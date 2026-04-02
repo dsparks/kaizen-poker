@@ -1,10 +1,10 @@
 # Kaizen Poker
 
-A two-player deckbuilding poker game. Each round: draw 7, play 2 as actions, score the best 5-card poker hand. First to 7 chips wins.
+A two-player deckcrafting poker game. Each round: draw 7, play 2 as actions, score the best 5-card poker hand. First to 7 chips wins.
 
 ## Play Online
 
-Visit: `https://YOUR_USERNAME.github.io/kaizen-poker/`
+Visit: `https://dsparks.github.io/kaizen-poker/`
 
 ## Deploy to GitHub Pages
 
