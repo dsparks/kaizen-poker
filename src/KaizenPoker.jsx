@@ -815,11 +815,11 @@ export default function KaizenPoker(){
       <div className="kp-main-column" style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
-          return(<div style={{background:"#6c5ce711",border:"1px solid #6c5ce733",borderRadius:6,padding:"5px 10px",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
+          return(<div style={{background:"linear-gradient(180deg,#18372bdd,#11271fff)",border:"1px solid #8f744333",borderRadius:8,padding:"6px 10px",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",boxShadow:"inset 0 1px 0 #f0e0b10d"}}>
             <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
             {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" — "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
         {/* Play areas */}
-        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1,minWidth:280,padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:`1px solid ${pl==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"inset 0 1px 0 #ffffff08"}}>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1,minWidth:280,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
           <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
           <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
             {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} className="kp-action-slot" style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033"}}>
@@ -833,7 +833,7 @@ export default function KaizenPoker(){
               </div>)}</div></div>))}</div>
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>}/>
         {/* Hand */}
-        <div style={{padding:"14px 16px",borderRadius:18,background:"linear-gradient(180deg,#0f161dcc,#0a1016cc)",border:`1px solid ${p==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"0 14px 30px #00000022,inset 0 1px 0 #ffffff0a"}}>
+        <div style={{padding:"14px 16px",borderRadius:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${p==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
           <div style={{fontSize:11,color:p==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             YOUR HAND (Player {p})
             {canAct&&<span style={{color:pClr,fontSize:10}}>— {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
