@@ -135,7 +135,7 @@ function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 // ============================================================
 // SIMPLE UI COMPONENTS
 // ============================================================
-function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,inspectLabel,statusLabel,statusColor}){const c=CM[id];if(!c)return null;
+function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,inspectLabel,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
   const w=small?68:120,h=small?95:168,ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
@@ -149,11 +149,17 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     padding:small?"4px 5px":"7px 9px",overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
     transform:baseTransform}}>
     {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#2ecc71",background:"#2ecc7122",borderRadius:3,padding:"0 4px"}}>NEW</div>}
-    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} style={{position:"absolute",top:2,right:2,padding:"1px 4px",borderRadius:999,border:"1px solid #ffffff22",background:"#091018dd",color:"#cbd5e1",fontSize:7,fontWeight:800,cursor:"pointer",letterSpacing:.3,zIndex:2}}>
-      {inspectLabel||"View"}
+    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",fontSize:9,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
+      {inspectLabel||"⌕"}
     </button>}
-    {statusLabel&&<div style={{position:"absolute",left:small?2:4,bottom:small?2:4,maxWidth:small?"65%":"72%",background:`${statusColor||"#f1c40f"}dd`,color:"#081018",borderRadius:4,padding:small?"1px 4px":"2px 6px",fontSize:small?7:8,fontWeight:900,letterSpacing:.4,textTransform:"uppercase",boxShadow:"0 1px 4px #0008",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-      {statusLabel}
+    {copySticker&&<div style={{position:"absolute",top:small?18:20,right:small?0:2,transform:"rotate(18deg)",background:"linear-gradient(180deg,#f4d27e,#d8a845)",color:"#4b2e10",border:`1px solid #9d7430`,borderRadius:small?6:8,padding:small?"2px 5px":"3px 7px",fontSize:small?6:8,fontWeight:900,letterSpacing:.8,boxShadow:"0 2px 6px #00000022",zIndex:2,textTransform:"uppercase"}}>
+      {copySticker}
+    </div>}
+    {rankSticker&&<div style={{position:"absolute",top:small?24:34,left:small?4:6,transform:"rotate(-8deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 5px":"2px 8px",fontSize:small?10:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:2}}>
+      {rankSticker}
+    </div>}
+    {suitSticker&&<div style={{position:"absolute",top:small?22:30,left:small?24:38,transform:"rotate(10deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?16:22,height:small?16:22,fontSize:small?11:15,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:2}}>
+      {SUITS[suitSticker]||suitSticker}
     </div>}
     <div style={{display:"flex",alignItems:"center",gap:1}}>
       <span style={{fontSize:small?20:32,fontWeight:900,color:SC[c.suit],lineHeight:1,fontFamily:"Georgia,serif"}}>{c.rank}</span>
@@ -829,7 +835,7 @@ export default function KaizenPoker(){
                 </div>
               </div>
               :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
-                <PreviewCard id={a.id} statusLabel={a.copiedFrom?`Copy: ${CM[a.copiedFrom]?.name}`:undefined} statusColor={a.copiedFrom?"#f1c40f":"#2ecc71"}/>
+                <PreviewCard id={a.id} copySticker={a.copiedFrom?"Copy":undefined}/>
               </div>)}</div></div>))}</div>
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>}/>
         {/* Hand */}
@@ -870,10 +876,7 @@ export default function KaizenPoker(){
                     {sortC(h).map(id=>{
                       const mod=mods.find(m=>m.target===id);
                       return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
-                        <PreviewCard id={id} glow={isWinner?clr:undefined} statusLabel={mod?"Modified":undefined} statusColor="#f1c40f"/>
-                        {mod&&<div style={{position:"absolute",bottom:2,left:2,right:2,background:"#f1c40fdd",color:"#000",
-                          borderRadius:3,fontSize:7,fontWeight:700,textAlign:"center",padding:"1px 2px"}}>
-                          {mod.rank&&`→${mod.rank}`}{mod.suit&&`→${SUITS[mod.suit]}`}</div>}
+                        <PreviewCard id={id} glow={isWinner?clr:undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
                       </div>);})}
                   </div>
                   <div style={{textAlign:"center"}}><HandBadge ids={h} mods={mods}/></div>
