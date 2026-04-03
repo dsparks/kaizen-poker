@@ -284,9 +284,11 @@ export default function KaizenPoker(){
     return [{sourceId:a.id,effectId:effect.id,copiedFrom:a.copiedFrom||null}];
   });
 
-  const startGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
+  const buildFreshGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
-    g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);setGs(g);};
+    g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
+  const startGame=()=>setGs(buildFreshGame());
+  const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setGs(nextGs);};
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
@@ -888,8 +890,15 @@ export default function KaizenPoker(){
         {gs.phase==="gameOver"&&<div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>Game Over — Player {gs.aChips>=7?"A":"B"} Wins!</div>
           <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>}
-        <div style={{marginTop:"auto"}}>
-          <PlaytestPanel/>
+        {gs.phase==="reveal"&&<div style={{position:"sticky",bottom:10,zIndex:2,display:"flex",justifyContent:"center",paddingTop:4}}>
+          <div style={{padding:"10px 14px",borderRadius:14,background:"linear-gradient(180deg,#0d151df2,#091018f2)",border:"1px solid #2a3644",boxShadow:"0 18px 36px #00000044"}}>
+            {gs.aChips>=7||gs.bChips>=7
+              ?<Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/>
+              :<Btn label="Next Round →" bg="#f1c40f" onClick={advanceFromReveal}/>}
+          </div>
+        </div>}
+        <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
+          <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
         </div>
       </div>
       {/* Log */}
