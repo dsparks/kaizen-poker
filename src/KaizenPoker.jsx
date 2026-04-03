@@ -50,7 +50,7 @@ const CARDS=[
 {id:"9C",rank:"9",suit:"C",name:"Terminate",type:"Enact",text:"Scrap a non-face card."},
 {id:"9D",rank:"9",suit:"D",name:"Impeach",type:"Enact",text:"Scrap a face card."},
 {id:"9H",rank:"9",suit:"H",name:"Accumulate",type:"Enact",text:"Scrap a card matching a scrapped card's suit or rank."},
-{id:"9S",rank:"9",suit:"S",name:"Reap",type:"React",text:"Scrap a card matching another card in your discard's suit or rank."},
+{id:"9S",rank:"9",suit:"S",name:"Reap",type:"Enact",text:"Scrap a card matching another card in your discard's suit or rank."},
 {id:"10C",rank:"10",suit:"C",name:"Nudge",type:"Modify",text:"Change a scoring card's rank by ±1."},
 {id:"10D",rank:"10",suit:"D",name:"Disguise",type:"Modify",text:"Change a scoring card's suit to any suit."},
 {id:"10H",rank:"10",suit:"H",name:"Buff",type:"Modify",text:"Change a scoring card's rank to any higher rank."},
@@ -509,6 +509,12 @@ export default function KaizenPoker(){
       if(!valid.length){g=L(g,"...no matching cards. Fizzles.");done(g);return;}
       pick("Accumulate: Scrap matching scrapped card",disc,id=>ss.has(CM[id].suit)||sr.has(CM[id].rank),
         id=>{done(L(scrapF({...g},p,id),`${p} accumulates ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
+    // 9S Reap
+    if(effectId==="9S"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
+      const valid=disc.filter((id,idx)=>disc.some((other,j)=>j!==idx&&(CM[other].rank===CM[id].rank||CM[other].suit===CM[id].suit)));
+      if(!valid.length){g=L(g,"...no matching discard cards. Fizzles.");done(g);return;}
+      pick("Reap: Scrap a card matching another discard card",disc,id=>valid.includes(id),
+        id=>{done(L(scrapF({...g},p,id),`${p} reaps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
     // JD Duplicate — immediately copies another of your Actions in play
     if(effectId==="JD"){const myActions=getP(g,p).filter(a=>a.id!==cid&&!a.faceDown);
       if(!myActions.length){g=L(g,"...no other actions to copy. Fizzles.");done(g);return;}
@@ -687,19 +693,6 @@ export default function KaizenPoker(){
       if(effect.id==="8C"&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});}}
     procPost(g,effs,0);};
 
-  const procRoundEndReaps=(g,reaps,i,done)=>{
-    if(i>=reaps.length){done(g);return;}
-    const pl=reaps[i];
-    if(isFroz(g,pl)){procRoundEndReaps(L(g,`${pl}: Reap - Frozen!`),reaps,i+1,done);return;}
-    const disc=getD(g,pl);
-    const valid=disc.filter((id,idx)=>disc.some((other,j)=>j!==idx&&(CM[other].rank===CM[id].rank||CM[other].suit===CM[id].suit)));
-    if(!valid.length){procRoundEndReaps(L(g,`${pl}: Reap - no matching discard card`),reaps,i+1,done);return;}
-    setModal({type:"pickFromList",title:`${pl}: Reap - scrap a matching discard card?`,cards:disc,filter:id=>valid.includes(id),canCancel:true,
-      onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
-        g2=L(g2,`${pl}: Reap scraps ${CM[id].name}`);setGs(g2);procRoundEndReaps(g2,reaps,i+1,done);},
-      onCancel:()=>{setModal(null);procRoundEndReaps(g,reaps,i+1,done);}});
-  };
-
   const startNextRound=(g)=>{
     if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];
@@ -718,23 +711,8 @@ export default function KaizenPoker(){
   const procPost=(g,effs,i)=>{if(i>=effs.length){
     if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
     const aH=getH(g,"A"),bH=getH(g,"B");
-    const aReaps=[...aH.filter(id=>id==="9S"),...getP(g,"A").filter(a=>!a.faceDown&&getActionCard(a)?.id==="9S").map(a=>a.id)];
-    const bReaps=[...bH.filter(id=>id==="9S"),...getP(g,"B").filter(a=>!a.faceDown&&getActionCard(a)?.id==="9S").map(a=>a.id)];
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
-    const reapQueue=[...aReaps.map(()=>"A"),...bReaps.map(()=>"B")];
-    setGs(g);procRoundEndReaps(g,reapQueue,0,startNextRound);return;
-    g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
-    g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];
-    g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};
-    g.round++;g.firstPlayer=g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
-    g=L(g,`=== ROUND ${g.round} === Player ${g.firstPlayer} acts first`);
-    let aR=2,bR=2,aD=7,bD=7;const aCW=g.aChips===6,bCW=g.bChips===6;
-    if(aCW&&!bCW){bD=8;bR=3;}if(bCW&&!aCW){aD=8;aR=3;}if(aCW||bCW)g=L(g,"⚡ SUDDEN DEATH!");
-    g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
-    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");setGs(g);return;}g.aHand=sortC(g.aHand);
-    g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");setGs(g);return;}g.bHand=sortC(g.bHand);
-    g.phase="action";g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
-    g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);setGs(g);return;}
+    startNextRound(g);return;}
     const e=effs[i];
     if(e.t==="forecast"){setModal({type:"pickFromList",title:`${e.pl}: Forecast — save to top of deck`,cards:getH(g,e.pl),canCancel:true,
       onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"hand",[...getH(g2,e.pl)].filter(x=>x!==id));
