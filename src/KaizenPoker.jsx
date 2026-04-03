@@ -16,9 +16,9 @@ export function adjacentRanks(rank){
   if(rank==="A")return ["K","2"];
   const ci=RV[rank],opts=[];if(ci>0)opts.push(RO[ci-1]);if(ci<12)opts.push(RO[ci+1]);return opts;
 }
-const TI={Enact:{bg:"#181d20",bd:"#636e72",lb:"Enact"},Modify:{bg:"#1f1c0e",bd:"#d4a017",lb:"Modify"},
-  React:{bg:"#0e1f1f",bd:"#00b894",lb:"React"},Amend:{bg:"#1f0e0e",bd:"#d63031",lb:"Amend"},
-  Remember:{bg:"#13102a",bd:"#6c5ce7",lb:"Remember"}};
+const TI={Enact:{bg:"#f5efe1",bd:"#8d6e63",ink:"#2f241d",tagBg:"#ece1cd",lb:"Enact"},Modify:{bg:"#f7f0dc",bd:"#c89b3c",ink:"#302515",tagBg:"#efe0b7",lb:"Modify"},
+  React:{bg:"#e9f2ea",bd:"#4d8b6f",ink:"#1f3229",tagBg:"#d5e6d7",lb:"React"},Amend:{bg:"#f6e4df",bd:"#a85045",ink:"#351f1b",tagBg:"#ecd1ca",lb:"Amend"},
+  Remember:{bg:"#ece8f8",bd:"#6d5b9c",ink:"#251f39",tagBg:"#ddd5f0",lb:"Remember"}};
 export const CARDS=[
 {id:"2C",rank:"2",suit:"C",name:"Prune",type:"Enact",text:"Scrap a Diamond or Heart.",scrapSuits:["D","H"]},
 {id:"2D",rank:"2",suit:"D",name:"Sculpt",type:"Enact",text:"Scrap a Heart or Spade.",scrapSuits:["H","S"]},
@@ -138,12 +138,13 @@ function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,inspectLabel,statusLabel,statusColor}){const c=CM[id];if(!c)return null;
   const w=small?68:120,h=small?95:168,ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
+  const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
     title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
     border:selected?`2px solid #f1c40f`:isNew?`2px solid #2ecc71`:glow?`2px solid ${glow}`:`1px solid ${ti.bd}44`,
-    background:`linear-gradient(160deg,${ti.bg},#0a0d10)`,
-    boxShadow:selected?"0 0 12px #f1c40f44":isNew?"0 0 14px #2ecc7155":glow?`0 0 12px ${glow}44`:"0 2px 6px #00000044",
+    background:paperBg,
+    boxShadow:selected?"0 0 12px #f1c40f44, 0 8px 18px #00000026":isNew?"0 0 14px #2ecc7155, 0 8px 18px #00000026":glow?`0 0 12px ${glow}44, 0 8px 18px #00000026`:"0 4px 12px #00000026",
     cursor:onClick?"pointer":"default",display:"flex",flexDirection:"column",
     padding:small?"4px 5px":"7px 9px",overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
     transform:baseTransform}}>
@@ -157,9 +158,9 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     <div style={{display:"flex",alignItems:"center",gap:1}}>
       <span style={{fontSize:small?20:32,fontWeight:900,color:SC[c.suit],lineHeight:1,fontFamily:"Georgia,serif"}}>{c.rank}</span>
       <span style={{fontSize:small?14:20,color:SC[c.suit],marginTop:small?1:3}}>{SUITS[c.suit]}</span></div>
-    <div style={{fontSize:small?8:14,fontWeight:700,color:"#eee",marginTop:1,fontFamily:"Georgia,serif",lineHeight:1.1}}>{c.name}</div>
-    <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{ti.lb}</div>
-    {!small&&<div style={{fontSize:9,color:"#8899aa",marginTop:"auto",lineHeight:1.3,paddingTop:3}}>{c.text}</div>}
+    <div style={{fontSize:small?8:14,fontWeight:700,color:ti.ink,marginTop:1,fontFamily:"Georgia,serif",lineHeight:1.1,textShadow:"0 1px 0 rgba(255,255,255,.35)"}}>{c.name}</div>
+    <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginTop:2,alignSelf:"flex-start",background:ti.tagBg,padding:small?"1px 4px":"2px 6px",borderRadius:999,border:`1px solid ${ti.bd}33`}}>{ti.lb}</div>
+    {!small&&<div style={{fontSize:9,color:"#3e3a35",marginTop:"auto",lineHeight:1.3,paddingTop:5,fontFamily:"Georgia,serif"}}>{c.text}</div>}
   </div>);}
 function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-160,Math.max(16,pos.x+20));
@@ -763,11 +764,12 @@ export default function KaizenPoker(){
   // ============================================================
   // RENDER
   // ============================================================
-  if(!gs)return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% 0%,#132434 0%,#071018 45%,#04070b 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
+  if(!gs)return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
+    <div style={{position:"absolute",inset:20,borderRadius:34,border:"2px solid #b8965b33",boxShadow:"inset 0 0 0 1px #f8e7b11a"}}/>
     <div style={{position:"absolute",width:520,height:520,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,#f1c40f08 35%,transparent 70%)",top:-220,left:"50%",transform:"translateX(-50%)"}}/>
-    <div style={{position:"absolute",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#3498db18 0%,transparent 70%)",bottom:-140,left:-100}}/>
-    <div style={{position:"absolute",width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,#e74c3c14 0%,transparent 70%)",top:120,right:-80}}/>
-    <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#0d1620dd,#091018ee)",border:"1px solid #223142",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #ffffff10",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
+    <div style={{position:"absolute",width:420,height:420,borderRadius:"50%",background:"radial-gradient(circle,#c49a5a14 0%,transparent 68%)",bottom:-180,left:-120}}/>
+    <div style={{position:"absolute",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#2ecc7114 0%,transparent 72%)",top:120,right:-80}}/>
+    <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
       <p style={{color:"#7f93a8",fontSize:14,maxWidth:420,textAlign:"center",lineHeight:1.6,margin:0}}>A two-player deckbuilding poker game. Draw 7, play 2 as actions, then score the best 5-card hand you can shape from what remains.</p>
@@ -784,14 +786,15 @@ export default function KaizenPoker(){
   const pClr=p==="A"?"#e74c3c":"#3498db";
   const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
 
-  return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% 0%,#132434 0%,#09121a 42%,#04070b 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.08);box-shadow:0 14px 30px #0008,0 0 0 1px rgba(255,255,255,.08)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.12),transparent 30%,transparent 70%,rgba(255,255,255,.04));opacity:.75;pointer-events:none}.kp-card-small::before{content:"";position:absolute;left:8px;right:8px;bottom:-8px;height:14px;border-radius:999px;background:radial-gradient(circle,rgba(0,0,0,.36) 0%,rgba(0,0,0,0) 70%);pointer-events:none;z-index:-1}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 22px #0007,0 0 0 1px rgba(255,255,255,.06)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
+  return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+      <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
-      <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#3498db12 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
-      <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#e74c3c10 0%,transparent 68%)",animation:"floatGlow 10s ease-in-out infinite"}}/>
+      <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
+      <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)",animation:"floatGlow 10s ease-in-out infinite"}}/>
     </div>
-    <div style={{padding:"10px 16px",borderBottom:isSuddenDeath?"2px solid #e74c3c":"1px solid #1b2633",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"linear-gradient(180deg,#3a1010cc,#090d12dd)":"linear-gradient(180deg,#0d151dcc,#070b10ee)",fontSize:12,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
+    <div style={{padding:"10px 16px",borderBottom:isSuddenDeath?"2px solid #d27d5c":"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"linear-gradient(180deg,#4b1f18dd,#1c120ddd)":"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
       <span style={{color:"#445"}}>Round {gs.round}</span>
       <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
