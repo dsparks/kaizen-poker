@@ -140,7 +140,7 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
-    title={small?"Hover to preview, double-click or tap View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
+    title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
     border:selected?`2px solid #f1c40f`:isNew?`2px solid #2ecc71`:glow?`2px solid ${glow}`:`1px solid ${ti.bd}44`,
     background:`linear-gradient(160deg,${ti.bg},#0a0d10)`,
     boxShadow:selected?"0 0 12px #f1c40f44":isNew?"0 0 14px #2ecc7155":glow?`0 0 12px ${glow}44`:"0 2px 6px #00000044",
@@ -170,7 +170,7 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
       onMouseLeave={()=>setHover(false)}
       onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
       onDoubleClick={()=>setPinned(true)}/>
-    {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:950,pointerEvents:"none",background:"#0b1016ee",border:"1px solid #2d3748",borderRadius:12,padding:10,boxShadow:"0 10px 30px #000a",animation:"inspectPop 0.12s ease-out"}}>
+    {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",background:"#0b1016ee",border:"1px solid #2d3748",borderRadius:12,padding:10,boxShadow:"0 10px 30px #000a",animation:"inspectPop 0.12s ease-out"}}>
       <div style={{fontSize:10,color:"#7f8c8d",marginBottom:6,textAlign:"center"}}>Preview</div>
       <Card id={props.id}/>
     </div>}
@@ -192,7 +192,7 @@ function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=
     const up=()=>{dr.current=false;window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up)};
     window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-    <div className="kp-modal-shell" style={{background:"#111827",border:"1px solid #333",borderRadius:12,padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",transform:`translate(${pos.x}px,${pos.y}px)`,position:"relative"}}>
+    <div className="kp-modal-shell" style={{background:"#111827",border:"1px solid #333",borderRadius:12,padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",left:pos.x,top:pos.y,position:"relative"}}>
       <div onMouseDown={onD} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,cursor:"grab",userSelect:"none",padding:"0 0 8px",borderBottom:"1px solid #222"}}>
         <div style={{fontSize:15,fontWeight:700,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{title}</div>
         <span style={{fontSize:9,color:"#334"}}>drag to move</span></div>
