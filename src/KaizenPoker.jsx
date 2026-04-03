@@ -168,7 +168,7 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
   </>);}
 function HandBadge({ids,mods}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span style={{padding:"3px 10px",borderRadius:5,background:`${c}18`,border:`1px solid ${c}44`,color:c,fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{r.handName}</span>;}
-function Btn({label,bg="#333",onClick,disabled}){return(<button onClick={onClick} disabled={disabled} style={{padding:"7px 15px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#888":"#000",border:"none",borderRadius:6,fontWeight:700,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1}}>{label}</button>);}
+function Btn({label,bg="#333",onClick,disabled}){return(<button onClick={onClick} disabled={disabled} style={{padding:"8px 16px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#94a3b8":"#081018",border:"1px solid "+(bg==="#333"?"#334155":"#ffffff22"),borderRadius:10,fontWeight:800,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1,boxShadow:disabled?"none":"0 8px 18px #00000033, inset 0 1px 0 #ffffff22",transform:"translateY(0)",transition:"transform 0.15s, box-shadow 0.15s, opacity 0.15s"}}>{label}</button>);}
 
 // Draggable Modal
 function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});
@@ -738,10 +738,16 @@ export default function KaizenPoker(){
   // ============================================================
   // RENDER
   // ============================================================
-  if(!gs)return(<div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0f1923,#070b10 70%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20}}>
-    <h1 style={{fontSize:32,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f1c40f,#e67e22)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:4}}>KAIZEN POKER</h1>
-    <p style={{color:"#556",fontSize:13,maxWidth:400,textAlign:"center",lineHeight:1.5}}>A two-player deckbuilding poker game. Draw 7, play 2 as actions, score the best 5-card hand.</p>
-    <Btn label="START GAME" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={startGame}/></div>);
+  if(!gs)return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% 0%,#132434 0%,#071018 45%,#04070b 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
+    <div style={{position:"absolute",width:520,height:520,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,#f1c40f08 35%,transparent 70%)",top:-220,left:"50%",transform:"translateX(-50%)"}}/>
+    <div style={{position:"absolute",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#3498db18 0%,transparent 70%)",bottom:-140,left:-100}}/>
+    <div style={{position:"absolute",width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,#e74c3c14 0%,transparent 70%)",top:120,right:-80}}/>
+    <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#0d1620dd,#091018ee)",border:"1px solid #223142",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #ffffff10",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
+      <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
+      <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
+      <p style={{color:"#7f93a8",fontSize:14,maxWidth:420,textAlign:"center",lineHeight:1.6,margin:0}}>A two-player deckbuilding poker game. Draw 7, play 2 as actions, then score the best 5-card hand you can shape from what remains.</p>
+      <Btn label="START GAME" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={startGame}/>
+    </div></div>);
 
   const p=gs.currentPlayer,hand=getH(gs,p),oppHand=getH(gs,opp(p));
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
@@ -751,31 +757,45 @@ export default function KaizenPoker(){
   const sdPlayer=gs.aChips===6?"A":gs.bChips===6?"B":null;// who could win
 
   const pClr=p==="A"?"#e74c3c":"#3498db";
+  const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
 
-  return(<div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0f1923,#070b10 70%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column"}}>
-    <div style={{padding:"8px 16px",borderBottom:isSuddenDeath?"2px solid #e74c3c":"1px solid #151c25",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"#e74c3c15":"#0008",fontSize:12,flexWrap:"wrap"}}>
+  return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% 0%,#132434 0%,#09121a 42%,#04070b 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}`}</style>
+    <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+      <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
+      <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#3498db12 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
+      <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#e74c3c10 0%,transparent 68%)",animation:"floatGlow 10s ease-in-out infinite"}}/>
+    </div>
+    <div style={{padding:"10px 16px",borderBottom:isSuddenDeath?"2px solid #e74c3c":"1px solid #1b2633",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"linear-gradient(180deg,#3a1010cc,#090d12dd)":"linear-gradient(180deg,#0d151dcc,#070b10ee)",fontSize:12,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
       <span style={{color:"#445"}}>Round {gs.round}</span>
-      <span style={{padding:"2px 8px",borderRadius:999,border:"1px solid #334",color:"#9fb0c0",fontSize:10,textTransform:"uppercase",letterSpacing:1}}>
+      <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
         {gs.phase==="action"?`Action - Player ${p}`:gs.phase==="score"?"Scoring":gs.phase==="reveal"?"Reveal":"Game Over"}
       </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>⚡ SUDDEN DEATH</span>}
-      <div style={{marginLeft:"auto",display:"flex",gap:16}}>
-        <span style={{color:"#e74c3c",fontWeight:700,background:sdPlayer==="A"?"#e74c3c22":"transparent",padding:"0 6px",borderRadius:4}}>A: {gs.aChips}</span>
-        <span style={{color:"#3498db",fontWeight:700,background:sdPlayer==="B"?"#e74c3c22":"transparent",padding:"0 6px",borderRadius:4}}>B: {gs.bChips}</span></div></div>
-    <div style={{display:"flex",flex:1,overflow:"hidden",height:0}}>
-      <div style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:10,overflow:"auto"}}>
+      <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
+        <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"#e74c3c",fontWeight:800}}>A {gs.aChips}</span>
+          <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#e74c3c")}</span>
+        </div>
+        <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"#3498db",fontWeight:800}}>B {gs.bChips}</span>
+          <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#3498db")}</span>
+        </div>
+      </div></div>
+    <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
+      <div style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
           return(<div style={{background:"#6c5ce711",border:"1px solid #6c5ce733",borderRadius:6,padding:"5px 10px",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
             <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
             {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" — "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
         {/* Opp hand */}
-        <div><div style={{fontSize:10,color:"#445",fontWeight:700,letterSpacing:1,marginBottom:3}}>PLAYER {opp(p)} — {oppHand.length} cards</div>
+        <div style={{padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:"1px solid #1f2b38",boxShadow:"inset 0 1px 0 #ffffff08"}}><div style={{fontSize:10,color:"#607385",fontWeight:700,letterSpacing:1,marginBottom:6}}>PLAYER {opp(p)} — {oppHand.length} cards</div>
           <div style={{display:"flex",gap:3}}>{oppHand.map((_,i)=>(<div key={i} style={{width:36,height:50,borderRadius:4,background:"repeating-linear-gradient(45deg,#1a1a2e,#1a1a2e 3px,#16213e 3px,#16213e 6px)",border:"1px solid #222"}}/>))}</div></div>
         {/* Play areas */}
-        <div style={{display:"flex",gap:16}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1}}>
-          <div style={{fontSize:9,color:"#445",fontWeight:700,letterSpacing:1,marginBottom:3}}>{pl}'s ACTIONS</div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1,minWidth:280,padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:`1px solid ${pl==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"inset 0 1px 0 #ffffff08"}}>
+          <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
           <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
             {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} style={{width:68,height:95,borderRadius:6,background:"#1a1a2e",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",color:"#334",fontSize:10}}>Face down</div>
               :<div key={i} style={{position:"relative"}}>
@@ -788,8 +808,8 @@ export default function KaizenPoker(){
         <div style={{display:"flex",gap:6}}><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></div>
         <PlaytestPanel/>
         {/* Hand */}
-        <div>
-          <div style={{fontSize:11,color:p==="A"?"#e74c3c":"#3498db",fontWeight:700,letterSpacing:1,marginBottom:5,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <div style={{padding:"14px 16px",borderRadius:18,background:"linear-gradient(180deg,#0f161dcc,#0a1016cc)",border:`1px solid ${p==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"0 14px 30px #00000022,inset 0 1px 0 #ffffff0a"}}>
+          <div style={{fontSize:11,color:p==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             YOUR HAND (Player {p})
             {canAct&&<span style={{color:pClr,fontSize:10}}>— {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
             {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)}/>}
@@ -807,11 +827,12 @@ export default function KaizenPoker(){
           const aH=getH(gs,"A"),bH=getH(gs,"B");
           const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
           const wText=w==="A"?"Player A wins the chip!":w==="B"?"Player B wins the chip!":"Tie — no chip awarded";
-          return(<div style={{padding:16,background:"#0d111799",borderRadius:12,border:`2px solid ${wClr}44`}}>
+          return(<div style={{padding:18,background:"linear-gradient(180deg,#101722ee,#0a0f16ee)",borderRadius:18,border:`2px solid ${wClr}44`,boxShadow:`0 24px 60px ${wClr}22`,animation:"revealRise 0.35s ease-out"}}>
             {/* Winner banner */}
             <div style={{textAlign:"center",marginBottom:16}}>
-              <div style={{fontSize:22,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",marginBottom:4}}>{wText}</div>
-              <div style={{fontSize:13,color:"#667"}}>{gs.aChips} — {gs.bChips}</div>
+              <div style={{fontSize:10,fontWeight:800,color:"#7f93a8",letterSpacing:3,textTransform:"uppercase",marginBottom:6}}>Showdown</div>
+              <div style={{fontSize:28,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",marginBottom:4,textShadow:`0 0 18px ${wClr}44`}}>{wText}</div>
+              <div style={{fontSize:13,color:"#90a4b8"}}>{gs.aChips} — {gs.bChips}</div>
             </div>
             {/* Both hands side by side */}
             <div style={{display:"flex",gap:20,justifyContent:"center",flexWrap:"wrap"}}>
@@ -849,9 +870,9 @@ export default function KaizenPoker(){
           <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>}
       </div>
       {/* Log */}
-      <div style={{width:240,borderLeft:"1px solid #151c25",background:"#0a0d1199",display:"flex",flexDirection:"column",flexShrink:0}}>
-        <div style={{fontSize:9,fontWeight:700,color:"#334",letterSpacing:1,padding:"10px 10px 4px"}}>LOG</div>
-        <div ref={el=>{if(el)el.scrollTop=el.scrollHeight;}} style={{flex:1,overflow:"auto",padding:"0 10px 10px",fontSize:10,color:"#667",lineHeight:1.5}}>
+      <div style={{width:260,borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
+        <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px"}}>BATTLE LOG</div>
+        <div ref={el=>{if(el)el.scrollTop=el.scrollHeight;}} style={{flex:1,overflow:"auto",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
           {gs.log.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
     </div>
     {/* MODALS */}
