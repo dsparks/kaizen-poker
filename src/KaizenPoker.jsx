@@ -192,7 +192,7 @@ function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=
     const up=()=>{dr.current=false;window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up)};
     window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-    <div style={{background:"#111827",border:"1px solid #333",borderRadius:12,padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflow:"auto",transform:`translate(${pos.x}px,${pos.y}px)`,position:"relative"}}>
+    <div className="kp-modal-shell" style={{background:"#111827",border:"1px solid #333",borderRadius:12,padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",transform:`translate(${pos.x}px,${pos.y}px)`,position:"relative"}}>
       <div onMouseDown={onD} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,cursor:"grab",userSelect:"none",padding:"0 0 8px",borderBottom:"1px solid #222"}}>
         <div style={{fontSize:15,fontWeight:700,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{title}</div>
         <span style={{fontSize:9,color:"#334"}}>drag to move</span></div>
@@ -252,11 +252,12 @@ function DeckStats({gs,player}){const[show,setShow]=useState(false);
     </div></div>);}
 
 // Public zones
-function PublicZones({gs}){const[exp,setExp]=useState(null);
+function PublicZones({gs,extraControls}){const[exp,setExp]=useState(null);
   const zones=[{key:"scrap",label:"Scrap",cards:gs.scrap,color:"#9b59b6"},{key:"aDiscard",label:"A Discard",cards:gs.aDiscard,color:"#e74c3c"},{key:"bDiscard",label:"B Discard",cards:gs.bDiscard,color:"#3498db"}];
   return(<div><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
     {zones.map(z=>(<button key={z.key} onClick={()=>setExp(exp===z.key?null:z.key)} style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,cursor:"pointer",
       border:`1px solid ${exp===z.key?z.color:z.color+"44"}`,background:exp===z.key?z.color+"1a":"transparent",color:exp===z.key?z.color:z.color+"99"}}>{z.label} ({z.cards.length})</button>))}
+    {extraControls}
     <span style={{fontSize:10,color:"#334"}}>A deck:{gs.aDeck.length} · B deck:{gs.bDeck.length}</span></div>
     {exp&&(()=>{const z=zones.find(x=>x.key===exp);if(!z||!z.cards.length)return <div style={{fontSize:10,color:"#445",marginTop:4,fontStyle:"italic"}}>Empty</div>;
       return(<div style={{marginTop:6,padding:6,background:"#0a0d1188",borderRadius:6,border:`1px solid ${z.color}22`}}>
@@ -281,7 +282,7 @@ export default function KaizenPoker(){
     if(a.faceDown)return [];
     const effect=getActionCard(a);
     if(effect?.type!=="Modify")return [];
-    return [effect.id];
+    return [{sourceId:a.id,effectId:effect.id,copiedFrom:a.copiedFrom||null}];
   });
 
   const startGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
@@ -613,34 +614,42 @@ export default function KaizenPoker(){
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
       if(pl==="A"){const bM=getModifyEntries(g2,"B");resolveMods(g2,"B",bM,0);}
       else finalScore(g2);});return;}
-    const mid=mods[i],mc=CM[mid],hand=getH(g,pl),mk=pl==="A"?"aMods":"bMods";
+    const entry=mods[i],mid=entry.effectId,mc=CM[mid],hand=getH(g,pl),mk=pl==="A"?"aMods":"bMods";
     const next=(g2)=>resolveMods(g2||g,pl,mods,i+1);
-    const skip=()=>{let g2=L(g,`${pl}: ${mc.name} — skipped`);setGs(g2);next(g2);};
+    const modLabel=entry.copiedFrom?`${CM[entry.sourceId]?.name||mc.name} copying ${CM[entry.copiedFrom]?.name||mc.name}`:mc.name;
+    const skip=()=>{let g2=L(g,`${pl}: ${modLabel} — skipped`);setGs(g2);next(g2);};
     // Forecast/Vanish: defer
-    if(mid==="5D"||mid==="8D"){let g2=L(g,`${pl}: ${mc.name} — after scoring`);setGs(g2);next(g2);return;}
+    if(mid==="5D"||mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);setGs(g2);next(g2);return;}
     // Buff
     if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff — pick scoring card to increase rank`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);const ci=RV[CM[tid].rank];const hr=RO.filter((_,i)=>i>ci);
+        if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: Buff ${CM[tid].name} → ${r}`);setGs(g2);next(g2);}});},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
     if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf — pick scoring card to decrease rank`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
+        if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: Nerf ${CM[tid].name} → ${r}`);setGs(g2);next(g2);}});},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
     if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge — pick scoring card (±1 rank)`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
+        if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: Nudge ${CM[tid].name} → ${r}`);setGs(g2);next(g2);}});},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
     if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);
         setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
-          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: Disguise ${CM[tid].name} → ${SUITS[s]}`);setGs(g2);next(g2);}});},
+          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${SUITS[s]}`);setGs(g2);next(g2);},
+          onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Clone — one SCORING card becomes copy of another SCORING card
     if(mid==="JC"){
@@ -648,7 +657,7 @@ export default function KaizenPoker(){
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
           setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
-              g2=L(g2,`${pl}: Clone ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
     if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce — discard empty`);setGs(g2);next(g2);return;}
@@ -656,9 +665,9 @@ export default function KaizenPoker(){
         onPick:tid=>{setModal(null);
           setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
-              g2=L(g2,`${pl}: Reminisce ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
-    let g2=L(g,`${pl}: ${mc.name} — not implemented`);setGs(g2);next(g2);};
+    let g2=L(g,`${pl}: ${modLabel} — not implemented`);setGs(g2);next(g2);};
 
   // Queen Remember on 2s
   const resolveQ2s=(g,pl,done)=>{
@@ -775,7 +784,7 @@ export default function KaizenPoker(){
   const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
 
   return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% 0%,#132434 0%,#09121a 42%,#04070b 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:translateY(-6px) scale(1.02)!important;box-shadow:0 14px 30px #0008!important}.kp-card-small.kp-card-clickable:hover{transform:translateY(-4px) scale(1.03)!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.12),transparent 30%,transparent 70%,rgba(255,255,255,.04));opacity:.75;pointer-events:none}.kp-card-small::before{content:"";position:absolute;left:8px;right:8px;bottom:-8px;height:14px;border-radius:999px;background:radial-gradient(circle,rgba(0,0,0,.36) 0%,rgba(0,0,0,0) 70%);pointer-events:none;z-index:-1}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}`}</style>
+    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:translateY(-6px) scale(1.02)!important;box-shadow:0 14px 30px #0008!important}.kp-card-small.kp-card-clickable:hover{transform:translateY(-4px) scale(1.03)!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.12),transparent 30%,transparent 70%,rgba(255,255,255,.04));opacity:.75;pointer-events:none}.kp-card-small::before{content:"";position:absolute;left:8px;right:8px;bottom:-8px;height:14px;border-radius:999px;background:radial-gradient(circle,rgba(0,0,0,.36) 0%,rgba(0,0,0,0) 70%);pointer-events:none;z-index:-1}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-main-column>.kp-opp-summary{padding:10px 14px!important}.kp-main-column>.kp-opp-summary>div:first-child{display:none}.kp-main-column>.kp-opp-summary>div:last-child{display:flex;gap:3px;flex-wrap:wrap}.kp-modal-shell .kp-card-clickable:hover{transform:translateY(-2px) scale(1.01)!important;box-shadow:0 10px 22px #0007!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:translateY(-2px) scale(1.01)!important}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
       <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#3498db12 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
@@ -799,14 +808,14 @@ export default function KaizenPoker(){
         </div>
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
-      <div style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
+      <div className="kp-main-column" style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
           return(<div style={{background:"#6c5ce711",border:"1px solid #6c5ce733",borderRadius:6,padding:"5px 10px",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
             <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
             {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" — "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
         {/* Opp hand */}
-        <div style={{padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:"1px solid #1f2b38",boxShadow:"inset 0 1px 0 #ffffff08"}}><div style={{fontSize:10,color:"#607385",fontWeight:700,letterSpacing:1,marginBottom:6}}>PLAYER {opp(p)} — {oppHand.length} cards</div>
+        <div className="kp-opp-summary" style={{padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:"1px solid #1f2b38",boxShadow:"inset 0 1px 0 #ffffff08"}}><div style={{fontSize:10,color:"#607385",fontWeight:700,letterSpacing:1,marginBottom:6}}>PLAYER {opp(p)} — {oppHand.length} cards</div>
           <div style={{display:"flex",gap:3}}>{oppHand.map((_,i)=>(<div key={i} style={{width:36,height:50,borderRadius:4,background:"repeating-linear-gradient(45deg,#1a1a2e,#1a1a2e 3px,#16213e 3px,#16213e 6px)",border:"1px solid #222"}}/>))}</div></div>
         {/* Play areas */}
         <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1,minWidth:280,padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:`1px solid ${pl==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"inset 0 1px 0 #ffffff08"}}>
@@ -821,8 +830,7 @@ export default function KaizenPoker(){
               :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                 <PreviewCard id={a.id} statusLabel={a.copiedFrom?`Copy: ${CM[a.copiedFrom]?.name}`:undefined} statusColor={a.copiedFrom?"#f1c40f":"#2ecc71"}/>
               </div>)}</div></div>))}</div>
-        <PublicZones gs={gs}/>
-        <div style={{display:"flex",gap:6}}><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></div>
+        <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>}/>
         <PlaytestPanel/>
         {/* Hand */}
         <div style={{padding:"14px 16px",borderRadius:18,background:"linear-gradient(180deg,#0f161dcc,#0a1016cc)",border:`1px solid ${p==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"0 14px 30px #00000022,inset 0 1px 0 #ffffff0a"}}>
@@ -925,12 +933,14 @@ export default function KaizenPoker(){
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
-        {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:"#f1c40f",fontSize:18,fontWeight:900,cursor:"pointer",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</button>))}</div></Modal>}
+        {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:"#f1c40f",fontSize:18,fontWeight:900,cursor:"pointer",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</button>))}</div>
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/></div>}</Modal>}
     {modal?.type==="pickSuit"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-        {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:SC[s],fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{SUITS[s]}</button>))}</div></Modal>}
+        {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:SC[s],fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{SUITS[s]}</button>))}</div>
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/></div>}</Modal>}
     {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}`}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
