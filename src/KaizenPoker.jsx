@@ -372,51 +372,6 @@ export default function KaizenPoker(){
   // --- UNDO ---
   const doUndo=()=>{if(undoState){setGs(undoState);setUndoState(null);setModal(null);setFdMode(false);}};
 
-  const chooseModifyOnPlay=(g,pl,sourceId,effectId,copiedFrom=null)=>{
-    const hand=getH(g,pl),disc=getD(g,pl),mk=pl==="A"?"aMods":"bMods",fk=pl==="A"?"aForecast":"bForecast";
-    const effect=CM[effectId],source=CM[sourceId]||effect;
-    const label=copiedFrom?`${source.name} copying ${effect.name}`:effect.name;
-    const finish=g2=>{setModal(null);setGs(advance(g2));};
-    const showPrompt=spec=>{setGs(g);window.setTimeout(()=>setModal(spec),0);};
-    const saveMod=(base,target,rank,suit,logMsg)=>{
-      let g2=cloneGs(base);g2[mk]=[...(g2[mk]||[]).filter(m=>m.sourceId!==sourceId),{sourceId,target,rank,suit}];
-      g2=L(g2,logMsg);finish(g2);
-    };
-    const saveForecast=(base,target)=>{
-      let g2=cloneGs(base);g2[fk]=[...(g2[fk]||[]).filter(m=>m.sourceId!==sourceId),{sourceId,target}];
-      g2=L(g2,`${pl}: ${label} marks ${CM[target].name} for Forecast`);finish(g2);
-    };
-    const skip=msg=>{let g2=L(g,msg||`${pl}: ${label} — skipped`);finish(g2);};
-    if(effectId==="5D"){showPrompt({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>saveForecast(g,tid),onCancel:()=>skip()});return;}
-    if(effectId==="8D"){setGs(g);skip(`${pl}: ${label} — after scoring`);return;}
-    if(effectId==="10H"){showPrompt({type:"pickFromList",title:`${pl}: Buff — pick scoring card to increase rank`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>{const hr=higherRanks(CM[tid].rank);if(!hr.length){skip(`${pl}: ${label} has no higher rank target for ${CM[tid].name}`);return;}
-        setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,onPick:r=>saveMod(g,tid,r,null,`${pl}: ${label} ${CM[tid].name} → ${r}`),onCancel:()=>skip()});},
-      onCancel:()=>skip()});return;}
-    if(effectId==="10S"){showPrompt({type:"pickFromList",title:`${pl}: Nerf — pick scoring card to decrease rank`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>{const lr=lowerRanks(CM[tid].rank);if(!lr.length){skip(`${pl}: ${label} has no lower rank target for ${CM[tid].name}`);return;}
-        setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,onPick:r=>saveMod(g,tid,r,null,`${pl}: ${label} ${CM[tid].name} → ${r}`),onCancel:()=>skip()});},
-      onCancel:()=>skip()});return;}
-    if(effectId==="10C"){showPrompt({type:"pickFromList",title:`${pl}: Nudge — pick scoring card (±1 rank)`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>{const opts=adjacentRanks(CM[tid].rank);if(!opts.length){skip(`${pl}: ${label} has no adjacent ranks for ${CM[tid].name}`);return;}
-        setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,onPick:r=>saveMod(g,tid,r,null,`${pl}: ${label} ${CM[tid].name} → ${r}`),onCancel:()=>skip()});},
-      onCancel:()=>skip()});return;}
-    if(effectId==="10D"){showPrompt({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,onPick:s=>saveMod(g,tid,null,s,`${pl}: ${label} ${CM[tid].name} → ${SUITS[s]}`),onCancel:()=>skip()}),
-      onCancel:()=>skip()});return;}
-    if(effectId==="JC"){if(hand.length<2){skip(`${pl}: ${label} — no other scoring card to copy`);return;}showPrompt({type:"pickFromList",title:`${pl}: Clone — pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:hand.filter(x=>x!==tid),showHand:hand,canCancel:false,
-        onPick:sid=>saveMod(g,tid,CM[sid].rank,CM[sid].suit,`${pl}: ${label} ${CM[tid].name} → copy of ${CM[sid].name}`)}),
-      onCancel:()=>skip()});return;}
-    if(effectId==="JS"){if(!disc.length){skip(`${pl}: ${label} — discard empty`);return;}showPrompt({type:"pickFromList",title:`${pl}: Reminisce — pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
-        onPick:sid=>saveMod(g,tid,CM[sid].rank,CM[sid].suit,`${pl}: ${label} ${CM[tid].name} → copy of ${CM[sid].name}`)}),
-      onCancel:()=>skip()});return;}
-    let g2=L(g,`${pl}: ${label} — not implemented`);finish(g2);
-  };
-
-  // --- HANDLE PLAY ---
   const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)setGs(p=>({...p,newCards:[]}));
     const card=CM[cid],p=gs.currentPlayer;
     if(fdMode){setFdMode(false);const snap=cloneGs(gs);let g=playFD(gs,cid);
@@ -601,7 +556,7 @@ export default function KaizenPoker(){
       if(!myActions.length){g=L(g,"...no other actions to copy. Fizzles.");done(g);return;}
       pick("Duplicate: Pick one of YOUR actions to copy",myActions.map(a=>a.id),null,id=>{
         let g2=cloneGs(g);// Mark Duplicate as copying that action
-        const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
+        const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id}:a);
         g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} duplicates ${CM[id].name}`);
         if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
@@ -609,7 +564,7 @@ export default function KaizenPoker(){
     if(effectId==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
       if(!oppActions.length){g=L(g,"...no opponent actions to copy. Fizzles.");done(g);return;}
       pick("Reflect: Pick an OPPONENT'S action to copy",oppActions.map(a=>a.id),null,id=>{
-        let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
+        let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id}:a);
         g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} reflects ${CM[id].name}`);
         if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
