@@ -319,48 +319,24 @@ export default function KaizenPoker(){
     const snap=cloneGs(gs);setUndoState(snap);resolveAction(cid);};
 
   // --- RESOLVE ACTION ---
-  const resolveAction=cid=>{const card=CM[cid],p=gs.currentPlayer;let g=cloneGs(gs);
-    g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
-    g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
+  const resolveAction=(cid,effectId=cid,alreadyInPlay=false,baseGs=gs)=>{const card=CM[effectId],p=baseGs.currentPlayer;let g=cloneGs(baseGs);
+    if(!alreadyInPlay){
+      g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
+      g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
+    }
     if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);setGs(g);return;}
     if(card.type==="React"){g=L(g,`${p} plays ${card.name} (React)`);g=advance(g);setGs(g);return;}
     if(card.type==="Remember"){g=L(g,`${p} plays ${card.name} (Remember)`);g=advance(g);setGs(g);return;}
     if(card.type==="Amend"){
-      if(cid==="7C"){g.amends={...g.amends,[opp(p)==="A"?"aFreeze":"bFreeze"]:true};g=L(g,`${p} plays Freeze`);}
-      else if(cid==="7D"){g.amends={...g.amends,[opp(p)==="A"?"aNegate":"bNegate"]:true};g=L(g,`${p} plays Negate`);}
+      if(effectId==="7C"){g.amends={...g.amends,[opp(p)==="A"?"aFreeze":"bFreeze"]:true};g=L(g,`${p} plays Freeze`);}
+      else if(effectId==="7D"){g.amends={...g.amends,[opp(p)==="A"?"aNegate":"bNegate"]:true};g=L(g,`${p} plays Negate`);}
       g=advance(g);setGs(g);return;}
     g=L(g,`${p} plays ${card.name}`);const frozen=isFroz(g,p);
     const scrapF=(g2,pl,id)=>{g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];return g2;};
     const done=g2=>{setUndoState(null);g2=advance(g2);setGs(g2);};// Clear undo after info revealed
     const pick=(t,cards,filter,onP,onC)=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,
       onPick:id=>{setModal(null);onP(id);},onCancel:onC?()=>{setModal(null);onC();}:undefined});};
-    const resolveCopiedImmediate=(g2,effectId)=>{
-      const effect=CM[effectId];
-      if(!effect){done(L(g2,"...copied action missing. Fizzles."));return;}
-      if(effect.type==="Modify"||effect.type==="React"||effect.type==="Remember"){done(g2);return;}
-      if(effect.type==="Amend"){
-        if(effectId==="7C"){g2.amends={...g2.amends,[opp(p)==="A"?"aFreeze":"bFreeze"]:true};g2=L(g2,`${p}: copied Freeze applies`);}
-        else if(effectId==="7D"){g2.amends={...g2.amends,[opp(p)==="A"?"aNegate":"bNegate"]:true};g2=L(g2,`${p}: copied Negate applies`);}
-        done(g2);return;
-      }
-      if(effectId==="AD"){g2=drawCards(g2,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.bonusActions++;g2.newCards=g2.drawn;}done(g2);return;}
-      if(effectId==="AC"){if(!g2.scrap.length){done(L(g2,"...copied Salvage fizzles (scrap empty)."));return;}
-        pick("Copied Salvage: Take from scrap",g2.scrap,null,id=>{let g3=cloneGs(g2);g3.scrap=g3.scrap.filter(x=>x!==id);
-          g3=setZ(g3,p,"hand",[...getH(g3,p),id]);g3.newCards=[id];g3.bonusActions++;g3=L(g3,`${p} salvages ${CM[id].name}`);done(g3);},
-        ()=>done(L(g2,"...cancelled.")));return;}
-      if(effectId==="AH"){const play=getP(g2,p).filter(a=>a.id!==cid);
-        if(!play.length){done(L(g2,"...copied Retrieve fizzles (no actions)."));return;}
-        pick("Copied Retrieve: Return any of your actions to hand",play.map(a=>a.id),null,id=>{let g3=cloneGs(g2);
-          g3=setZ(g3,p,"play",[...getP(g3,p)].filter(a=>a.id!==id));g3=setZ(g3,p,"hand",[...getH(g3,p),id]);
-          g3.newCards=[id];g3.bonusActions++;g3=L(g3,`${p} retrieves ${CM[id].name}`);done(g3);},
-        ()=>done(L(g2,"...cancelled.")));return;}
-      if(effectId==="AS"){const disc=getD(g2,p);if(!disc.length){done(L(g2,"...copied Reanimate fizzles (discard empty)."));return;}
-        pick("Copied Reanimate: Return a card from your discard to hand",disc,null,id=>{let g3=cloneGs(g2);
-          g3=setZ(g3,p,"discard",[...getD(g3,p)].filter(x=>x!==id));g3=setZ(g3,p,"hand",[...getH(g3,p),id]);
-          g3.newCards=[id];g3.bonusActions++;g3=L(g3,`${p} reanimates ${CM[id].name}`);done(g3);},
-        ()=>done(L(g2,"...cancelled.")));return;}
-      done(L(g2,`(${effect.name} copy resolution not implemented)`));
-    };
+    const resolveCopiedImmediate=(g2,nextEffectId)=>resolveAction(cid,nextEffectId,true,g2);
 
     // 2s
     if(card.scrapSuits){if(frozen){g=L(g,"...Frozen!");done(g);return;}
@@ -370,17 +346,17 @@ export default function KaizenPoker(){
         id=>{let g2=scrapF({...g},p,id);g2=L(g2,`${p} scraps ${CM[id].name}`);done(g2);},
         ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 3C Defer
-    if(cid==="3C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
+    if(effectId==="3C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       setModal({type:"twoChoice",title:"Defer",card:dk[0],opt1:"Leave on Top",opt2:"Put on Bottom",
         on1:()=>{setModal(null);g=L(g,`${p} leaves ${CM[dk[0]].name} on top`);done(g);},
         on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];d.push(d.shift());g2=setZ(g2,p,"deck",d);
           g2=L(g2,`${p} puts ${CM[dk[0]].name} on bottom`);done(g2);}});return;}
     // 3D Loot
-    if(cid==="3D"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}setGs(g);
+    if(effectId==="3D"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}setGs(g);
       setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",newCards:g.drawn||[],
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>done(g2));}});return;}
     // 3H Rummage
-    if(cid==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"Yourself",opt2:"Opponent",
+    if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"Yourself",opt2:"Opponent",
       on1:()=>{setModal(null);setModal({type:"pickDiscard",hand:getH(g,p),title:"Rummage: Discard (then draw)",
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>{
           g2=drawCards(g2,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
@@ -389,41 +365,41 @@ export default function KaizenPoker(){
           onPick:id=>{setModal(null);discardFromHand(g,opp(p),id,g2=>{
             g2=drawCards(g2,opp(p),1);if(g2.drawn)g2=L(g2,`${opp(p)} draws`);done(g2);});}});}});return;}
     // 3S Consider
-    if(cid==="3S"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
+    if(effectId==="3S"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       setModal({type:"twoChoice",title:"Consider",card:dk[0],opt1:"Keep on Top",opt2:"Discard It",
         on1:()=>{setModal(null);g=L(g,`${p} keeps ${CM[dk[0]].name}`);done(g);},
         on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];const c=d.shift();
           g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);}});return;}
     // 4C Entomb
-    if(cid==="4C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
+    if(effectId==="4C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       pick("Entomb: Pick from deck → discard",sortC(dk),null,id=>{let g2={...g};
         g2=setZ(g2,p,"deck",shuf([...getDk(g2,p)].filter(x=>x!==id)));g2=setZ(g2,p,"discard",[...getD(g2,p),id]);
         g2=L(g2,`${p} entombs ${CM[id].name}`);done(g2);});return;}
     // 4D Gamble
-    if(cid==="4D"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
+    if(effectId==="4D"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       pick("Gamble: Take from deck (random discard)",sortC(dk),null,id=>{let g2={...g};
         g2=setZ(g2,p,"deck",shuf([...getDk(g2,p)].filter(x=>x!==id)));let h=[...getH(g2,p),id];g2.newCards=[id];
         const ri=Math.floor(Math.random()*h.length);const disc=h[ri];h=h.filter((_,i)=>i!==ri);
         g2=setZ(g2,p,"hand",h);g2=setZ(g2,p,"discard",[...getD(g2,p),disc]);
         g2=L(g2,`${p} takes ${CM[id].name}, randomly discards ${CM[disc].name}`);done(g2);});return;}
     // 4H Cultivate
-    if(cid==="4H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
+    if(effectId==="4H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       pick("Cultivate: Put on top of deck",sortC(dk),null,id=>{let g2={...g};
         let d=shuf([...getDk(g2,p)].filter(x=>x!==id));d.unshift(id);g2=setZ(g2,p,"deck",d);
         g2=L(g2,`${p} cultivates ${CM[id].name}`);done(g2);});return;}
     // 4S Unearth
-    if(cid==="4S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
+    if(effectId==="4S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
       pick("Unearth: Return from discard",disc,null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=L(g2,`${p} unearths ${CM[id].name}`);g2.newCards=[id];setGs(g2);
         setModal({type:"pickDiscard",hand:h,title:"Unearth: Discard a card",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // 5C Mill
-    if(cid==="5C"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
+    if(effectId==="5C"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
       for(let i=0;i<3&&dk.length;i++){const c=dk.shift();dc.push(c);m.push(c);}
       g=setZ(g,p,"deck",dk);g=setZ(g,p,"discard",dc);g=L(g,`${p} mills: ${m.map(id=>CM[id].name).join(", ")}`);done(g);return;}
     // 5H Recall
-    if(cid==="5H"){const play=getP(g,p).filter(a=>!a.faceDown&&a.id!==cid);
+    if(effectId==="5H"){const play=getP(g,p).filter(a=>!a.faceDown&&a.id!==cid);
       if(!play.length){g=L(g,"...no other actions.");done(g);return;}
       pick("Recall: Return action to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
@@ -431,24 +407,24 @@ export default function KaizenPoker(){
         setModal({type:"pickDiscard",hand:h,title:"Recall: Discard",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // 5S Reclaim
-    if(cid==="5S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
+    if(effectId==="5S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
       pick("Reclaim: Put on top of deck",disc,null,id=>{let g2={...g};
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));g2=setZ(g2,p,"deck",[id,...getDk(g2,p)]);
         g2=L(g2,`${p} reclaims ${CM[id].name}`);done(g2);});return;}
     // 6C Curse
-    if(cid==="6C"){if(!g.scrap.length){g=L(g,"...scrap empty. Fizzles.");done(g);return;}
+    if(effectId==="6C"){if(!g.scrap.length){g=L(g,"...scrap empty. Fizzles.");done(g);return;}
       pick("Curse: Move from scrap → opponent's discard",g.scrap,null,id=>{let g2={...g};
         g2.scrap=g2.scrap.filter(x=>x!==id);g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);
         g2=L(g2,`${p} curses ${opp(p)} with ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6D Abduct
-    if(cid==="6D"){const oa=getP(g,opp(p)).filter(a=>!a.faceDown);
+    if(effectId==="6D"){const oa=getP(g,opp(p)).filter(a=>!a.faceDown);
       if(!oa.length){g=L(g,"...no opponent actions. Fizzles.");done(g);return;}
       pick("Abduct: Steal opponent's action",oa.map(a=>a.id),null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"play",[...getP(g2,opp(p))].filter(a=>a.id!==id));
         g2=setZ(g2,p,"discard",[...getD(g2,p),id]);g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==cid));
         g2.scrap=[...g2.scrap,cid];g2=L(g2,`${p} abducts ${CM[id].name}!`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6H Exchange
-    if(cid==="6H"){const od=getD(g,opp(p)),md=getD(g,p);
+    if(effectId==="6H"){const od=getD(g,opp(p)),md=getD(g,p);
       if(!od.length||!md.length){g=L(g,"...need cards in both discards. Fizzles.");done(g);return;}
       pick("Exchange: Pick from opponent's discard",od,null,oid=>{
         pick("Exchange: Pick from YOUR discard to swap",getD(g,p),null,mid=>{let g2={...g};
@@ -458,50 +434,50 @@ export default function KaizenPoker(){
           g2=L(g2,`${p} exchanges: gives ${CM[mid].name}, takes ${CM[oid].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});
       },()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6S Banish
-    if(cid==="6S"){const od=getD(g,opp(p));if(!od.length){g=L(g,"...opponent discard empty. Fizzles.");done(g);return;}
+    if(effectId==="6S"){const od=getD(g,opp(p));if(!od.length){g=L(g,"...opponent discard empty. Fizzles.");done(g);return;}
       pick("Banish: Move to scrap",od,null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p))].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
         g2=L(g2,`${p} banishes ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 7H Abdicate
-    if(cid==="7H"){const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
+    if(effectId==="7H"){const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
       if(!faces.length){g=L(g,`${opp(p)} has no face cards.`);g=drawCards(g,opp(p),1);if(g.drawn)g=L(g,`${opp(p)} draws`);done(g);return;}
       setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard a face card`,filter:id=>FACE.includes(CM[id].rank),
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,opp(p),"hand",[...getH(g2,opp(p))].filter(x=>x!==id));
           g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);g2=L(g2,`${opp(p)} discards ${CM[id].name} (Abdicate)`);
           g2=drawCards(g2,opp(p),1);if(g2.drawn)g2=L(g2,`${opp(p)} draws`);done(g2);}});return;}
     // 7S Nullify
-    if(cid==="7S"){const allM=[...getP(g,"A").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"A"})),
+    if(effectId==="7S"){const allM=[...getP(g,"A").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"A"})),
       ...getP(g,"B").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"B"}))];
       if(!allM.length){g=L(g,"...no Modifies. Fizzles.");done(g);return;}
       pick("Nullify: Remove a Modify",allM.map(m=>m.id),null,id=>{let g2={...g};const ow=allM.find(m=>m.id===id).ow;
         g2=setZ(g2,ow,"play",[...getP(g2,ow)].filter(a=>a.id!==id));g2=setZ(g2,ow,"discard",[...getD(g2,ow),id]);
         g2=L(g2,`${p} nullifies ${CM[id].name}`);done(g2);});return;}
     // 8H Reject
-    if(cid==="8H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
+    if(effectId==="8H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       setModal({type:"twoChoice",title:"Reject",card:dk[0],opt1:"Leave It",opt2:"Scrap It",
         on1:()=>{setModal(null);g=L(g,`${p} keeps ${CM[dk[0]].name}`);done(g);},
         on2:()=>{setModal(null);if(frozen){g=L(g,"...Frozen!");done(g);return;}
           let g2={...g};let d=[...getDk(g2,p)];d.shift();g2=setZ(g2,p,"deck",d);g2.scrap=[...g2.scrap,dk[0]];
           g2=L(g2,`${p} rejects ${CM[dk[0]].name}`);done(g2);}});return;}
     // 9C Terminate
-    if(cid==="9C"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
+    if(effectId==="9C"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>!FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no non-face cards. Fizzles.");done(g);return;}
       pick("Terminate: Scrap a non-face card",disc,id=>!FACE.includes(CM[id].rank),
         id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
     // 9D Impeach
-    if(cid==="9D"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
+    if(effectId==="9D"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no face cards. Fizzles.");done(g);return;}
       pick("Impeach: Scrap a face card",disc,id=>FACE.includes(CM[id].rank),
         id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
     // 9H Accumulate
-    if(cid==="9H"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
+    if(effectId==="9H"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const ss=new Set(g.scrap.map(id=>CM[id].suit)),sr=new Set(g.scrap.map(id=>CM[id].rank));
       const valid=disc.filter(id=>ss.has(CM[id].suit)||sr.has(CM[id].rank));
       if(!valid.length){g=L(g,"...no matching cards. Fizzles.");done(g);return;}
       pick("Accumulate: Scrap matching scrapped card",disc,id=>ss.has(CM[id].suit)||sr.has(CM[id].rank),
         id=>{done(L(scrapF({...g},p,id),`${p} accumulates ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
     // JD Duplicate — immediately copies another of your Actions in play
-    if(cid==="JD"){const myActions=getP(g,p).filter(a=>a.id!==cid&&!a.faceDown);
+    if(effectId==="JD"){const myActions=getP(g,p).filter(a=>a.id!==cid&&!a.faceDown);
       if(!myActions.length){g=L(g,"...no other actions to copy. Fizzles.");done(g);return;}
       pick("Duplicate: Pick one of YOUR actions to copy",myActions.map(a=>a.id),null,id=>{
         let g2=cloneGs(g);// Mark Duplicate as copying that action
@@ -510,7 +486,7 @@ export default function KaizenPoker(){
         if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // JH Reflect — copies an opponent's Action in play
-    if(cid==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
+    if(effectId==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
       if(!oppActions.length){g=L(g,"...no opponent actions to copy. Fizzles.");done(g);return;}
       pick("Reflect: Pick an OPPONENT'S action to copy",oppActions.map(a=>a.id),null,id=>{
         let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
@@ -518,32 +494,32 @@ export default function KaizenPoker(){
         if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // AD Explore
-    if(cid==="AD"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
+    if(effectId==="AD"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
     // AC Salvage
-    if(cid==="AC"){if(!g.scrap.length){g=L(g,"...scrap empty.");done(g);return;}
+    if(effectId==="AC"){if(!g.scrap.length){g=L(g,"...scrap empty.");done(g);return;}
       pick("Salvage: Take from scrap",g.scrap,null,id=>{let g2=cloneGs(g);g2.scrap=g2.scrap.filter(x=>x!==id);
         g2=setZ(g2,p,"hand",[...getH(g2,p),id]);g2.newCards=[id];g2=L(g2,`${p} salvages ${CM[id].name}`);g2.bonusActions++;done(g2);},
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // AH Retrieve — can retrieve ANY action in play (including face-down)
-    if(cid==="AH"){const play=getP(g,p).filter(a=>a.id!==cid);
+    if(effectId==="AH"){const play=getP(g,p).filter(a=>a.id!==cid);
       if(!play.length){g=L(g,"...no actions to retrieve.");done(g);return;}
       pick("Retrieve: Return any of your actions to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==id));g2=setZ(g2,p,"hand",[...getH(g2,p),id]);
         g2.newCards=[id];g2=L(g2,`${p} retrieves ${CM[id].name}`);g2.bonusActions++;done(g2);},
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // AS Reanimate — return card from discard to hand
-    if(cid==="AS"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
+    if(effectId==="AS"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
       pick("Reanimate: Return a card from your discard to hand",disc,null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));g2=setZ(g2,p,"hand",[...getH(g2,p),id]);
         g2.newCards=[id];g2=L(g2,`${p} reanimates ${CM[id].name}`);g2.bonusActions++;done(g2);},
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // KC Brainstorm
-    if(cid==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;setGs(g);
+    if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;setGs(g);
       setModal({type:"brainstorm",hand:getH(g,p),newCards:dr,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"deck",[...ids,...getDk(g2,p)]);
         g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(" → ")}`);g2.newCards=[];done(g2);}});return;}
     // KD Improvise
-    if(cid==="KD"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
+    if(effectId==="KD"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
       for(let i=0;i<3&&dk.length;i++){const c=dk.shift();dc.push(c);m.push(c);}
       g=setZ(g,p,"deck",dk);g=setZ(g,p,"discard",dc);g=L(g,`${p} mills: ${m.map(id=>CM[id].name).join(", ")}`);setGs(g);
       pick("Improvise: Take from discard",[...getD(g,p)],null,id=>{let g2=cloneGs(g);
@@ -552,7 +528,7 @@ export default function KaizenPoker(){
         setModal({type:"pickDiscard",hand:h,title:"Improvise: Discard",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // KH Rejuvenate
-    if(cid==="KH"){setModal({type:"rejuvenate",hand:getH(g,p),onPick:ids=>{setModal(null);let g2=cloneGs(g);
+    if(effectId==="KH"){setModal({type:"rejuvenate",hand:getH(g,p),onPick:ids=>{setModal(null);let g2=cloneGs(g);
       g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"discard",[...getD(g2,p),...ids]);
       g2=L(g2,`${p} discards: ${ids.map(id=>CM[id].name).join(", ")}`);
       // Check Capitalize for each discarded card (only 8S matters)
@@ -562,7 +538,7 @@ export default function KaizenPoker(){
         checkCap(g3,p,ids[ci],g4=>capCheck(g4,ci+1));};
       capCheck(g2,0);}});return;}
     // KS Bury
-    if(cid==="KS"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
+    if(effectId==="KS"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       if(!disc.length){g=L(g,"...nothing to scrap.");done(g);return;}
       setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury: Scrap up to 3",onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>!ids.includes(x)));g2.scrap=[...g2.scrap,...ids];
@@ -765,9 +741,12 @@ export default function KaizenPoker(){
   const pClr=p==="A"?"#e74c3c":"#3498db";
 
   return(<div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0f1923,#070b10 70%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column"}}>
-    <div style={{padding:"8px 16px",borderBottom:isSuddenDeath?"2px solid #e74c3c":"1px solid #151c25",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"#e74c3c15":"#0008",fontSize:12}}>
+    <div style={{padding:"8px 16px",borderBottom:isSuddenDeath?"2px solid #e74c3c":"1px solid #151c25",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"#e74c3c15":"#0008",fontSize:12,flexWrap:"wrap"}}>
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
       <span style={{color:"#445"}}>Round {gs.round}</span>
+      <span style={{padding:"2px 8px",borderRadius:999,border:"1px solid #334",color:"#9fb0c0",fontSize:10,textTransform:"uppercase",letterSpacing:1}}>
+        {gs.phase==="action"?`Action - Player ${p}`:gs.phase==="score"?"Scoring":gs.phase==="reveal"?"Reveal":"Game Over"}
+      </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>⚡ SUDDEN DEATH</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:16}}>
         <span style={{color:"#e74c3c",fontWeight:700,background:sdPlayer==="A"?"#e74c3c22":"transparent",padding:"0 6px",borderRadius:4}}>A: {gs.aChips}</span>
@@ -787,7 +766,12 @@ export default function KaizenPoker(){
           <div style={{fontSize:9,color:"#445",fontWeight:700,letterSpacing:1,marginBottom:3}}>{pl}'s ACTIONS</div>
           <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
             {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} style={{width:68,height:95,borderRadius:6,background:"#1a1a2e",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",color:"#334",fontSize:10}}>Face down</div>
-              :<Card key={i} id={a.id} small/>)}</div></div>))}</div>
+              :<div key={i} style={{position:"relative"}}>
+                <Card id={a.id} small/>
+                {a.copiedFrom&&<div style={{position:"absolute",left:2,right:2,bottom:2,background:"#f1c40fe6",color:"#111",borderRadius:4,padding:"2px 3px",fontSize:7,fontWeight:800,lineHeight:1.1,textAlign:"center",boxShadow:"0 1px 4px #0008"}}>
+                  {CM[a.id].name}: {CM[a.copiedFrom]?.name}
+                </div>}
+              </div>)}</div></div>))}</div>
         <PublicZones gs={gs}/>
         <div style={{display:"flex",gap:6}}><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></div>
         {/* Hand */}
