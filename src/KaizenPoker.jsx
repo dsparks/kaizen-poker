@@ -8,7 +8,13 @@ const SC={C:"#2ecc71",D:"#f39c12",H:"#e74c3c",S:"#3498db"};
 const SO=["C","D","H","S"];
 const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
-const FACE=["J","Q","K","A"];
+const FACE=["J","Q","K"];
+function lowerRanks(rank){return rank==="2"?["A"]:RO.filter(r=>RV[r]<RV[rank])}
+function adjacentRanks(rank){
+  if(rank==="2")return ["A","3"];
+  if(rank==="A")return ["K","2"];
+  const ci=RV[rank],opts=[];if(ci>0)opts.push(RO[ci-1]);if(ci<12)opts.push(RO[ci+1]);return opts;
+}
 const TI={Enact:{bg:"#181d20",bd:"#636e72",lb:"Enact"},Modify:{bg:"#1f1c0e",bd:"#d4a017",lb:"Modify"},
   React:{bg:"#0e1f1f",bd:"#00b894",lb:"React"},Amend:{bg:"#1f0e0e",bd:"#d63031",lb:"Amend"},
   Remember:{bg:"#13102a",bd:"#6c5ce7",lb:"Remember"}};
@@ -91,7 +97,9 @@ function evalHand(cardIds,mods=[]){
   const rsc={};eff.forEach(c=>{const k=c.rank+c.suit;rsc[k]=(rsc[k]||0)+1});
   const maxId=Math.max(...Object.values(rsc));const isFlush=Object.values(sc).some(c=>c===5);
   const sv=[...new Set(rv)].sort((a,b)=>a-b);
-  let isStr=sv.length===5&&(sv[4]-sv[0]===4||sv.join(",")==="0,1,2,3,12");
+  const isWheel=sv.join(",")==="0,1,2,3,12";
+  let isStr=sv.length===5&&(sv[4]-sv[0]===4||isWheel);
+  const rankVals=isWheel?[3,2,1,0,-1]:rv;
   const cnts=Object.values(rc).sort((a,b)=>b-a);let twins=Object.values(rsc).some(c=>c>=2);
   let hr=0,hn="High Card";
   if(maxId===5){hr=13;hn="Flush Five"}else if(cnts[0]===3&&cnts[1]===2&&isFlush){hr=12;hn="Flush House"}
@@ -101,7 +109,7 @@ function evalHand(cardIds,mods=[]){
   else if(isStr){hr=5;hn="Straight"}else if(cnts[0]===3){hr=4;hn="Three of a Kind"}
   else if(cnts[0]===2&&cnts[1]===2){const pr=Object.entries(rc).filter(([,c])=>c===2);hr=twins&&pr.length===1?2:3;hn=hr===2?"Twins":"Two Pair"}
   else if(cnts[0]===2){hr=twins?2:1;hn=hr===2?"Twins":"Pair"}
-  return{handRank:hr,handName:hn,rankVals:rv,effective:eff};}
+  return{handRank:hr,handName:hn,rankVals,effective:eff};}
 function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHand(b,bm);
   if(ae.handRank!==be.handRank)return ae.handRank>be.handRank?"A":"B";
   for(let i=0;i<ae.rankVals.length;i++){if(ae.rankVals[i]>be.rankVals[i])return"A";if(ae.rankVals[i]<be.rankVals[i])return"B";}return"TIE";}
@@ -571,13 +579,13 @@ export default function KaizenPoker(){
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
     if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf — pick scoring card to decrease rank`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>{setModal(null);const ci=RV[CM[tid].rank];const lr=RO.filter((_,i)=>i<ci);
+      onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: Nerf ${CM[tid].name} → ${r}`);setGs(g2);next(g2);}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
     if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge — pick scoring card (±1 rank)`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>{setModal(null);const ci=RV[CM[tid].rank];const opts=[];if(ci>0)opts.push(RO[ci-1]);if(ci<12)opts.push(RO[ci+1]);
+      onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: Nudge ${CM[tid].name} → ${r}`);setGs(g2);next(g2);}});},
       onCancel:()=>{setModal(null);skip();}});return;}
