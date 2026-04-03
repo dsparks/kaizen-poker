@@ -135,16 +135,25 @@ function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 // ============================================================
 // SIMPLE UI COMPONENTS
 // ============================================================
-function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onDoubleClick}){const c=CM[id];if(!c)return null;
+function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,inspectLabel,statusLabel,statusColor}){const c=CM[id];if(!c)return null;
   const w=small?68:120,h=small?95:168,ti=TI[c.type];
-  return(<div onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onDoubleClick={onDoubleClick} title={small?"Hover to preview, double-click to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
+  const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
+  return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
+    onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
+    title={small?"Hover to preview, double-click or tap View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
     border:selected?`2px solid #f1c40f`:isNew?`2px solid #2ecc71`:glow?`2px solid ${glow}`:`1px solid ${ti.bd}44`,
     background:`linear-gradient(160deg,${ti.bg},#0a0d10)`,
     boxShadow:selected?"0 0 12px #f1c40f44":isNew?"0 0 14px #2ecc7155":glow?`0 0 12px ${glow}44`:"0 2px 6px #00000044",
     cursor:onClick?"pointer":"default",display:"flex",flexDirection:"column",
     padding:small?"4px 5px":"7px 9px",overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
-    transform:selected?"translateY(-4px)":isNew?"translateY(-3px)":"none"}}>
+    transform:baseTransform}}>
     {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#2ecc71",background:"#2ecc7122",borderRadius:3,padding:"0 4px"}}>NEW</div>}
+    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} style={{position:"absolute",top:2,right:2,padding:"1px 4px",borderRadius:999,border:"1px solid #ffffff22",background:"#091018dd",color:"#cbd5e1",fontSize:7,fontWeight:800,cursor:"pointer",letterSpacing:.3,zIndex:2}}>
+      {inspectLabel||"View"}
+    </button>}
+    {statusLabel&&<div style={{position:"absolute",left:small?2:4,bottom:small?2:4,maxWidth:small?"65%":"72%",background:`${statusColor||"#f1c40f"}dd`,color:"#081018",borderRadius:4,padding:small?"1px 4px":"2px 6px",fontSize:small?7:8,fontWeight:900,letterSpacing:.4,textTransform:"uppercase",boxShadow:"0 1px 4px #0008",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+      {statusLabel}
+    </div>}
     <div style={{display:"flex",alignItems:"center",gap:1}}>
       <span style={{fontSize:small?20:32,fontWeight:900,color:SC[c.suit],lineHeight:1,fontFamily:"Georgia,serif"}}>{c.rank}</span>
       <span style={{fontSize:small?14:20,color:SC[c.suit],marginTop:small?1:3}}>{SUITS[c.suit]}</span></div>
@@ -152,10 +161,16 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{ti.lb}</div>
     {!small&&<div style={{fontSize:9,color:"#8899aa",marginTop:"auto",lineHeight:1.3,paddingTop:3}}>{c.text}</div>}
   </div>);}
-function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);
+function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
+  const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-160,Math.max(16,pos.x+20));
+  const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-220,Math.max(16,pos.y-30));
   return(<>
-    <Card {...props} small onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} onDoubleClick={()=>setPinned(true)}/>
-    {hover&&!pinned&&<div style={{position:"fixed",right:18,bottom:18,zIndex:950,pointerEvents:"none",background:"#0b1016ee",border:"1px solid #2d3748",borderRadius:12,padding:10,boxShadow:"0 10px 30px #000a"}}>
+    <Card {...props} small inspectLabel="View" onInspect={()=>setPinned(true)}
+      onMouseEnter={e=>{setHover(true);setPos({x:e.clientX,y:e.clientY});}}
+      onMouseLeave={()=>setHover(false)}
+      onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
+      onDoubleClick={()=>setPinned(true)}/>
+    {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:950,pointerEvents:"none",background:"#0b1016ee",border:"1px solid #2d3748",borderRadius:12,padding:10,boxShadow:"0 10px 30px #000a",animation:"inspectPop 0.12s ease-out"}}>
       <div style={{fontSize:10,color:"#7f8c8d",marginBottom:6,textAlign:"center"}}>Preview</div>
       <Card id={props.id}/>
     </div>}
@@ -760,7 +775,7 @@ export default function KaizenPoker(){
   const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
 
   return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% 0%,#132434 0%,#09121a 42%,#04070b 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}`}</style>
+    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:translateY(-6px) scale(1.02)!important;box-shadow:0 14px 30px #0008!important}.kp-card-small.kp-card-clickable:hover{transform:translateY(-4px) scale(1.03)!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.12),transparent 30%,transparent 70%,rgba(255,255,255,.04));opacity:.75;pointer-events:none}.kp-card-small::before{content:"";position:absolute;left:8px;right:8px;bottom:-8px;height:14px;border-radius:999px;background:radial-gradient(circle,rgba(0,0,0,.36) 0%,rgba(0,0,0,0) 70%);pointer-events:none;z-index:-1}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
       <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#3498db12 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
@@ -797,12 +812,14 @@ export default function KaizenPoker(){
         <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1,minWidth:280,padding:"12px 14px",borderRadius:16,background:"linear-gradient(180deg,#0d141bcc,#091018cc)",border:`1px solid ${pl==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"inset 0 1px 0 #ffffff08"}}>
           <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
           <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
-            {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} style={{width:68,height:95,borderRadius:6,background:"#1a1a2e",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",color:"#334",fontSize:10}}>Face down</div>
-              :<div key={i} style={{position:"relative"}}>
-                <PreviewCard id={a.id}/>
-                {a.copiedFrom&&<div style={{position:"absolute",left:2,right:2,bottom:2,background:"#f1c40fe6",color:"#111",borderRadius:4,padding:"2px 3px",fontSize:7,fontWeight:800,lineHeight:1.1,textAlign:"center",boxShadow:"0 1px 4px #0008"}}>
-                  {CM[a.id].name}: {CM[a.copiedFrom]?.name}
-                </div>}
+            {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} className="kp-action-slot" style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033"}}>
+                <div style={{textAlign:"center",lineHeight:1.2}}>
+                  <div style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:"uppercase"}}>Hidden</div>
+                  <div style={{fontSize:8,color:"#516172"}}>Face-down</div>
+                </div>
+              </div>
+              :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
+                <PreviewCard id={a.id} statusLabel={a.copiedFrom?`Copy: ${CM[a.copiedFrom]?.name}`:undefined} statusColor={a.copiedFrom?"#f1c40f":"#2ecc71"}/>
               </div>)}</div></div>))}</div>
         <PublicZones gs={gs}/>
         <div style={{display:"flex",gap:6}}><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></div>
@@ -844,8 +861,8 @@ export default function KaizenPoker(){
                   <div style={{display:"flex",gap:5,marginBottom:6}}>
                     {sortC(h).map(id=>{
                       const mod=mods.find(m=>m.target===id);
-                      return(<div key={id} style={{position:"relative"}}>
-                        <PreviewCard id={id} glow={isWinner?clr:undefined}/>
+                      return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
+                        <PreviewCard id={id} glow={isWinner?clr:undefined} statusLabel={mod?"Modified":undefined} statusColor="#f1c40f"/>
                         {mod&&<div style={{position:"absolute",bottom:2,left:2,right:2,background:"#f1c40fdd",color:"#000",
                           borderRadius:3,fontSize:7,fontWeight:700,textAlign:"center",padding:"1px 2px"}}>
                           {mod.rank&&`→${mod.rank}`}{mod.suit&&`→${SUITS[mod.suit]}`}</div>}
