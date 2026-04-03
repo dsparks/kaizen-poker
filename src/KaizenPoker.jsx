@@ -298,7 +298,9 @@ export default function KaizenPoker(){
   });
   const getAppliedMods=(g,pl)=>{
     const mk=pl==="A"?"aMods":"bMods";
-    return getP(g,pl).flatMap(a=>a.faceDown?[]:((g[mk]||[]).filter(m=>m.sourceId===a.id)));
+    const queued=g[mk]||[];
+    const free=queued.filter(m=>!m.sourceId);
+    return [...free,...getP(g,pl).flatMap(a=>a.faceDown?[]:queued.filter(m=>m.sourceId===a.id))];
   };
 
   const buildFreshGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
@@ -436,8 +438,7 @@ export default function KaizenPoker(){
       g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
       g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
     }
-    if(card.type==="Modify"){g.aMods=g.aMods||[];g.bMods=g.bMods||[];g.aForecast=g.aForecast||[];g.bForecast=g.bForecast||[];
-      g=L(g,`${p} plays ${card.name} (Modify)`);chooseModifyOnPlay(g,p,cid,effectId,effectId!==cid?effectId:null);return;}
+    if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);setGs(g);return;}
     if(card.type==="React"){g=L(g,`${p} plays ${card.name} (React)`);g=advance(g);setGs(g);return;}
     if(card.type==="Remember"){g=L(g,`${p} plays ${card.name} (Remember)`);g=advance(g);setGs(g);return;}
     if(card.type==="Amend"){
@@ -602,7 +603,7 @@ export default function KaizenPoker(){
         let g2=cloneGs(g);// Mark Duplicate as copying that action
         const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
         g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} duplicates ${CM[id].name}`);
-        if(["Enact","Amend","Modify"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
+        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // JH Reflect — copies an opponent's Action in play
     if(effectId==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
@@ -610,7 +611,7 @@ export default function KaizenPoker(){
       pick("Reflect: Pick an OPPONENT'S action to copy",oppActions.map(a=>a.id),null,id=>{
         let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
         g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} reflects ${CM[id].name}`);
-        if(["Enact","Amend","Modify"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
+        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // AD Explore
     if(effectId==="AD"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
@@ -668,8 +669,8 @@ export default function KaizenPoker(){
   // SCORING WITH MODIFY RESOLUTION
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
-    g.aMods=g.aMods||[];g.bMods=g.bMods||[];g.aForecast=g.aForecast||[];g.bForecast=g.bForecast||[];g=L(g,"Applying chosen modifications...");setGs(g);
-    resolveQ2s(g,"A",g2=>resolveQ2s(g2,"B",finalScore));};
+    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g=L(g,"Resolving modifications...");setGs(g);
+    const aM=getModifyEntries(g,"A");resolveMods(g,"A",aM,0);};
 
   const resolveMods=(g,pl,mods,i)=>{
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
@@ -682,7 +683,7 @@ export default function KaizenPoker(){
     // Forecast: choose target now, resolve after reveal
     if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
       setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
-        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),tid];g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);setGs(g2);next(g2);},
+        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);setGs(g2);next(g2);},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Vanish: defer
     if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);setGs(g2);next(g2);return;}
@@ -691,7 +692,7 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
@@ -699,7 +700,7 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
@@ -707,14 +708,14 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
     if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);
         setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
-          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${SUITS[s]}`);setGs(g2);next(g2);},
+          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${SUITS[s]}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Clone — one SCORING card becomes copy of another SCORING card
@@ -722,7 +723,7 @@ export default function KaizenPoker(){
       setModal({type:"pickFromList",title:`${pl}: Clone — pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
           setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
-            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
+            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
@@ -730,13 +731,14 @@ export default function KaizenPoker(){
       setModal({type:"pickFromList",title:`${pl}: Reminisce — pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);
           setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
-            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
+            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     let g2=L(g,`${pl}: ${modLabel} — not implemented`);setGs(g2);next(g2);};
 
   // Queen Remember on 2s
   const resolveQ2s=(g,pl,done)=>{
+    const mk=pl==="A"?"aMods":"bMods";
     const modded=new Set(getAppliedMods(g,pl).map(m=>m.target));
     const hand=getH(g,pl);
     const twos=hand.filter(id=>CM[id].rank==="2"&&!modded.has(id));
@@ -783,7 +785,7 @@ export default function KaizenPoker(){
         const fk=pl==="A"?"aForecast":"bForecast";
         const queue=[...(g[fk]||[])];
         const nextMark=queue.shift()||null;
-        effs.push({t:"forecast",pl,target:nextMark?.target||null});
+        effs.push({t:"forecast",pl,target:nextMark?nextMark.target:null});
         g[fk]=queue;
       }
       if(effect.id==="8D")effs.push({t:"vanish",pl});
