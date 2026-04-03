@@ -828,7 +828,6 @@ export default function KaizenPoker(){
                 <PreviewCard id={a.id} statusLabel={a.copiedFrom?`Copy: ${CM[a.copiedFrom]?.name}`:undefined} statusColor={a.copiedFrom?"#f1c40f":"#2ecc71"}/>
               </div>)}</div></div>))}</div>
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>}/>
-        <PlaytestPanel/>
         {/* Hand */}
         <div style={{padding:"14px 16px",borderRadius:18,background:"linear-gradient(180deg,#0f161dcc,#0a1016cc)",border:`1px solid ${p==="A"?"#e74c3c22":"#3498db22"}`,boxShadow:"0 14px 30px #00000022,inset 0 1px 0 #ffffff0a"}}>
           <div style={{fontSize:11,color:p==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
@@ -849,15 +848,15 @@ export default function KaizenPoker(){
           const aH=getH(gs,"A"),bH=getH(gs,"B");
           const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
           const wText=w==="A"?"Player A wins the chip!":w==="B"?"Player B wins the chip!":"Tie — no chip awarded";
-          return(<div style={{padding:18,background:"linear-gradient(180deg,#101722ee,#0a0f16ee)",borderRadius:18,border:`2px solid ${wClr}44`,boxShadow:`0 24px 60px ${wClr}22`,animation:"revealRise 0.35s ease-out"}}>
+          return(<div style={{padding:16,background:"linear-gradient(180deg,#101722ee,#0a0f16ee)",borderRadius:18,border:`2px solid ${wClr}44`,boxShadow:`0 24px 60px ${wClr}22`,animation:"revealRise 0.35s ease-out"}}>
             {/* Winner banner */}
-            <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{textAlign:"center",marginBottom:12}}>
               <div style={{fontSize:10,fontWeight:800,color:"#7f93a8",letterSpacing:3,textTransform:"uppercase",marginBottom:6}}>Showdown</div>
-              <div style={{fontSize:28,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",marginBottom:4,textShadow:`0 0 18px ${wClr}44`}}>{wText}</div>
+              <div style={{fontSize:22,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",marginBottom:2,textShadow:`0 0 18px ${wClr}44`,lineHeight:1.15}}>{wText}</div>
               <div style={{fontSize:13,color:"#90a4b8"}}>{gs.aChips} — {gs.bChips}</div>
             </div>
             {/* Both hands side by side */}
-            <div style={{display:"flex",gap:20,justifyContent:"center",flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
               {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:gs.aMods},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:gs.bMods}].map(({pl,hand:h,ev,clr,mods})=>{
                 const isWinner=w===pl;const isTie=w==="TIE";
                 return(<div key={pl} style={{opacity:!isWinner&&!isTie?0.5:1,transition:"all 0.3s"}}>
@@ -877,7 +876,7 @@ export default function KaizenPoker(){
                 </div>);})}
             </div>
             {/* Next round button */}
-            <div style={{textAlign:"center",marginTop:16}}>
+            <div style={{textAlign:"center",marginTop:12}}>
               {gs.aChips>=7||gs.bChips>=7
                 ?<div><div style={{fontSize:20,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif",marginBottom:8}}>
                     🏆 Player {gs.aChips>=7?"A":"B"} wins the game!</div>
@@ -890,6 +889,9 @@ export default function KaizenPoker(){
         {gs.phase==="gameOver"&&<div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>Game Over — Player {gs.aChips>=7?"A":"B"} Wins!</div>
           <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>}
+        <div style={{marginTop:"auto"}}>
+          <PlaytestPanel/>
+        </div>
       </div>
       {/* Log */}
       <div style={{width:260,borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
