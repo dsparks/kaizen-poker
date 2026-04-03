@@ -170,8 +170,7 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
       onMouseLeave={()=>setHover(false)}
       onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
       onDoubleClick={()=>setPinned(true)}/>
-    {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",background:"#0b1016ee",border:"1px solid #2d3748",borderRadius:12,padding:10,boxShadow:"0 10px 30px #000a",animation:"inspectPop 0.12s ease-out"}}>
-      <div style={{fontSize:10,color:"#7f8c8d",marginBottom:6,textAlign:"center"}}>Preview</div>
+    {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
       <Card id={props.id}/>
     </div>}
     {pinned&&<Modal title={`${CM[props.id]?.rank||""}${SUITS[CM[props.id]?.suit]||""} ${CM[props.id]?.name||"Card"}`}>
