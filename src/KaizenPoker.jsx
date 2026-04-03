@@ -296,6 +296,10 @@ export default function KaizenPoker(){
     if(effect?.type!=="Modify")return [];
     return [{sourceId:a.id,effectId:effect.id,copiedFrom:a.copiedFrom||null}];
   });
+  const getAppliedMods=(g,pl)=>{
+    const mk=pl==="A"?"aMods":"bMods";
+    return getP(g,pl).flatMap(a=>a.faceDown?[]:((g[mk]||[]).filter(m=>m.sourceId===a.id)));
+  };
 
   const buildFreshGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
@@ -366,6 +370,49 @@ export default function KaizenPoker(){
   // --- UNDO ---
   const doUndo=()=>{if(undoState){setGs(undoState);setUndoState(null);setModal(null);setFdMode(false);}};
 
+  const chooseModifyOnPlay=(g,pl,sourceId,effectId,copiedFrom=null)=>{
+    const hand=getH(g,pl),disc=getD(g,pl),mk=pl==="A"?"aMods":"bMods",fk=pl==="A"?"aForecast":"bForecast";
+    const effect=CM[effectId],source=CM[sourceId]||effect;
+    const label=copiedFrom?`${source.name} copying ${effect.name}`:effect.name;
+    const finish=g2=>{setModal(null);setGs(advance(g2));};
+    const saveMod=(base,target,rank,suit,logMsg)=>{
+      let g2=cloneGs(base);g2[mk]=[...(g2[mk]||[]).filter(m=>m.sourceId!==sourceId),{sourceId,target,rank,suit}];
+      g2=L(g2,logMsg);finish(g2);
+    };
+    const saveForecast=(base,target)=>{
+      let g2=cloneGs(base);g2[fk]=[...(g2[fk]||[]).filter(m=>m.sourceId!==sourceId),{sourceId,target}];
+      g2=L(g2,`${pl}: ${label} marks ${CM[target].name} for Forecast`);finish(g2);
+    };
+    const skip=msg=>{let g2=L(g,msg||`${pl}: ${label} — skipped`);finish(g2);};
+    if(effectId==="5D"){setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>saveForecast(g,tid),onCancel:()=>skip()});return;}
+    if(effectId==="8D"){setGs(g);skip(`${pl}: ${label} — after scoring`);return;}
+    if(effectId==="10H"){setGs(g);setModal({type:"pickFromList",title:`${pl}: Buff — pick scoring card to increase rank`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>{const hr=higherRanks(CM[tid].rank);if(!hr.length){skip(`${pl}: ${label} has no higher rank target for ${CM[tid].name}`);return;}
+        setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,onPick:r=>saveMod(g,tid,r,null,`${pl}: ${label} ${CM[tid].name} → ${r}`),onCancel:()=>skip()});},
+      onCancel:()=>skip()});return;}
+    if(effectId==="10S"){setGs(g);setModal({type:"pickFromList",title:`${pl}: Nerf — pick scoring card to decrease rank`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>{const lr=lowerRanks(CM[tid].rank);if(!lr.length){skip(`${pl}: ${label} has no lower rank target for ${CM[tid].name}`);return;}
+        setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,onPick:r=>saveMod(g,tid,r,null,`${pl}: ${label} ${CM[tid].name} → ${r}`),onCancel:()=>skip()});},
+      onCancel:()=>skip()});return;}
+    if(effectId==="10C"){setGs(g);setModal({type:"pickFromList",title:`${pl}: Nudge — pick scoring card (±1 rank)`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>{const opts=adjacentRanks(CM[tid].rank);if(!opts.length){skip(`${pl}: ${label} has no adjacent ranks for ${CM[tid].name}`);return;}
+        setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,onPick:r=>saveMod(g,tid,r,null,`${pl}: ${label} ${CM[tid].name} → ${r}`),onCancel:()=>skip()});},
+      onCancel:()=>skip()});return;}
+    if(effectId==="10D"){setGs(g);setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,onPick:s=>saveMod(g,tid,null,s,`${pl}: ${label} ${CM[tid].name} → ${SUITS[s]}`),onCancel:()=>skip()}),
+      onCancel:()=>skip()});return;}
+    if(effectId==="JC"){if(hand.length<2){skip(`${pl}: ${label} — no other scoring card to copy`);return;}setGs(g);setModal({type:"pickFromList",title:`${pl}: Clone — pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:hand.filter(x=>x!==tid),showHand:hand,canCancel:false,
+        onPick:sid=>saveMod(g,tid,CM[sid].rank,CM[sid].suit,`${pl}: ${label} ${CM[tid].name} → copy of ${CM[sid].name}`)}),
+      onCancel:()=>skip()});return;}
+    if(effectId==="JS"){if(!disc.length){skip(`${pl}: ${label} — discard empty`);return;}setGs(g);setModal({type:"pickFromList",title:`${pl}: Reminisce — pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
+      onPick:tid=>setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
+        onPick:sid=>saveMod(g,tid,CM[sid].rank,CM[sid].suit,`${pl}: ${label} ${CM[tid].name} → copy of ${CM[sid].name}`)}),
+      onCancel:()=>skip()});return;}
+    let g2=L(g,`${pl}: ${label} — not implemented`);finish(g2);
+  };
+
   // --- HANDLE PLAY ---
   const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)setGs(p=>({...p,newCards:[]}));
     const card=CM[cid],p=gs.currentPlayer;
@@ -388,7 +435,8 @@ export default function KaizenPoker(){
       g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
       g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
     }
-    if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);setGs(g);return;}
+    if(card.type==="Modify"){g.aMods=g.aMods||[];g.bMods=g.bMods||[];g.aForecast=g.aForecast||[];g.bForecast=g.bForecast||[];
+      g=L(g,`${p} plays ${card.name} (Modify)`);chooseModifyOnPlay(g,p,cid,effectId,effectId!==cid?effectId:null);return;}
     if(card.type==="React"){g=L(g,`${p} plays ${card.name} (React)`);g=advance(g);setGs(g);return;}
     if(card.type==="Remember"){g=L(g,`${p} plays ${card.name} (Remember)`);g=advance(g);setGs(g);return;}
     if(card.type==="Amend"){
@@ -553,7 +601,7 @@ export default function KaizenPoker(){
         let g2=cloneGs(g);// Mark Duplicate as copying that action
         const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
         g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} duplicates ${CM[id].name}`);
-        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
+        if(["Enact","Amend","Modify"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // JH Reflect — copies an opponent's Action in play
     if(effectId==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
@@ -561,7 +609,7 @@ export default function KaizenPoker(){
       pick("Reflect: Pick an OPPONENT'S action to copy",oppActions.map(a=>a.id),null,id=>{
         let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
         g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} reflects ${CM[id].name}`);
-        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
+        if(["Enact","Amend","Modify"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // AD Explore
     if(effectId==="AD"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
@@ -619,10 +667,8 @@ export default function KaizenPoker(){
   // SCORING WITH MODIFY RESOLUTION
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
-    const aM=getModifyEntries(g,"A");
-    const bM=getModifyEntries(g,"B");
-    g.aMods=g.aMods||[];g.bMods=g.bMods||[];g.aForecast=g.aForecast||[];g.bForecast=g.bForecast||[];g=L(g,"Resolving modifications...");setGs(g);
-    resolveMods(g,"A",aM,0);};
+    g.aMods=g.aMods||[];g.bMods=g.bMods||[];g.aForecast=g.aForecast||[];g.bForecast=g.bForecast||[];g=L(g,"Applying chosen modifications...");setGs(g);
+    resolveQ2s(g,"A",g2=>resolveQ2s(g2,"B",finalScore));};
 
   const resolveMods=(g,pl,mods,i)=>{
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
@@ -690,7 +736,7 @@ export default function KaizenPoker(){
 
   // Queen Remember on 2s
   const resolveQ2s=(g,pl,done)=>{
-    const mk=pl==="A"?"aMods":"bMods";const modded=new Set((g[mk]||[]).map(m=>m.target));
+    const modded=new Set(getAppliedMods(g,pl).map(m=>m.target));
     const hand=getH(g,pl);
     const twos=hand.filter(id=>CM[id].rank==="2"&&!modded.has(id));
     const misc=g.scrap.includes("QC"),camo=g.scrap.includes("QD");
@@ -716,9 +762,9 @@ export default function KaizenPoker(){
     proc(g,0);};
 
   // Finalize scoring — show reveal
-  const finalScore=(g)=>{const aH=getH(g,"A"),bH=getH(g,"B");
-    const aE=evalHand(aH,g.aMods||[]),bE=evalHand(bH,g.bMods||[]);
-    const winner=compareHands(aH,bH,g.aMods||[],g.bMods||[]);
+  const finalScore=(g)=>{const aH=getH(g,"A"),bH=getH(g,"B"),aM=getAppliedMods(g,"A"),bM=getAppliedMods(g,"B");
+    const aE=evalHand(aH,aM),bE=evalHand(bH,bM);
+    const winner=compareHands(aH,bH,aM,bM);
     g=L(g,`A: ${aE.handName}`);g=L(g,`B: ${bE.handName}`);
     if(winner==="A"){g.aChips++;g=L(g,`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
     else if(winner==="B"){g.bChips++;g=L(g,`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
@@ -735,7 +781,8 @@ export default function KaizenPoker(){
       if(effect.id==="5D"){
         const fk=pl==="A"?"aForecast":"bForecast";
         const queue=[...(g[fk]||[])];
-        effs.push({t:"forecast",pl,target:queue.shift()||null});
+        const nextMark=queue.shift()||null;
+        effs.push({t:"forecast",pl,target:nextMark?.target||null});
         g[fk]=queue;
       }
       if(effect.id==="8D")effs.push({t:"vanish",pl});
@@ -771,7 +818,7 @@ export default function KaizenPoker(){
       g2=L(g2,`${e.pl}: Forecast puts ${CM[e.target].name} on top of the deck`);
       setGs(g2);procPost(g2,effs,i+1);return;}
     if(e.t==="vanish"){if(isFroz(g,e.pl)){g=L(g,`${e.pl}: Vanish — Frozen!`);procPost(g,effs,i+1);return;}
-      const mk=e.pl==="A"?"aMods":"bMods";const effS=new Set(getH(g,e.pl).map(id=>{const m=g[mk].find(x=>x.target===id);return m?.suit||CM[id].suit;}));
+      const activeMods=getAppliedMods(g,e.pl);const effS=new Set(getH(g,e.pl).map(id=>{const m=activeMods.find(x=>x.target===id);return m?.suit||CM[id].suit;}));
       const disc=getD(g,e.pl);const valid=disc.filter(id=>effS.has(CM[id].suit));
       if(!valid.length){procPost(g,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Vanish — scrap matching suit`,cards:disc,filter:id=>effS.has(CM[id].suit),canCancel:true,
@@ -865,7 +912,7 @@ export default function KaizenPoker(){
             {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)}/>}
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>← pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
             {canAct&&undoState&&<Btn label="↩ Undo" bg="#e67e22" onClick={doUndo}/>}
-            {gs.phase==="score"&&<HandBadge ids={hand}/>}</div>
+            {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,p)}/>}</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {sortC(hand).map(id=>(<Card key={id} id={id} onClick={canAct?()=>handlePlayCard(id):undefined}
               glow={canAct?(fdMode?"#888":pClr):undefined} isNew={gs.newCards.includes(id)}/>))}</div></div>
@@ -886,7 +933,7 @@ export default function KaizenPoker(){
             </div>
             {/* Both hands side by side */}
             <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
-              {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:gs.aMods},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:gs.bMods}].map(({pl,hand:h,ev,clr,mods})=>{
+              {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:getAppliedMods(gs,"A")},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:getAppliedMods(gs,"B")}].map(({pl,hand:h,ev,clr,mods})=>{
                 const isWinner=w===pl;const isTie=w==="TIE";
                 return(<div key={pl} style={{opacity:!isWinner&&!isTie?0.5:1,transition:"all 0.3s"}}>
                   <div style={{fontSize:12,fontWeight:700,color:clr,marginBottom:4,textAlign:"center",letterSpacing:1}}>
