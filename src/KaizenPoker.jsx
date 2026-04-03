@@ -99,7 +99,10 @@ function evalHand(cardIds,mods=[]){
   const sv=[...new Set(rv)].sort((a,b)=>a-b);
   const isWheel=sv.join(",")==="0,1,2,3,12";
   let isStr=sv.length===5&&(sv[4]-sv[0]===4||isWheel);
-  const rankVals=isWheel?[3,2,1,0,-1]:rv;
+  const straightHigh=isWheel?3:Math.max(...sv);
+  const byCountThenRank=Object.entries(rc).map(([r,c])=>({rank:r,count:c,val:RV[r]})).sort((a,b)=>(b.count-a.count)||(b.val-a.val));
+  const pairVals=byCountThenRank.filter(x=>x.count===2).map(x=>x.val).sort((a,b)=>b-a);
+  const singleVals=byCountThenRank.filter(x=>x.count===1).map(x=>x.val).sort((a,b)=>b-a);
   const cnts=Object.values(rc).sort((a,b)=>b-a);let twins=Object.values(rsc).some(c=>c>=2);
   let hr=0,hn="High Card";
   if(maxId===5){hr=13;hn="Flush Five"}else if(cnts[0]===3&&cnts[1]===2&&isFlush){hr=12;hn="Flush House"}
@@ -109,6 +112,14 @@ function evalHand(cardIds,mods=[]){
   else if(isStr){hr=5;hn="Straight"}else if(cnts[0]===3){hr=4;hn="Three of a Kind"}
   else if(cnts[0]===2&&cnts[1]===2){const pr=Object.entries(rc).filter(([,c])=>c===2);hr=twins&&pr.length===1?2:3;hn=hr===2?"Twins":"Two Pair"}
   else if(cnts[0]===2){hr=twins?2:1;hn=hr===2?"Twins":"Pair"}
+  let rankVals=rv;
+  if(hr===13||hr===11)rankVals=[byCountThenRank[0]?.val??-1];
+  else if(hr===12||hr===7)rankVals=[byCountThenRank[0]?.val??-1,byCountThenRank[1]?.val??-1];
+  else if(hr===10||hr===9||hr===5)rankVals=[straightHigh];
+  else if(hr===8)rankVals=[byCountThenRank[0]?.val??-1,byCountThenRank[1]?.val??-1];
+  else if(hr===4)rankVals=[byCountThenRank[0]?.val??-1,...singleVals];
+  else if(hr===3)rankVals=[...pairVals,...singleVals];
+  else if(hr===2||hr===1)rankVals=[pairVals[0]??-1,...singleVals];
   return{handRank:hr,handName:hn,rankVals,effective:eff};}
 function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHand(b,bm);
   if(ae.handRank!==be.handRank)return ae.handRank>be.handRank?"A":"B";
@@ -123,9 +134,9 @@ function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 // ============================================================
 // SIMPLE UI COMPONENTS
 // ============================================================
-function Card({id,selected,onClick,dimmed,small,glow,isNew}){const c=CM[id];if(!c)return null;
+function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onDoubleClick}){const c=CM[id];if(!c)return null;
   const w=small?68:120,h=small?95:168,ti=TI[c.type];
-  return(<div onClick={onClick} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
+  return(<div onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onDoubleClick={onDoubleClick} title={small?"Hover to preview, double-click to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
     border:selected?`2px solid #f1c40f`:isNew?`2px solid #2ecc71`:glow?`2px solid ${glow}`:`1px solid ${ti.bd}44`,
     background:`linear-gradient(160deg,${ti.bg},#0a0d10)`,
     boxShadow:selected?"0 0 12px #f1c40f44":isNew?"0 0 14px #2ecc7155":glow?`0 0 12px ${glow}44`:"0 2px 6px #00000044",
@@ -140,6 +151,20 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew}){const c=CM[id];if(!
     <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{ti.lb}</div>
     {!small&&<div style={{fontSize:9,color:"#8899aa",marginTop:"auto",lineHeight:1.3,paddingTop:3}}>{c.text}</div>}
   </div>);}
+function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);
+  return(<>
+    <Card {...props} small onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} onDoubleClick={()=>setPinned(true)}/>
+    {hover&&!pinned&&<div style={{position:"fixed",right:18,bottom:18,zIndex:950,pointerEvents:"none",background:"#0b1016ee",border:"1px solid #2d3748",borderRadius:12,padding:10,boxShadow:"0 10px 30px #000a"}}>
+      <div style={{fontSize:10,color:"#7f8c8d",marginBottom:6,textAlign:"center"}}>Preview</div>
+      <Card id={props.id}/>
+    </div>}
+    {pinned&&<Modal title={`${CM[props.id]?.rank||""}${SUITS[CM[props.id]?.suit]||""} ${CM[props.id]?.name||"Card"}`}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+        <Card id={props.id}/>
+        <Btn label="Close" bg="#333" onClick={()=>setPinned(false)}/>
+      </div>
+    </Modal>}
+  </>);}
 function HandBadge({ids,mods}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span style={{padding:"3px 10px",borderRadius:5,background:`${c}18`,border:`1px solid ${c}44`,color:c,fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{r.handName}</span>;}
 function Btn({label,bg="#333",onClick,disabled}){return(<button onClick={onClick} disabled={disabled} style={{padding:"7px 15px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#888":"#000",border:"none",borderRadius:6,fontWeight:700,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1}}>{label}</button>);}
@@ -161,7 +186,7 @@ function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=
 function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm"}){const[pk,setPk]=useState([]);
   return(<Modal title={title}><div style={{fontSize:11,color:"#667",marginBottom:6}}>Select up to {maxPick}</div>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-      {cards.map(id=>(<Card key={id} id={id} small selected={pk.includes(id)}
+      {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<maxPick?[...p,id]:p)}/>))}</div>
     <Btn label={`${btnLabel} (${pk.length})`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
 
@@ -171,7 +196,7 @@ function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
   return(<Modal title="Brainstorm: Put 3 cards on top (tap in order, 1st = top)">
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {hand.map(id=>{const idx=pk.indexOf(id);return(<div key={id} style={{position:"relative"}}>
-        <Card id={id} small selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
+        <PreviewCard id={id} selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
         {idx>=0&&<div style={{position:"absolute",top:2,left:2,background:"#f1c40f",color:"#000",borderRadius:10,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{idx+1}</div>}
       </div>);})}</div>
     {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top→Bottom: {pk.map(id=>CM[id].name).join(" → ")}</div>}
@@ -181,7 +206,7 @@ function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
 function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
   return(<Modal title="Rejuvenate: Discard up to 3, draw that many">
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-      {hand.map(id=>(<Card key={id} id={id} small selected={pk.includes(id)}
+      {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
     <Btn label={`Discard ${pk.length} → Draw ${pk.length}`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
 
@@ -219,7 +244,7 @@ function PublicZones({gs}){const[exp,setExp]=useState(null);
     <span style={{fontSize:10,color:"#334"}}>A deck:{gs.aDeck.length} · B deck:{gs.bDeck.length}</span></div>
     {exp&&(()=>{const z=zones.find(x=>x.key===exp);if(!z||!z.cards.length)return <div style={{fontSize:10,color:"#445",marginTop:4,fontStyle:"italic"}}>Empty</div>;
       return(<div style={{marginTop:6,padding:6,background:"#0a0d1188",borderRadius:6,border:`1px solid ${z.color}22`}}>
-        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{sortC(z.cards).map((id,i)=><Card key={id+i} id={id} small/>)}</div></div>);})()}</div>);}
+        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{sortC(z.cards).map((id,i)=><PreviewCard key={id+i} id={id}/>)}</div></div>);})()}</div>);}
 
 // ============================================================
 // MAIN APP
@@ -775,7 +800,7 @@ export default function KaizenPoker(){
           <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
             {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} style={{width:68,height:95,borderRadius:6,background:"#1a1a2e",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",color:"#334",fontSize:10}}>Face down</div>
               :<div key={i} style={{position:"relative"}}>
-                <Card id={a.id} small/>
+                <PreviewCard id={a.id}/>
                 {a.copiedFrom&&<div style={{position:"absolute",left:2,right:2,bottom:2,background:"#f1c40fe6",color:"#111",borderRadius:4,padding:"2px 3px",fontSize:7,fontWeight:800,lineHeight:1.1,textAlign:"center",boxShadow:"0 1px 4px #0008"}}>
                   {CM[a.id].name}: {CM[a.copiedFrom]?.name}
                 </div>}
@@ -819,7 +844,7 @@ export default function KaizenPoker(){
                     {sortC(h).map(id=>{
                       const mod=mods.find(m=>m.target===id);
                       return(<div key={id} style={{position:"relative"}}>
-                        <Card id={id} small glow={isWinner?clr:undefined}/>
+                        <PreviewCard id={id} glow={isWinner?clr:undefined}/>
                         {mod&&<div style={{position:"absolute",bottom:2,left:2,right:2,background:"#f1c40fdd",color:"#000",
                           borderRadius:3,fontSize:7,fontWeight:700,textAlign:"center",padding:"1px 2px"}}>
                           {mod.rank&&`→${mod.rank}`}{mod.suit&&`→${SUITS[mod.suit]}`}</div>}
@@ -857,14 +882,14 @@ export default function KaizenPoker(){
     {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"}>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
-          return <Card key={id} id={id} small dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
+          return <PreviewCard key={id} id={id} dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
     {modal?.type==="pickFromList"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}>
         <div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
-        <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><Card key={id} id={id} small/>)}</div></div>}
+        <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
-          return <Card key={id} id={id} small dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#f1c40f":undefined}/>;})}</div>
+          return <PreviewCard key={id} id={id} dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#f1c40f":undefined}/>;})}</div>
       {modal.canCancel&&<Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/>}</Modal>}
     {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick}/>}
     {modal?.type==="twoChoice"&&<Modal title={modal.title}>
@@ -880,17 +905,17 @@ export default function KaizenPoker(){
       <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label="Play It" bg="#2ecc71" onClick={modal.onYes}/><Btn label="Cancel" bg="#333" onClick={modal.onNo}/></div></Modal>}
     {modal?.type==="pickRank"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
-        <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><Card key={id} id={id} small/>)}</div></div>}
+        <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
         {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:"#f1c40f",fontSize:18,fontWeight:900,cursor:"pointer",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</button>))}</div></Modal>}
     {modal?.type==="pickSuit"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
-        <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><Card key={id} id={id} small/>)}</div></div>}
+        <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
         {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:SC[s],fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{SUITS[s]}</button>))}</div></Modal>}
     {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}`}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
-        <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><Card key={id} id={id} small/>)}</div></div>}
+        <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Card id={modal.cardId}/></div>
       <p style={{color:"#aaa",fontSize:11,textAlign:"center",marginBottom:10}}>Unmodified 2 — Queen effects available:</p>
       <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
