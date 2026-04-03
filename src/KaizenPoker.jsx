@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import PlaytestPanel from "./PlaytestPanel.jsx";
 
 // ============================================================
 // DATA (unchanged)
@@ -6,11 +7,11 @@ import { useState, useCallback, useRef } from "react";
 const SUITS={C:"♣",D:"♦",H:"♥",S:"♠"};
 const SC={C:"#2ecc71",D:"#f39c12",H:"#e74c3c",S:"#3498db"};
 const SO=["C","D","H","S"];
-const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
-const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
-const FACE=["J","Q","K"];
-function lowerRanks(rank){return rank==="2"?["A"]:RO.filter(r=>RV[r]<RV[rank])}
-function adjacentRanks(rank){
+export const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+export const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
+export const FACE=["J","Q","K"];
+export function lowerRanks(rank){return rank==="2"?["A"]:RO.filter(r=>RV[r]<RV[rank])}
+export function adjacentRanks(rank){
   if(rank==="2")return ["A","3"];
   if(rank==="A")return ["K","2"];
   const ci=RV[rank],opts=[];if(ci>0)opts.push(RO[ci-1]);if(ci<12)opts.push(RO[ci+1]);return opts;
@@ -18,7 +19,7 @@ function adjacentRanks(rank){
 const TI={Enact:{bg:"#181d20",bd:"#636e72",lb:"Enact"},Modify:{bg:"#1f1c0e",bd:"#d4a017",lb:"Modify"},
   React:{bg:"#0e1f1f",bd:"#00b894",lb:"React"},Amend:{bg:"#1f0e0e",bd:"#d63031",lb:"Amend"},
   Remember:{bg:"#13102a",bd:"#6c5ce7",lb:"Remember"}};
-const CARDS=[
+export const CARDS=[
 {id:"2C",rank:"2",suit:"C",name:"Prune",type:"Enact",text:"Scrap a Diamond or Heart.",scrapSuits:["D","H"]},
 {id:"2D",rank:"2",suit:"D",name:"Sculpt",type:"Enact",text:"Scrap a Heart or Spade.",scrapSuits:["H","S"]},
 {id:"2H",rank:"2",suit:"H",name:"Extract",type:"Enact",text:"Scrap a Spade or Club.",scrapSuits:["S","C"]},
@@ -72,7 +73,7 @@ const CARDS=[
 {id:"AH",rank:"A",suit:"H",name:"Retrieve",type:"Enact",text:"Return your Action from play to hand. If you do, bonus action."},
 {id:"AS",rank:"A",suit:"S",name:"Reanimate",type:"Enact",text:"Return a card from discard to hand. If you do, bonus action."},
 ];
-const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
+export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
 const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
 
 // ============================================================
@@ -88,7 +89,7 @@ function drawCards(gs,player,n){
     drawn.push(dk.shift());hand.push(drawn[drawn.length-1]);}
   if(player==="A"){st.aDeck=dk;st.aDiscard=dc;st.aHand=hand}else{st.bDeck=dk;st.bDiscard=dc;st.bHand=hand}
   return{...st,drawn};}
-function evalHand(cardIds,mods=[]){
+export function evalHand(cardIds,mods=[]){
   let eff=cardIds.map(id=>{const b=CM[id];const m=mods.find(x=>x.target===id);
     return m?{...b,rank:m.rank||b.rank,suit:m.suit||b.suit,mod:true}:{...b,mod:false}});
   const ranks=eff.map(c=>c.rank),suits=eff.map(c=>c.suit);
@@ -121,7 +122,7 @@ function evalHand(cardIds,mods=[]){
   else if(hr===3)rankVals=[...pairVals,...singleVals];
   else if(hr===2||hr===1)rankVals=[pairVals[0]??-1,...singleVals];
   return{handRank:hr,handName:hn,rankVals,effective:eff};}
-function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHand(b,bm);
+export function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHand(b,bm);
   if(ae.handRank!==be.handRank)return ae.handRank>be.handRank?"A":"B";
   for(let i=0;i<ae.rankVals.length;i++){if(ae.rankVals[i]>be.rankVals[i])return"A";if(ae.rankVals[i]<be.rankVals[i])return"B";}return"TIE";}
 function initGame(){const all=shuf(CARDS.map(c=>c.id));
@@ -785,6 +786,7 @@ export default function KaizenPoker(){
               </div>)}</div></div>))}</div>
         <PublicZones gs={gs}/>
         <div style={{display:"flex",gap:6}}><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></div>
+        <PlaytestPanel/>
         {/* Hand */}
         <div>
           <div style={{fontSize:11,color:p==="A"?"#e74c3c":"#3498db",fontWeight:700,letterSpacing:1,marginBottom:5,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
