@@ -227,6 +227,13 @@ export default function KaizenPoker(){
   const opp=p=>p==="A"?"B":"A";
   const setZ=(gs,p,z,v)=>({...gs,[(p==="A"?"a":"b")+z[0].toUpperCase()+z.slice(1)]:v});
   const isFroz=(gs,p)=>p==="A"?gs.amends.aFreeze:gs.amends.bFreeze;
+  const getActionCard=a=>a?.copiedFrom?(CM[a.copiedFrom]||CM[a.id]):CM[a?.id];
+  const getModifyEntries=(g,pl)=>getP(g,pl).flatMap(a=>{
+    if(a.faceDown)return [];
+    const effect=getActionCard(a);
+    if(effect?.type!=="Modify")return [];
+    return [effect.id];
+  });
 
   const startGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
@@ -327,6 +334,33 @@ export default function KaizenPoker(){
     const done=g2=>{setUndoState(null);g2=advance(g2);setGs(g2);};// Clear undo after info revealed
     const pick=(t,cards,filter,onP,onC)=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,
       onPick:id=>{setModal(null);onP(id);},onCancel:onC?()=>{setModal(null);onC();}:undefined});};
+    const resolveCopiedImmediate=(g2,effectId)=>{
+      const effect=CM[effectId];
+      if(!effect){done(L(g2,"...copied action missing. Fizzles."));return;}
+      if(effect.type==="Modify"||effect.type==="React"||effect.type==="Remember"){done(g2);return;}
+      if(effect.type==="Amend"){
+        if(effectId==="7C"){g2.amends={...g2.amends,[opp(p)==="A"?"aFreeze":"bFreeze"]:true};g2=L(g2,`${p}: copied Freeze applies`);}
+        else if(effectId==="7D"){g2.amends={...g2.amends,[opp(p)==="A"?"aNegate":"bNegate"]:true};g2=L(g2,`${p}: copied Negate applies`);}
+        done(g2);return;
+      }
+      if(effectId==="AD"){g2=drawCards(g2,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.bonusActions++;g2.newCards=g2.drawn;}done(g2);return;}
+      if(effectId==="AC"){if(!g2.scrap.length){done(L(g2,"...copied Salvage fizzles (scrap empty)."));return;}
+        pick("Copied Salvage: Take from scrap",g2.scrap,null,id=>{let g3=cloneGs(g2);g3.scrap=g3.scrap.filter(x=>x!==id);
+          g3=setZ(g3,p,"hand",[...getH(g3,p),id]);g3.newCards=[id];g3.bonusActions++;g3=L(g3,`${p} salvages ${CM[id].name}`);done(g3);},
+        ()=>done(L(g2,"...cancelled.")));return;}
+      if(effectId==="AH"){const play=getP(g2,p).filter(a=>a.id!==cid);
+        if(!play.length){done(L(g2,"...copied Retrieve fizzles (no actions)."));return;}
+        pick("Copied Retrieve: Return any of your actions to hand",play.map(a=>a.id),null,id=>{let g3=cloneGs(g2);
+          g3=setZ(g3,p,"play",[...getP(g3,p)].filter(a=>a.id!==id));g3=setZ(g3,p,"hand",[...getH(g3,p),id]);
+          g3.newCards=[id];g3.bonusActions++;g3=L(g3,`${p} retrieves ${CM[id].name}`);done(g3);},
+        ()=>done(L(g2,"...cancelled.")));return;}
+      if(effectId==="AS"){const disc=getD(g2,p);if(!disc.length){done(L(g2,"...copied Reanimate fizzles (discard empty)."));return;}
+        pick("Copied Reanimate: Return a card from your discard to hand",disc,null,id=>{let g3=cloneGs(g2);
+          g3=setZ(g3,p,"discard",[...getD(g3,p)].filter(x=>x!==id));g3=setZ(g3,p,"hand",[...getH(g3,p),id]);
+          g3.newCards=[id];g3.bonusActions++;g3=L(g3,`${p} reanimates ${CM[id].name}`);done(g3);},
+        ()=>done(L(g2,"...cancelled.")));return;}
+      done(L(g2,`(${effect.name} copy resolution not implemented)`));
+    };
 
     // 2s
     if(card.scrapSuits){if(frozen){g=L(g,"...Frozen!");done(g);return;}
@@ -471,15 +505,17 @@ export default function KaizenPoker(){
       if(!myActions.length){g=L(g,"...no other actions to copy. Fizzles.");done(g);return;}
       pick("Duplicate: Pick one of YOUR actions to copy",myActions.map(a=>a.id),null,id=>{
         let g2=cloneGs(g);// Mark Duplicate as copying that action
-        const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:true}:a);
-        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} duplicates ${CM[id].name}`);done(g2);},
+        const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
+        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} duplicates ${CM[id].name}`);
+        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // JH Reflect — copies an opponent's Action in play
     if(cid==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
       if(!oppActions.length){g=L(g,"...no opponent actions to copy. Fizzles.");done(g);return;}
       pick("Reflect: Pick an OPPONENT'S action to copy",oppActions.map(a=>a.id),null,id=>{
-        let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:true}:a);
-        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} reflects ${CM[id].name}`);done(g2);},
+        let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id,resolvedImmediate:CM[id]?.type==="Enact"||CM[id]?.type==="Amend"}:a);
+        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} reflects ${CM[id].name}`);
+        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // AD Explore
     if(cid==="AD"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
@@ -537,15 +573,14 @@ export default function KaizenPoker(){
   // SCORING WITH MODIFY RESOLUTION
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
-    // Separate Modify cards that resolve at scoring vs those already resolved (Duplicate/Reflect)
-    const aM=getP(g,"A").filter(a=>CM[a.id]?.type==="Modify"&&!a.faceDown&&!a.resolvedImmediate).map(a=>a.id);
-    const bM=getP(g,"B").filter(a=>CM[a.id]?.type==="Modify"&&!a.faceDown&&!a.resolvedImmediate).map(a=>a.id);
+    const aM=getModifyEntries(g,"A");
+    const bM=getModifyEntries(g,"B");
     g.aMods=g.aMods||[];g.bMods=g.bMods||[];g=L(g,"Resolving modifications...");setGs(g);
     resolveMods(g,"A",aM,0);};
 
   const resolveMods=(g,pl,mods,i)=>{
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
-      if(pl==="A"){const bM=getP(g2,"B").filter(a=>CM[a.id]?.type==="Modify"&&!a.faceDown&&!a.resolvedImmediate).map(a=>a.id);resolveMods(g2,"B",bM,0);}
+      if(pl==="A"){const bM=getModifyEntries(g2,"B");resolveMods(g2,"B",bM,0);}
       else finalScore(g2);});return;}
     const mid=mods[i],mc=CM[mid],hand=getH(g,pl),mk=pl==="A"?"aMods":"bMods";
     const next=(g2)=>resolveMods(g2||g,pl,mods,i+1);
@@ -636,14 +671,49 @@ export default function KaizenPoker(){
     // Post-score effects
     const effs=[];
     for(const pl of["A","B"]){for(const a of getP(g,pl)){
-      if(a.id==="5D"&&!a.faceDown)effs.push({t:"forecast",pl});
-      if(a.id==="8D"&&!a.faceDown)effs.push({t:"vanish",pl});
-      if(a.id==="8C"&&!a.faceDown&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});}}
+      const effect=getActionCard(a);
+      if(a.faceDown||!effect)continue;
+      if(effect.id==="5D")effs.push({t:"forecast",pl});
+      if(effect.id==="8D")effs.push({t:"vanish",pl});
+      if(effect.id==="8C"&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});}}
     procPost(g,effs,0);};
+
+  const procRoundEndReaps=(g,reaps,i,done)=>{
+    if(i>=reaps.length){done(g);return;}
+    const pl=reaps[i];
+    if(isFroz(g,pl)){procRoundEndReaps(L(g,`${pl}: Reap - Frozen!`),reaps,i+1,done);return;}
+    const disc=getD(g,pl);
+    const valid=disc.filter((id,idx)=>disc.some((other,j)=>j!==idx&&(CM[other].rank===CM[id].rank||CM[other].suit===CM[id].suit)));
+    if(!valid.length){procRoundEndReaps(L(g,`${pl}: Reap - no matching discard card`),reaps,i+1,done);return;}
+    setModal({type:"pickFromList",title:`${pl}: Reap - scrap a matching discard card?`,cards:disc,filter:id=>valid.includes(id),canCancel:true,
+      onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+        g2=L(g2,`${pl}: Reap scraps ${CM[id].name}`);setGs(g2);procRoundEndReaps(g2,reaps,i+1,done);},
+      onCancel:()=>{setModal(null);procRoundEndReaps(g,reaps,i+1,done);}});
+  };
+
+  const startNextRound=(g)=>{
+    if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
+    g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];
+    g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};
+    g.round++;g.firstPlayer=g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
+    g=L(g,`=== ROUND ${g.round} === Player ${g.firstPlayer} acts first`);
+    let aR=2,bR=2,aD=7,bD=7;const aCW=g.aChips===6,bCW=g.bChips===6;
+    if(aCW&&!bCW){bD=8;bR=3;}if(bCW&&!aCW){aD=8;aR=3;}if(aCW||bCW)g=L(g,"⚡ SUDDEN DEATH!");
+    g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
+    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");setGs(g);return;}g.aHand=sortC(g.aHand);
+    g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");setGs(g);return;}g.bHand=sortC(g.bHand);
+    g.phase="action";g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
+    g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);setGs(g);
+  };
 
   const procPost=(g,effs,i)=>{if(i>=effs.length){
     if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
     const aH=getH(g,"A"),bH=getH(g,"B");
+    const aReaps=[...aH.filter(id=>id==="9S"),...getP(g,"A").filter(a=>!a.faceDown&&getActionCard(a)?.id==="9S").map(a=>a.id)];
+    const bReaps=[...bH.filter(id=>id==="9S"),...getP(g,"B").filter(a=>!a.faceDown&&getActionCard(a)?.id==="9S").map(a=>a.id)];
+    g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
+    const reapQueue=[...aReaps.map(()=>"A"),...bReaps.map(()=>"B")];
+    setGs(g);procRoundEndReaps(g,reapQueue,0,startNextRound);return;
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};
