@@ -11,6 +11,7 @@ export const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 export const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
 export const FACE=["J","Q","K"];
 export function lowerRanks(rank){return rank==="2"?["A"]:RO.filter(r=>RV[r]<RV[rank])}
+export function higherRanks(rank){return rank==="A"?RO.filter(r=>r!=="A"):RO.filter(r=>RV[r]>RV[rank])}
 export function adjacentRanks(rank){
   if(rank==="2")return ["A","3"];
   if(rank==="A")return ["K","2"];
@@ -129,13 +130,13 @@ function initGame(){const all=shuf(CARDS.map(c=>c.id));
   return{aDeck:all.slice(7,26),bDeck:all.slice(33),aHand:sortC(all.slice(0,7)),bHand:sortC(all.slice(26,33)),
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
-    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],_aReq:2,_bReq:2};}
+    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2};}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 
 // ============================================================
 // SIMPLE UI COMPONENTS
 // ============================================================
-function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,inspectLabel,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
+function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
   const w=small?68:120,h=small?95:168,ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
@@ -149,16 +150,21 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     padding:small?"4px 5px":"7px 9px",overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
     transform:baseTransform}}>
     {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#2ecc71",background:"#2ecc7122",borderRadius:3,padding:"0 4px"}}>NEW</div>}
-    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",fontSize:9,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
-      {inspectLabel||"⌕"}
+    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
+      <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
+        <circle cx="5" cy="5" r="3.2" fill="none" stroke="#3b3228" strokeWidth="1.4"/>
+        <path d="M7.6 7.6L10.5 10.5" stroke="#3b3228" strokeWidth="1.4" strokeLinecap="round"/>
+      </svg>
     </button>}
-    {copySticker&&<div style={{position:"absolute",top:small?18:20,right:small?0:2,transform:"rotate(18deg)",background:"linear-gradient(180deg,#f4d27e,#d8a845)",color:"#4b2e10",border:`1px solid #9d7430`,borderRadius:small?6:8,padding:small?"2px 5px":"3px 7px",fontSize:small?6:8,fontWeight:900,letterSpacing:.8,boxShadow:"0 2px 6px #00000022",zIndex:2,textTransform:"uppercase"}}>
-      {copySticker}
+    {copySticker&&<div style={{position:"absolute",top:small?18:22,right:small?1:4,transform:"rotate(8deg)",background:"linear-gradient(180deg,#fff4a8,#f6dd69)",color:"#5a4618",border:"1px solid #d4bb5a",borderRadius:small?3:4,padding:small?"4px 5px 5px":"6px 8px 7px",fontSize:small?6:8,fontWeight:900,letterSpacing:.35,boxShadow:"0 3px 8px #00000024, inset 0 1px 0 #fff9cc",zIndex:2,textTransform:"uppercase",lineHeight:1.05,minWidth:small?34:48,textAlign:"center"}}>
+      <div style={{position:"absolute",top:0,left:"18%",right:"18%",height:small?3:4,borderRadius:"0 0 3px 3px",background:"#fff8d0aa"}}/>
+      <div>COPY OF</div>
+      <div style={{marginTop:2,fontSize:small?5:7,letterSpacing:.15,textTransform:"none",fontWeight:800}}>{copySticker}</div>
     </div>}
-    {rankSticker&&<div style={{position:"absolute",top:small?24:34,left:small?4:6,transform:"rotate(-8deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 5px":"2px 8px",fontSize:small?10:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:2}}>
+    {rankSticker&&<div style={{position:"absolute",top:small?18:26,left:small?3:5,transform:"rotate(-7deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 4px":"2px 8px",fontSize:small?9:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:2,lineHeight:1}}>
       {rankSticker}
     </div>}
-    {suitSticker&&<div style={{position:"absolute",top:small?22:30,left:small?24:38,transform:"rotate(10deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?16:22,height:small?16:22,fontSize:small?11:15,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:2}}>
+    {suitSticker&&<div style={{position:"absolute",top:small?18:26,left:small?18:30,transform:"rotate(9deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?13:20,height:small?13:20,fontSize:small?9:14,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:2}}>
       {SUITS[suitSticker]||suitSticker}
     </div>}
     <div style={{display:"flex",alignItems:"center",gap:1}}>
@@ -172,7 +178,7 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-160,Math.max(16,pos.x+20));
   const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-220,Math.max(16,pos.y-30));
   return(<>
-    <Card {...props} small inspectLabel="View" onInspect={()=>setPinned(true)}
+    <Card {...props} small onInspect={()=>setPinned(true)}
       onMouseEnter={e=>{setHover(true);setPos({x:e.clientX,y:e.clientY});}}
       onMouseLeave={()=>setHover(false)}
       onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
@@ -615,7 +621,7 @@ export default function KaizenPoker(){
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
     const aM=getModifyEntries(g,"A");
     const bM=getModifyEntries(g,"B");
-    g.aMods=g.aMods||[];g.bMods=g.bMods||[];g=L(g,"Resolving modifications...");setGs(g);
+    g.aMods=g.aMods||[];g.bMods=g.bMods||[];g.aForecast=g.aForecast||[];g.bForecast=g.bForecast||[];g=L(g,"Resolving modifications...");setGs(g);
     resolveMods(g,"A",aM,0);};
 
   const resolveMods=(g,pl,mods,i)=>{
@@ -626,11 +632,16 @@ export default function KaizenPoker(){
     const next=(g2)=>resolveMods(g2||g,pl,mods,i+1);
     const modLabel=entry.copiedFrom?`${CM[entry.sourceId]?.name||mc.name} copying ${CM[entry.copiedFrom]?.name||mc.name}`:mc.name;
     const skip=()=>{let g2=L(g,`${pl}: ${modLabel} — skipped`);setGs(g2);next(g2);};
-    // Forecast/Vanish: defer
-    if(mid==="5D"||mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);setGs(g2);next(g2);return;}
+    // Forecast: choose target now, resolve after reveal
+    if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
+      setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
+        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),tid];g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);setGs(g2);next(g2);},
+        onCancel:()=>{setModal(null);skip();}});return;}
+    // Vanish: defer
+    if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);setGs(g2);next(g2);return;}
     // Buff
     if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff — pick scoring card to increase rank`,cards:hand,showHand:hand,canCancel:true,
-      onPick:tid=>{setModal(null);const ci=RV[CM[tid].rank];const hr=RO.filter((_,i)=>i>ci);
+      onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
@@ -721,14 +732,19 @@ export default function KaizenPoker(){
     for(const pl of["A","B"]){for(const a of getP(g,pl)){
       const effect=getActionCard(a);
       if(a.faceDown||!effect)continue;
-      if(effect.id==="5D")effs.push({t:"forecast",pl});
+      if(effect.id==="5D"){
+        const fk=pl==="A"?"aForecast":"bForecast";
+        const queue=[...(g[fk]||[])];
+        effs.push({t:"forecast",pl,target:queue.shift()||null});
+        g[fk]=queue;
+      }
       if(effect.id==="8D")effs.push({t:"vanish",pl});
       if(effect.id==="8C"&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});}}
     procPost(g,effs,0);};
 
   const startNextRound=(g)=>{
     if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
-    g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];
+    g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};
     g.round++;g.firstPlayer=g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
     g=L(g,`=== ROUND ${g.round} === Player ${g.firstPlayer} acts first`);
@@ -747,10 +763,13 @@ export default function KaizenPoker(){
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
     startNextRound(g);return;}
     const e=effs[i];
-    if(e.t==="forecast"){setModal({type:"pickFromList",title:`${e.pl}: Forecast — save to top of deck`,cards:getH(g,e.pl),canCancel:true,
-      onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"hand",[...getH(g2,e.pl)].filter(x=>x!==id));
-        g2=setZ(g2,e.pl,"deck",[id,...getDk(g2,e.pl)]);g2=L(g2,`${e.pl}: Forecast saves ${CM[id].name}`);setGs(g2);procPost(g2,effs,i+1);},
-      onCancel:()=>{setModal(null);procPost(g,effs,i+1);}});return;}
+    if(e.t==="forecast"){
+      if(!e.target||!getH(g,e.pl).includes(e.target)){procPost(g,effs,i+1);return;}
+      let g2={...g};
+      g2=setZ(g2,e.pl,"hand",[...getH(g2,e.pl)].filter(x=>x!==e.target));
+      g2=setZ(g2,e.pl,"deck",[e.target,...getDk(g2,e.pl)]);
+      g2=L(g2,`${e.pl}: Forecast puts ${CM[e.target].name} on top of the deck`);
+      setGs(g2);procPost(g2,effs,i+1);return;}
     if(e.t==="vanish"){if(isFroz(g,e.pl)){g=L(g,`${e.pl}: Vanish — Frozen!`);procPost(g,effs,i+1);return;}
       const mk=e.pl==="A"?"aMods":"bMods";const effS=new Set(getH(g,e.pl).map(id=>{const m=g[mk].find(x=>x.target===id);return m?.suit||CM[id].suit;}));
       const disc=getD(g,e.pl);const valid=disc.filter(id=>effS.has(CM[id].suit));
@@ -835,7 +854,7 @@ export default function KaizenPoker(){
                 </div>
               </div>
               :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
-                <PreviewCard id={a.id} copySticker={a.copiedFrom?"Copy":undefined}/>
+                <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
               </div>)}</div></div>))}</div>
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>}/>
         {/* Hand */}
