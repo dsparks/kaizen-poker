@@ -156,10 +156,10 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
         <path d="M7.6 7.6L10.5 10.5" stroke="#3b3228" strokeWidth="1.4" strokeLinecap="round"/>
       </svg>
     </button>}
-    {copySticker&&<div style={{position:"absolute",top:small?18:22,right:small?1:4,transform:"rotate(8deg)",background:"linear-gradient(180deg,#fff4a8,#f6dd69)",color:"#5a4618",border:"1px solid #d4bb5a",borderRadius:small?3:4,padding:small?"4px 5px 5px":"6px 8px 7px",fontSize:small?6:8,fontWeight:900,letterSpacing:.35,boxShadow:"0 3px 8px #00000024, inset 0 1px 0 #fff9cc",zIndex:2,textTransform:"uppercase",lineHeight:1.05,minWidth:small?34:48,textAlign:"center"}}>
+    {copySticker&&<div style={{position:"absolute",top:small?18:22,right:small?1:4,transform:"rotate(8deg)",background:"linear-gradient(180deg,#fff4a8,#f6dd69)",color:"#5a4618",border:"1px solid #d4bb5a",borderRadius:small?3:4,padding:small?"4px 5px 5px":"6px 8px 7px",fontSize:small?7:8,fontWeight:900,letterSpacing:.3,boxShadow:"0 3px 8px #00000024, inset 0 1px 0 #fff9cc",zIndex:2,textTransform:"uppercase",lineHeight:1.05,minWidth:small?38:48,textAlign:"center"}}>
       <div style={{position:"absolute",top:0,left:"18%",right:"18%",height:small?3:4,borderRadius:"0 0 3px 3px",background:"#fff8d0aa"}}/>
       <div>COPY OF</div>
-      <div style={{marginTop:2,fontSize:small?5:7,letterSpacing:.15,textTransform:"none",fontWeight:800}}>{copySticker}</div>
+      <div style={{marginTop:2,fontSize:small?6:7,letterSpacing:.05,textTransform:"none",fontWeight:800,lineHeight:1.05}}>{copySticker}</div>
     </div>}
     {rankSticker&&<div style={{position:"absolute",top:small?18:26,left:small?3:5,transform:"rotate(-7deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 4px":"2px 8px",fontSize:small?9:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:2,lineHeight:1}}>
       {rankSticker}
@@ -184,11 +184,11 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
       onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
       onDoubleClick={()=>setPinned(true)}/>
     {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
-      <Card id={props.id}/>
+      <Card id={props.id} rankSticker={props.rankSticker} suitSticker={props.suitSticker} copySticker={props.copySticker}/>
     </div>}
     {pinned&&<Modal title={`${CM[props.id]?.rank||""}${SUITS[CM[props.id]?.suit]||""} ${CM[props.id]?.name||"Card"}`}>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-        <Card id={props.id}/>
+        <Card id={props.id} rankSticker={props.rankSticker} suitSticker={props.suitSticker} copySticker={props.copySticker}/>
         <Btn label="Close" bg="#333" onClick={()=>setPinned(false)}/>
       </div>
     </Modal>}
