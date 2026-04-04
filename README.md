@@ -73,6 +73,19 @@ It also creates analytics views:
 - `v_card_opening_hand_win_rates`
 - `v_card_usage_summary`
 
+### 4. Enable analytics on GitHub Pages
+
+If you want the deployed site at `https://dsparks.github.io/kaizen-poker/` to send analytics too, add these repository secrets in GitHub:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+Path in GitHub:
+
+`Repo -> Settings -> Secrets and variables -> Actions -> New repository secret`
+
+Then push to `main` again. The deploy workflow reads those secrets at build time and bakes them into the GitHub Pages bundle.
+
 ## Current Analytics Flow
 
 During play, the app writes:
