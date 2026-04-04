@@ -1,6 +1,7 @@
 export const APP_VERSION = "0.1.0";
 export const RULES_VERSION = "2026-04-stats-v1";
 export const ANALYTICS_SOURCE = "local_hotseat";
+export const SOLO_ANALYTICS_SOURCE = "solo_variant";
 const ACTIVE_GAME_KEY = "kaizenPoker.activeTrackedGame";
 const COMPLETED_GAMES_KEY = "kaizenPoker.completedTrackedGames";
 const GUEST_PROFILE_PREFIX = "kaizenPoker.guestProfile.";
@@ -10,25 +11,30 @@ const mkId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.
 const nowIso = () => new Date().toISOString();
 const clone = value => JSON.parse(JSON.stringify(value));
 
-export function getOrCreateGuestProfile(slot) {
-  if (!hasStorage()) return { id: mkId(), authUserId: null, isGuest: true, displayName: `Guest ${slot}` };
+export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
+  if (!hasStorage()) return { id: mkId(), authUserId: null, isGuest: true, displayName };
   const key = `${GUEST_PROFILE_PREFIX}${slot}`;
   const raw = window.localStorage.getItem(key);
   if (raw) return JSON.parse(raw);
-  const profile = { id: mkId(), authUserId: null, isGuest: true, displayName: `Guest ${slot}` };
+  const profile = { id: mkId(), authUserId: null, isGuest: true, displayName };
   window.localStorage.setItem(key, JSON.stringify(profile));
   return profile;
 }
 
+const analyticsSourceForMode = mode => mode === "solo" ? SOLO_ANALYTICS_SOURCE : ANALYTICS_SOURCE;
+
 export function buildTrackedGame(gs) {
   const startedAt = gs._createdAt || nowIso();
+  const source = analyticsSourceForMode(gs.mode);
   const players = {
-    A: getOrCreateGuestProfile("A"),
-    B: getOrCreateGuestProfile("B"),
+    A: getOrCreateGuestProfile("A", gs.mode === "solo" ? "Solo Player" : "Guest A"),
+    B: gs.mode === "solo"
+      ? getOrCreateGuestProfile("SOLO_CHALLENGER", "Challenger")
+      : getOrCreateGuestProfile("B", "Guest B"),
   };
   const tracked = {
     gameId: gs._gameId || mkId(),
-    source: ANALYTICS_SOURCE,
+    source,
     appVersion: APP_VERSION,
     rulesVersion: RULES_VERSION,
     startedAt,
@@ -57,6 +63,7 @@ function appendInitialEvents(tracked, gs) {
   next = appendTrackedEvent(next, gs, "game_started", {
     gameId: next.gameId,
     source: next.source,
+    mode: gs.mode || "hotseat",
     appVersion: next.appVersion,
     rulesVersion: next.rulesVersion,
     aInitialDeck: next.initialState.aInitialDeck,
@@ -123,10 +130,12 @@ export function buildRoundSummary(gs) {
     aHandRank: gs._revealAE?.handName || null,
     bHandRank: gs._revealBE?.handName || null,
     roundSummary: {
+      mode: gs.mode || "hotseat",
       aHand: [...(gs.aHand || [])],
       bHand: [...(gs.bHand || [])],
       aMods: clone(gs.aMods || []),
       bMods: clone(gs.bMods || []),
+      challengerReveal: gs.mode === "solo" ? clone(gs._soloReveal || null) : null,
       winner: gs._revealWinner || null,
       aChips: gs.aChips,
       bChips: gs.bChips,
