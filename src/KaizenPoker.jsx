@@ -1308,6 +1308,7 @@ export default function KaizenPoker(){
         {gs.phase==="action"?(gs.mode==="solo"?"Action - Solo Player":`Action - Player ${p}`):gs.phase==="score"?"Scoring":gs.phase==="reveal"?"Reveal":"Game Over"}
       </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>⚡ SUDDEN DEATH</span>}
+      <button onClick={()=>setModal({type:"mainMenu"})} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
       <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
         <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
           <span style={{color:"#e74c3c",fontWeight:800}}>{gs.mode==="solo"?"YOU":"A"} {gs.aChips}</span>
@@ -1503,6 +1504,20 @@ export default function KaizenPoker(){
       </div>
       <div style={{display:"flex",justifyContent:"center",marginTop:12}}>
         <Btn label="Close" bg="#333" onClick={()=>setModal(null)}/>
+      </div>
+    </Modal>}
+    {modal?.type==="mainMenu"&&<Modal title="Menu">
+      <div style={{display:"grid",gap:14,minWidth:"min(360px,82vw)"}}>
+        <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.5}}>
+          Leave this game and return to the home screen, or close this menu and keep playing.
+        </div>
+        {isOnlineMode&&<div style={{fontSize:11,color:"#fcd34d",lineHeight:1.5}}>
+          Leaving an online game stops syncing on this browser. You can rejoin later from the same invite link.
+        </div>}
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
+          <Btn label="Return to Game" bg="#333" onClick={()=>setModal(null)}/>
+          <Btn label="Quit to Home" bg="#e67e22" onClick={()=>{setModal(null);clearGameState();}}/>
+        </div>
       </div>
     </Modal>}
     {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick}/>}
