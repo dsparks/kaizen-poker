@@ -1,5 +1,15 @@
 import { useState, useCallback, useRef } from "react";
 import PlaytestPanel from "./PlaytestPanel.jsx";
+import {
+  archiveCompletedTrackedGame,
+  appendTrackedEvent,
+  buildRoundSummary,
+  buildTrackedGame,
+  finalizeTrackedGame,
+  saveActiveTrackedGame,
+  upsertTrackedRound,
+} from "./analytics.js";
+import { syncTrackedGame } from "./supabaseAnalytics.js";
 
 // ============================================================
 // DATA (unchanged)
@@ -127,10 +137,14 @@ export function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHan
   if(ae.handRank!==be.handRank)return ae.handRank>be.handRank?"A":"B";
   for(let i=0;i<ae.rankVals.length;i++){if(ae.rankVals[i]>be.rankVals[i])return"A";if(ae.rankVals[i]<be.rankVals[i])return"B";}return"TIE";}
 function initGame(){const all=shuf(CARDS.map(c=>c.id));
+  const startedAt=new Date().toISOString();
+  const gameId=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():`kp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const aInitialDeck=all.slice(0,26),bInitialDeck=all.slice(26),aInitialHand=aInitialDeck.slice(0,7),bInitialHand=bInitialDeck.slice(0,7);
   return{aDeck:all.slice(7,26),bDeck:all.slice(33),aHand:sortC(all.slice(0,7)),bHand:sortC(all.slice(26,33)),
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
-    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2};}
+    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,
+    _gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 
 // ============================================================
@@ -294,6 +308,42 @@ export default function KaizenPoker(){
   const[toast,setToast]=useState(null);
   const logRef=useRef(null);
   const toastTimerRef=useRef(null);
+  const trackedRef=useRef(null);
+  const syncTimerRef=useRef(null);
+
+  const scheduleTrackedSync=()=>{
+    if(!trackedRef.current)return;
+    saveActiveTrackedGame(trackedRef.current);
+    if(syncTimerRef.current)clearTimeout(syncTimerRef.current);
+    syncTimerRef.current=setTimeout(()=>{const snap=trackedRef.current;if(snap)void syncTrackedGame(snap).catch(err=>console.error("Analytics sync failed",err));},500);
+  };
+  const setTracked=updater=>{
+    trackedRef.current=typeof updater==="function"?updater(trackedRef.current):updater;
+    scheduleTrackedSync();
+    return trackedRef.current;
+  };
+  const trackEvent=(gLike,eventType,eventPayload={},opts={})=>{
+    if(!trackedRef.current)return;
+    setTracked(curr=>appendTrackedEvent(curr,gLike,eventType,eventPayload,opts));
+  };
+  const trackDraws=(gLike,playerSlot,cards,source)=>{
+    (cards||[]).forEach(cardId=>trackEvent(gLike,"card_drawn",{cardId,source},{playerSlot}));
+  };
+  const trackRoundStart=gLike=>trackEvent(gLike,"round_started",{
+    roundNumber:gLike.round,
+    firstPlayer:gLike.firstPlayer,
+    aHand:[...(gLike.aHand||[])],
+    bHand:[...(gLike.bHand||[])],
+    aActionsRequired:gLike._aReq||2,
+    bActionsRequired:gLike._bReq||2,
+    aCardsDrawn:(gLike.aHand||[]).length,
+    bCardsDrawn:(gLike.bHand||[]).length,
+  },{phase:"action",playerSlot:gLike.firstPlayer});
+  const trackRoundSummary=gLike=>setTracked(curr=>upsertTrackedRound(curr,buildRoundSummary(gLike)));
+  const trackGameFinished=(gLike,winner)=>{
+    setTracked(curr=>finalizeTrackedGame(curr,gLike,winner));
+    if(trackedRef.current){archiveCompletedTrackedGame(trackedRef.current);void syncTrackedGame(trackedRef.current).catch(err=>console.error("Analytics final sync failed",err));}
+  };
 
   const flashToast=(msg,tone="info")=>{
     if(toastTimerRef.current)clearTimeout(toastTimerRef.current);
@@ -307,7 +357,17 @@ export default function KaizenPoker(){
     if(/Fizzles?/i.test(clean)){flashToast(clean,"fizzle");return;}
     if(/cancelled/i.test(clean)){flashToast(clean,"cancel");}
   };
-  const L=(gs,msg)=>{maybeToastLog(msg);return {...gs,log:[...gs.log,msg]};};
+  const L=(gs,msg)=>{
+    maybeToastLog(msg);
+    if(trackedRef.current){
+      const phase=gs?.phase==="gameOver"?"game_over":gs?.phase||"action";
+      setTracked(curr=>appendTrackedEvent(curr,gs,"log_message",{message:msg},{phase,playerSlot:null}));
+      if(/Frozen/i.test(msg)) setTracked(curr=>appendTrackedEvent(curr,gs,"action_frozen",{message:msg},{phase,playerSlot:null}));
+      if(/Fizzles?/i.test(msg)) setTracked(curr=>appendTrackedEvent(curr,gs,"action_fizzled",{message:msg},{phase,playerSlot:null}));
+      if(/cancelled/i.test(msg)) setTracked(curr=>appendTrackedEvent(curr,gs,"action_cancelled",{message:msg},{phase,playerSlot:null}));
+    }
+    return {...gs,log:[...gs.log,msg]};
+  };
   const getH=(gs,p)=>p==="A"?gs.aHand:gs.bHand;const getD=(gs,p)=>p==="A"?gs.aDiscard:gs.bDiscard;
   const getDk=(gs,p)=>p==="A"?gs.aDeck:gs.bDeck;const getP=(gs,p)=>p==="A"?gs.aPlay:gs.bPlay;
   const opp=p=>p==="A"?"B":"A";
@@ -330,8 +390,8 @@ export default function KaizenPoker(){
   const buildFreshGame=()=>{let g=initGame();g=L(g,`=== ROUND 1 === Player A acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
-  const startGame=()=>setGs(buildFreshGame());
-  const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setGs(nextGs);};
+  const startGame=()=>{const g=buildFreshGame();setTracked(buildTrackedGame(g));setGs(g);};
+  const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setTracked(buildTrackedGame(nextGs));setGs(nextGs);};
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
@@ -369,6 +429,7 @@ export default function KaizenPoker(){
     let g2=cloneGs(g);
     g2=setZ(g2,player,"hand",[...getH(g2,player)].filter(x=>x!==cardId));
     g2=setZ(g2,player,"discard",[...getD(g2,player),cardId]);
+    trackEvent(g2,"card_discarded",{cardId,source:"hand"},{playerSlot:player});
     g2=L(g2,`${player} discards ${CM[cardId].name}`);setGs(g2);
     checkCap(g2,player,cardId,then);};
 
@@ -383,9 +444,9 @@ export default function KaizenPoker(){
         onPick:id=>{setModal(null);
           discardFromHand(g,p,id,g2=>{
             setUndoState(null);
-            g2=drawCards(g2,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}
+            g2=drawCards(g2,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"refresh");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}
             done(g2);});}});return;}
-      if(key==="sift"){setUndoState(null);let g2=drawCards(g,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}setGs(g2);
+      if(key==="sift"){setUndoState(null);let g2=drawCards(g,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"sift");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}setGs(g2);
         setModal({type:"pickDiscard",hand:getH(g2,p),title:"Sift: Discard a card",newCards:g2.drawn||[],
           onPick:id=>{setModal(null);discardFromHand(g2,p,id,done);}});return;}
       if(key==="declutter"){const disc=getD(g,p);if(!disc.length){done(g);return;}
@@ -400,6 +461,7 @@ export default function KaizenPoker(){
   const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)setGs(p=>({...p,newCards:[]}));
     const card=CM[cid],p=gs.currentPlayer;
     if(fdMode){setFdMode(false);const snap=cloneGs(gs);let g=playFD(gs,cid);
+      trackEvent(g,"action_played",{cardId:cid,effectId:cid,faceDown:true,actionType:"FaceDown"},{playerSlot:p});
       setUndoState(snap);// Can undo face-down (no info revealed)
       offerRefresh(g,g2=>{g2=advance(g2);setGs(g2);});return;}
     if(card.type==="Modify"&&((p==="A"&&gs.amends.aNegate)||(p==="B"&&gs.amends.bNegate))){
@@ -417,6 +479,7 @@ export default function KaizenPoker(){
     if(!alreadyInPlay){
       g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
       g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
+      trackEvent(g,"action_played",{cardId:cid,effectId,faceDown:false,actionType:card.type},{playerSlot:p});
     }
     if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);setGs(g);return;}
     if(card.type==="React"){g=L(g,`${p} plays ${card.name} (React)`);g=advance(g);setGs(g);return;}
@@ -426,7 +489,7 @@ export default function KaizenPoker(){
       else if(effectId==="7D"){g.amends={...g.amends,[opp(p)==="A"?"aNegate":"bNegate"]:true};g=L(g,`${p} plays Negate`);}
       g=advance(g);setGs(g);return;}
     g=L(g,`${p} plays ${card.name}`);const frozen=isFroz(g,p);
-    const scrapF=(g2,pl,id)=>{g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];return g2;};
+    const scrapF=(g2,pl,id,reason="effect")=>{g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];trackEvent(g2,"card_scrapped",{cardId:id,reason},{playerSlot:pl});return g2;};
     const done=g2=>{setUndoState(null);g2=advance(g2);setGs(g2);};// Clear undo after info revealed
     const pick=(t,cards,filter,onP,onC)=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,
       onPick:id=>{setModal(null);onP(id);},onCancel:onC?()=>{setModal(null);onC();}:undefined});};
@@ -446,18 +509,18 @@ export default function KaizenPoker(){
         on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];d.push(d.shift());g2=setZ(g2,p,"deck",d);
           g2=L(g2,`${p} puts ${CM[dk[0]].name} on bottom`);done(g2);}});return;}
     // 3D Loot
-    if(effectId==="3D"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}setGs(g);
+    if(effectId==="3D"){g=drawCards(g,p,1);if(g.drawn){trackDraws(g,p,g.drawn,"loot");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}setGs(g);
       setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",newCards:g.drawn||[],
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>done(g2));}});return;}
     // 3H Rummage
     if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"Yourself",opt2:"Opponent",
       on1:()=>{setModal(null);setModal({type:"pickDiscard",hand:getH(g,p),title:"Rummage: Discard (then draw)",
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>{
-          g2=drawCards(g2,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
+          g2=drawCards(g2,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"rummage");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
       on2:()=>{setModal(null);const oh=getH(g,opp(p));
         setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard (then draws)`,
           onPick:id=>{setModal(null);discardFromHand(g,opp(p),id,g2=>{
-            g2=drawCards(g2,opp(p),1);if(g2.drawn)g2=L(g2,`${opp(p)} draws`);done(g2);});}});}});return;}
+            g2=drawCards(g2,opp(p),1);if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"rummage");g2=L(g2,`${opp(p)} draws`);}done(g2);});}});}});return;}
     // 3S Consider
     if(effectId==="3S"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       setModal({type:"twoChoice",title:"Consider",card:dk[0],opt1:"Keep on Top",opt2:"Discard It",
@@ -534,11 +597,11 @@ export default function KaizenPoker(){
         g2=L(g2,`${p} banishes ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 7H Abdicate
     if(effectId==="7H"){const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
-      if(!faces.length){g=L(g,`${opp(p)} has no face cards.`);g=drawCards(g,opp(p),1);if(g.drawn)g=L(g,`${opp(p)} draws`);done(g);return;}
+      if(!faces.length){g=L(g,`${opp(p)} has no face cards.`);g=drawCards(g,opp(p),1);if(g.drawn){trackDraws(g,opp(p),g.drawn,"abdicate");g=L(g,`${opp(p)} draws`);}done(g);return;}
       setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard a face card`,filter:id=>FACE.includes(CM[id].rank),
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,opp(p),"hand",[...getH(g2,opp(p))].filter(x=>x!==id));
           g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);g2=L(g2,`${opp(p)} discards ${CM[id].name} (Abdicate)`);
-          g2=drawCards(g2,opp(p),1);if(g2.drawn)g2=L(g2,`${opp(p)} draws`);done(g2);}});return;}
+          g2=drawCards(g2,opp(p),1);if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"abdicate");g2=L(g2,`${opp(p)} draws`);}done(g2);}});return;}
     // 7S Nullify
     if(effectId==="7S"){const allM=[...getP(g,"A").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"A"})),
       ...getP(g,"B").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"B"}))];
@@ -594,7 +657,7 @@ export default function KaizenPoker(){
         if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
       ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
     // AD Explore
-    if(effectId==="AD"){g=drawCards(g,p,1);if(g.drawn){g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
+    if(effectId==="AD"){g=drawCards(g,p,1);if(g.drawn){trackDraws(g,p,g.drawn,"explore");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
     // AC Salvage
     if(effectId==="AC"){if(!g.scrap.length){g=L(g,"...scrap empty.");done(g);return;}
       pick("Salvage: Take from scrap",g.scrap,null,id=>{let g2=cloneGs(g);g2.scrap=g2.scrap.filter(x=>x!==id);
@@ -614,7 +677,7 @@ export default function KaizenPoker(){
         g2.newCards=[id];g2=L(g2,`${p} reanimates ${CM[id].name}`);g2.bonusActions++;done(g2);},
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // KC Brainstorm
-    if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;setGs(g);
+    if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];trackDraws(g,p,dr,"brainstorm");g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;setGs(g);
       setModal({type:"brainstorm",hand:getH(g,p),newCards:dr,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"deck",[...ids,...getDk(g2,p)]);
         g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(" ➠ ")}`);g2.newCards=[];done(g2);}});return;}
@@ -633,7 +696,7 @@ export default function KaizenPoker(){
       g2=L(g2,`${p} discards: ${ids.map(id=>CM[id].name).join(", ")}`);
       // Check Capitalize for each discarded card (only 8S matters)
       const capCheck=(g3,ci)=>{if(ci>=ids.length){
-        g3=drawCards(g3,p,ids.length);const dr=g3.drawn||[];
+        g3=drawCards(g3,p,ids.length);const dr=g3.drawn||[];trackDraws(g3,p,dr,"rejuvenate");
         g3=L(g3,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g3.newCards=dr;done(g3);return;}
         checkCap(g3,p,ids[ci],g4=>capCheck(g4,ci+1));};
       capCheck(g2,0);}});return;}
@@ -663,7 +726,7 @@ export default function KaizenPoker(){
     // Forecast: choose target now, resolve after reveal
     if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
       setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
-        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);setGs(g2);next(g2);},
+        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,kind:"forecast"},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);setGs(g2);next(g2);},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Vanish: defer
     if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);setGs(g2);next(g2);return;}
@@ -672,7 +735,7 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
@@ -680,7 +743,7 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
@@ -688,14 +751,14 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
     if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);
         setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
-          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g2);next(g2);},
+          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,suit:s},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Clone — one SCORING card becomes copy of another SCORING card
@@ -703,7 +766,7 @@ export default function KaizenPoker(){
       setModal({type:"pickFromList",title:`${pl}: Clone — pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
           setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
-            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
+            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
@@ -711,7 +774,7 @@ export default function KaizenPoker(){
       setModal({type:"pickFromList",title:`${pl}: Reminisce — pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);
           setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
-            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
+            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     let g2=L(g,`${pl}: ${modLabel} — not implemented`);setGs(g2);next(g2);};
@@ -731,16 +794,16 @@ export default function KaizenPoker(){
             onPick:r=>{setModal(null);
               if(camo){setModal({type:"twoOptChoice",title:`Also change suit of ${CM[tid].name}? (rank ➠ ${r})`,opt1:"Yes",opt2:"No",
                 on1:()=>{setModal(null);setModal({type:"pickSuit",title:"Pick suit",showHand:hand,
-                  onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
-                on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}});}
-              else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}}});},
+                  onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
+                on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}});}
+              else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}}});},
         onSuit:()=>{setModal(null);
           setModal({type:"pickSuit",title:`Camouflage: ${CM[tid].name} ➠ any suit`,showHand:hand,
-            onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
+            onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];trackEvent(g3,"queen_choice",{source:"camouflage",target:tid,rank:null,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
         onBoth:()=>{setModal(null);
           setModal({type:"pickRank",title:`${CM[tid].name}: Pick rank`,ranks:RO,showHand:hand,
             onPick:r=>{setModal(null);setModal({type:"pickSuit",title:`${CM[tid].name}: Pick suit`,showHand:hand,
-              onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});}});},
+              onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});}});},
         onSkip:()=>{setModal(null);proc(g2,ti+1);}});};
     proc(g,0);};
 
@@ -748,15 +811,23 @@ export default function KaizenPoker(){
   const finalScore=(g)=>{const aH=getH(g,"A"),bH=getH(g,"B"),aM=getAppliedMods(g,"A"),bM=getAppliedMods(g,"B");
     const aE=evalHand(aH,aM),bE=evalHand(bH,bM);
     const winner=compareHands(aH,bH,aM,bM);
+    trackEvent(g,"round_scored",{
+      winner,
+      aHand:[...aH],
+      bHand:[...bH],
+      aHandRank:aE.handName,
+      bHandRank:bE.handName,
+      aMods:[...aM],
+      bMods:[...bM],
+    },{phase:"score",playerSlot:null});
     g=L(g,`A: ${aE.handName}`);g=L(g,`B: ${bE.handName}`);
-    if(winner==="A"){g.aChips++;g=L(g,`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
-    else if(winner==="B"){g.bChips++;g=L(g,`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
+    if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
+    else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
     else g=L(g,"Tie — no chip awarded.");
     g.phase="reveal";g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;setGs(g);};
 
   // After reveal, process post-score effects and advance
   const advanceFromReveal=()=>{if(!gs)return;let g={...gs};const winner=g._revealWinner;
-    // Post-score effects
     const effs=[];
     for(const pl of["A","B"]){for(const a of getP(g,pl)){
       const effect=getActionCard(a);
@@ -769,11 +840,12 @@ export default function KaizenPoker(){
         g[fk]=queue;
       }
       if(effect.id==="8D")effs.push({t:"vanish",pl});
-      if(effect.id==="8C"&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});}}
+      if(effect.id==="8C"&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});
+    }}
     procPost(g,effs,0);};
 
   const startNextRound=(g)=>{
-    if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
+    if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);trackGameFinished(g,g.aChips>=7?"A":"B");setGs(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};
     g.round++;g.firstPlayer=g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
@@ -781,14 +853,15 @@ export default function KaizenPoker(){
     let aR=2,bR=2,aD=7,bD=7;const aCW=g.aChips===6,bCW=g.bChips===6;
     if(aCW&&!bCW){bD=8;bR=3;}if(bCW&&!aCW){aD=8;aR=3;}if(aCW||bCW)g=L(g,"⚡ SUDDEN DEATH!");
     g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
-    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");setGs(g);return;}g.aHand=sortC(g.aHand);
-    g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");setGs(g);return;}g.bHand=sortC(g.bHand);
+    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");trackGameFinished(g,"B");setGs(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
+    g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");trackGameFinished(g,"A");setGs(g);return;}trackDraws(g,"B",g.drawn||[],"round_start");g.bHand=sortC(g.bHand);
     g.phase="action";g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
-    g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);setGs(g);
+    g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);trackRoundStart(g);setGs(g);
   };
 
   const procPost=(g,effs,i)=>{if(i>=effs.length){
-    if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);setGs(g);return;}
+    trackRoundSummary(g);
+    if(g.aChips>=7||g.bChips>=7){g.phase="gameOver";g=L(g,`🏆 Player ${g.aChips>=7?"A":"B"} wins the game!`);trackGameFinished(g,g.aChips>=7?"A":"B");setGs(g);return;}
     const aH=getH(g,"A"),bH=getH(g,"B");
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
     startNextRound(g);return;}
@@ -798,6 +871,7 @@ export default function KaizenPoker(){
       let g2={...g};
       g2=setZ(g2,e.pl,"hand",[...getH(g2,e.pl)].filter(x=>x!==e.target));
       g2=setZ(g2,e.pl,"deck",[e.target,...getDk(g2,e.pl)]);
+      trackEvent(g2,"post_score_effect",{effect:"forecast",target:e.target,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
       g2=L(g2,`${e.pl}: Forecast puts ${CM[e.target].name} on top of the deck`);
       setGs(g2);procPost(g2,effs,i+1);return;}
     if(e.t==="vanish"){if(isFroz(g,e.pl)){g=L(g,`${e.pl}: Vanish — Frozen!`);procPost(g,effs,i+1);return;}
@@ -806,12 +880,16 @@ export default function KaizenPoker(){
       if(!valid.length){procPost(g,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Vanish — scrap matching suit`,cards:disc,filter:id=>effS.has(CM[id].suit),canCancel:true,
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+          trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
+          trackEvent(g2,"card_scrapped",{cardId:id,reason:"vanish"},{phase:"post_score",playerSlot:e.pl});
           g2=L(g2,`${e.pl}: Vanish scraps ${CM[id].name}`);setGs(g2);procPost(g2,effs,i+1);},
         onCancel:()=>{setModal(null);procPost(g,effs,i+1);}});return;}
     if(e.t==="capitulate"){if(isFroz(g,e.pl)){procPost(g,effs,i+1);return;}
       const disc=getD(g,e.pl);if(!disc.length){procPost(g,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Capitulate — you lost! Scrap a card?`,cards:disc,canCancel:true,
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+          trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
+          trackEvent(g2,"card_scrapped",{cardId:id,reason:"capitulate"},{phase:"post_score",playerSlot:e.pl});
           g2=L(g2,`${e.pl}: Capitulate scraps ${CM[id].name}`);setGs(g2);procPost(g2,effs,i+1);},
         onCancel:()=>{setModal(null);procPost(g,effs,i+1);}});return;}
     procPost(g,effs,i+1);};
