@@ -713,12 +713,14 @@ export default function KaizenPoker(){
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
     g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g=L(g,"Resolving modifications...");setGs(g);
-    const aM=getModifyEntries(g,"A");resolveMods(g,"A",aM,0);};
+    const first=gs.firstPlayer||"A";
+    const firstMods=getModifyEntries(g,first);resolveMods(g,first,firstMods,0);};
 
   const resolveMods=(g,pl,mods,i)=>{
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
-      if(pl==="A"){const bM=getModifyEntries(g2,"B");resolveMods(g2,"B",bM,0);}
-      else finalScore(g2);});return;}
+      const nextPlayer=opp(pl);
+      if(pl!==g2.firstPlayer){finalScore(g2);return;}
+      const nextMods=getModifyEntries(g2,nextPlayer);resolveMods(g2,nextPlayer,nextMods,0);});return;}
     const entry=mods[i],mid=entry.effectId,mc=CM[mid],hand=getH(g,pl),mk=pl==="A"?"aMods":"bMods";
     const next=(g2)=>resolveMods(g2||g,pl,mods,i+1);
     const modLabel=entry.copiedFrom?`${CM[entry.sourceId]?.name||mc.name} copying ${CM[entry.copiedFrom]?.name||mc.name}`:mc.name;
