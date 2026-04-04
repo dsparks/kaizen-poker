@@ -562,7 +562,7 @@ export default function KaizenPoker(){
     if(!gs||gs.phase!=="score"||modal)return;
     const flow=gs._scoreFlow;
     if(!flow)return;
-    if(onlineRef.current.active&&liveSeat&&liveSeat!==flow.player)return;
+    if(onlineRef.current.active&&seatPlayer&&seatPlayer!==flow.player)return;
     if(flow.stage==="mods"){
       resolveMods(gs,flow.player,getModifyEntries(gs,flow.player),flow.index||0);
       return;
@@ -575,7 +575,7 @@ export default function KaizenPoker(){
         resolveMods(g2,nextPlayer,getModifyEntries(g2,nextPlayer),0);
       },flow.index||0);
     }
-  },[gs,modal,liveSeat]);
+  },[gs,modal,seatPlayer]);
 
   const startOnlineGame=async()=>{
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
@@ -966,7 +966,7 @@ export default function KaizenPoker(){
       g={...g,currentPlayer:pl,_scoreFlow:{stage:"mods",player:pl,index:i}};
       commitGameState(g);
     }
-    if(onlineRef.current.active&&liveSeat&&liveSeat!==pl)return;
+    if(onlineRef.current.active&&seatPlayer&&seatPlayer!==pl)return;
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
       if(g2.mode==="solo"){finalScore(g2);return;}
       const nextPlayer=opp(pl);
@@ -1038,7 +1038,7 @@ export default function KaizenPoker(){
       g={...g,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:tiStart}};
       commitGameState(g);
     }
-    if(onlineRef.current.active&&liveSeat&&liveSeat!==pl)return;
+    if(onlineRef.current.active&&seatPlayer&&seatPlayer!==pl)return;
     const mk=pl==="A"?"aMods":"bMods";
     const modded=new Set(getAppliedMods(g,pl).map(m=>m.target));
     const hand=getH(g,pl);
@@ -1049,7 +1049,7 @@ export default function KaizenPoker(){
         g2={...g2,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:ti}};
         commitGameState(g2);
       }
-      if(onlineRef.current.active&&liveSeat&&liveSeat!==pl)return;
+      if(onlineRef.current.active&&seatPlayer&&seatPlayer!==pl)return;
       if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
       setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,
         onRank:()=>{setModal(null);
@@ -1211,12 +1211,13 @@ export default function KaizenPoker(){
 
   const isOnlineMode=gs.mode==="online";
   const actingPlayer=gs.currentPlayer;
-  const viewerPlayer=isOnlineMode&&liveSeat?liveSeat:actingPlayer;
+  const seatPlayer=isOnlineMode?(liveSeat||onlineRef.current.seat||null):null;
+  const viewerPlayer=isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
-  const canControlSeat=!isOnlineMode||(!!liveSeat&&liveSeat===actingPlayer);
-  const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!liveSeat&&liveSeat===actingPlayer);
+  const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
+  const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
   const canAct=gs.phase==="action"&&actionsLeft>0&&canControlSeat&&onlineReady;
 
   const isSuddenDeath=gs.mode!=="solo"&&(gs.aChips===6||gs.bChips===6);
@@ -1396,13 +1397,13 @@ export default function KaizenPoker(){
         </div>}
         {isOnlineMode&&<div style={{background:"linear-gradient(180deg,#132333dd,#0d1824f2)",border:"1px solid #3b82f655",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",boxShadow:"inset 0 1px 0 #ffffff10"}}>
           <span style={{fontSize:10,fontWeight:800,color:"#93c5fd",letterSpacing:1.2,textTransform:"uppercase"}}>Online Game</span>
-          {liveSeat
-            ?<span style={{fontSize:11,color:"#dbeafe"}}>You are Player {liveSeat}</span>
+          {seatPlayer
+            ?<span style={{fontSize:11,color:"#dbeafe"}}>You are Player {seatPlayer}</span>
             :<span style={{fontSize:11,color:"#cbd5e1"}}>Spectating</span>}
           <span style={{fontSize:11,color:"#94a3b8"}}>{onlineStatus}</span>
           {liveGameId&&<span style={{fontSize:10,color:"#64748b"}}>{liveGameId}</span>}
-          {shareLink&&liveSeat==="A"&&<button onClick={()=>navigator.clipboard?.writeText(shareLink)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",background:"#101923",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,cursor:"pointer"}}>Copy Invite Link</button>}
-          {isOnlineMode&&onlineStatus==="waiting"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player B to join</span>}
+          {shareLink&&seatPlayer==="A"&&<button onClick={()=>navigator.clipboard?.writeText(shareLink)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",background:"#101923",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,cursor:"pointer"}}>Copy Invite Link</button>}
+          {isOnlineMode&&onlineStatus==="waiting"&&seatPlayer==="A"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player B to join</span>}
           {isOnlineMode&&!canControlSeat&&gs.phase==="action"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player {actingPlayer}</span>}
           {onlineError&&<span style={{fontSize:11,color:"#fca5a5"}}>{onlineError}</span>}
         </div>}
