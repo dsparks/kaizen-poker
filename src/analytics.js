@@ -2,6 +2,7 @@ export const APP_VERSION = "0.1.0";
 export const RULES_VERSION = "2026-04-stats-v1";
 export const ANALYTICS_SOURCE = "local_hotseat";
 export const SOLO_ANALYTICS_SOURCE = "solo_variant";
+export const ONLINE_ANALYTICS_SOURCE = "online_guest";
 const ACTIVE_GAME_KEY = "kaizenPoker.activeTrackedGame";
 const COMPLETED_GAMES_KEY = "kaizenPoker.completedTrackedGames";
 const GUEST_PROFILE_PREFIX = "kaizenPoker.guestProfile.";
@@ -21,7 +22,7 @@ export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
   return profile;
 }
 
-const analyticsSourceForMode = mode => mode === "solo" ? SOLO_ANALYTICS_SOURCE : ANALYTICS_SOURCE;
+const analyticsSourceForMode = mode => mode === "solo" ? SOLO_ANALYTICS_SOURCE : mode === "online" ? ONLINE_ANALYTICS_SOURCE : ANALYTICS_SOURCE;
 
 export function buildTrackedGame(gs) {
   const startedAt = gs._createdAt || nowIso();

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import {
   archiveCompletedTrackedGame,
@@ -9,6 +9,15 @@ import {
   saveActiveTrackedGame,
   upsertTrackedRound,
 } from "./analytics.js";
+import { createGameTransport } from "./gameTransport.js";
+import {
+  claimSeat,
+  createLiveGame,
+  fetchLiveGame,
+  makeSeatToken,
+  multiplayerEnabled,
+  updateLiveGame,
+} from "./liveGameClient.js";
 import { syncTrackedGame } from "./supabaseAnalytics.js";
 
 // ============================================================
@@ -87,6 +96,7 @@ export const CARDS=[
 export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
 const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
 const SOLO_TARGET_CHIPS=13;
+const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
 const CHALLENGER_LOOKUP={
   "2":{handRank:0,handName:"High Card",description:"Highest single card, no other hand achieved"},
   "3":{handRank:1,handName:"Pair",description:"Two cards of the same rank"},
@@ -336,6 +346,64 @@ export default function KaizenPoker(){
   const[gs,setGs]=useState(null);const[modal,setModal]=useState(null);const[fdMode,setFdMode]=useState(false);
   const[undoState,setUndoState]=useState(null); // snapshot before last action, for undo
   const[toast,setToast]=useState(null);
+  const[joinCode,setJoinCode]=useState("");
+  const[shareLink,setShareLink]=useState("");
+  const[onlineError,setOnlineError]=useState("");
+  const[onlineStatus,setOnlineStatus]=useState("offline");
+  const[liveSeat,setLiveSeat]=useState(null);
+  const[liveGameId,setLiveGameId]=useState(null);
+  const gameTransport=createGameTransport({setGs});
+  const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1});
+  const pollRef=useRef(null);
+  const analyticsAuthorityRef=useRef(true);
+  const commitGameState=nextGs=>{
+    gameTransport.commit(nextGs);
+    if(onlineRef.current.active&&onlineRef.current.gameId&&onlineRef.current.seat){
+      const status=nextGs.phase==="gameOver"?"finished":"active";
+      void updateLiveGame({
+        gameId:onlineRef.current.gameId,
+        state:nextGs,
+        tracked:trackedRef.current,
+        expectedVersion:onlineRef.current.version||1,
+        seat:onlineRef.current.seat,
+        token:onlineRef.current.token,
+        status,
+      }).then(row=>{
+        if(!row)return;
+        onlineRef.current.version=row.version;
+        setOnlineStatus(row.status||"active");
+      }).catch(async err=>{
+        console.error("Live game update failed",err);
+        setOnlineError(err.message||"Live update failed.");
+        try{
+          const fresh=await fetchLiveGame(onlineRef.current.gameId);
+          if(fresh?.state){
+            onlineRef.current.version=fresh.version||onlineRef.current.version;
+            gameTransport.commit(fresh.state);
+            if(fresh.tracked&&analyticsAuthorityRef.current)setTracked(fresh.tracked);
+          }
+        }catch(innerErr){
+          console.error("Live game resync failed",innerErr);
+        }
+      });
+    }
+    return nextGs;
+  };
+  const patchGameState=updater=>gameTransport.patch(updater);
+  const clearGameState=()=>{
+    if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;}
+    if(typeof window!=="undefined") window.history.replaceState({}, "", window.location.pathname);
+    onlineRef.current={active:false,gameId:null,seat:null,token:null,version:1};
+    analyticsAuthorityRef.current=true;
+    setJoinCode("");
+    setShareLink("");
+    setOnlineError("");
+    setOnlineStatus("offline");
+    setLiveSeat(null);
+    setLiveGameId(null);
+    trackedRef.current=null;
+    gameTransport.clear();
+  };
   const logRef=useRef(null);
   const toastTimerRef=useRef(null);
   const trackedRef=useRef(null);
@@ -343,6 +411,7 @@ export default function KaizenPoker(){
 
   const scheduleTrackedSync=()=>{
     if(!trackedRef.current)return;
+    if(!analyticsAuthorityRef.current)return;
     saveActiveTrackedGame(trackedRef.current);
     if(syncTimerRef.current)clearTimeout(syncTimerRef.current);
     syncTimerRef.current=setTimeout(()=>{const snap=trackedRef.current;if(snap)void syncTrackedGame(snap).catch(err=>console.error("Analytics sync failed",err));},500);
@@ -372,7 +441,7 @@ export default function KaizenPoker(){
   const trackRoundSummary=gLike=>setTracked(curr=>upsertTrackedRound(curr,buildRoundSummary(gLike)));
   const trackGameFinished=(gLike,winner)=>{
     setTracked(curr=>finalizeTrackedGame(curr,gLike,winner));
-    if(trackedRef.current){archiveCompletedTrackedGame(trackedRef.current);void syncTrackedGame(trackedRef.current).catch(err=>console.error("Analytics final sync failed",err));}
+    if(analyticsAuthorityRef.current&&trackedRef.current){archiveCompletedTrackedGame(trackedRef.current);void syncTrackedGame(trackedRef.current).catch(err=>console.error("Analytics final sync failed",err));}
   };
 
   const flashToast=(msg,tone="info")=>{
@@ -421,8 +490,110 @@ export default function KaizenPoker(){
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     if(mode==="solo")g=L(g,`Challenger Deck: ${g.bDeck.length} cards ready`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
-  const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setTracked(buildTrackedGame(g));setGs(g);};
-  const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setTracked(buildTrackedGame(nextGs));setGs(nextGs);};
+  const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setTracked(buildTrackedGame(g));commitGameState(g);};
+  const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setTracked(buildTrackedGame(nextGs));commitGameState(nextGs);};
+
+  const liveSeatKey=gameId=>`${LIVE_SEAT_PREFIX}${gameId}`;
+  const storeSeat=(gameId,seat,token)=>{try{localStorage.setItem(liveSeatKey(gameId),JSON.stringify({seat,token}));}catch{}};
+  const loadSeat=(gameId)=>{try{const raw=localStorage.getItem(liveSeatKey(gameId));return raw?JSON.parse(raw):null;}catch{return null;}};
+
+  const hydrateFromLiveRow=(row,{seat=null,token=null,authority=false}={})=>{
+    if(!row?.state)return;
+    if(typeof window!=="undefined"){
+      const nextUrl=`${window.location.pathname}?game=${row.id}`;
+      window.history.replaceState({}, "", nextUrl);
+    }
+    onlineRef.current={active:true,gameId:row.id,seat,token,version:row.version||1};
+    analyticsAuthorityRef.current=authority;
+    setLiveGameId(row.id);
+    setLiveSeat(seat);
+    setOnlineStatus(row.status||"active");
+    setJoinCode(row.id);
+    setShareLink(typeof window!=="undefined"?`${window.location.origin}${window.location.pathname}?game=${row.id}`:"");
+    setOnlineError("");
+    if(row.tracked) setTracked(row.tracked);
+    else if(authority) setTracked(buildTrackedGame(row.state));
+    else trackedRef.current=null;
+    gameTransport.commit(row.state);
+  };
+
+  const startLivePolling=(gameId,authority=false)=>{
+    if(pollRef.current)clearInterval(pollRef.current);
+    pollRef.current=setInterval(async()=>{
+      try{
+        const row=await fetchLiveGame(gameId);
+        if(!row?.state)return;
+        if((row.version||1)!==(onlineRef.current.version||1)){
+          onlineRef.current.version=row.version||1;
+          gameTransport.commit(row.state);
+          if(row.tracked&&authority)setTracked(row.tracked);
+        }
+        setOnlineStatus(row.status||"active");
+      }catch(err){
+        console.error("Live poll failed",err);
+      }
+    },1200);
+  };
+
+  const startOnlineGame=async()=>{
+    if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
+    try{
+      const token=makeSeatToken();
+      const g=buildFreshGame("online");
+      const tracked=buildTrackedGame(g);
+      analyticsAuthorityRef.current=true;
+      trackedRef.current=tracked;
+      const row=await createLiveGame({gameId:g._gameId,state:g,tracked,playerAToken:token});
+      storeSeat(row.id,"A",token);
+      hydrateFromLiveRow(row,{seat:"A",token,authority:true});
+      startLivePolling(row.id,true);
+    }catch(err){
+      console.error(err);
+      setOnlineError(err.message||"Unable to create online game.");
+    }
+  };
+
+  const joinOnlineGame=useCallback(async(rawCode)=>{
+    const gameId=(rawCode||"").trim().replace(/^.*[?&]game=/,"");
+    if(!gameId){setOnlineError("Enter a game link or game ID.");return;}
+    if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
+    try{
+      let row=await fetchLiveGame(gameId);
+      if(!row){setOnlineError("That online game was not found.");return;}
+      let seatInfo=loadSeat(gameId);
+      let seat=seatInfo?.seat||null;
+      let token=seatInfo?.token||null;
+      let authority=false;
+      if(seat==="A"&&token&&row.player_a_token===token) authority=true;
+      else if(seat==="B"&&token&&row.player_b_token===token) authority=false;
+      else if(!row.player_b_token){
+        seat="B";token=makeSeatToken();
+        const claimed=await claimSeat(gameId,"B",token);
+        row=claimed||await fetchLiveGame(gameId);
+        storeSeat(gameId,"B",token);
+      }else if(row.player_a_token&&seatInfo?.token===row.player_a_token){
+        seat="A";token=seatInfo.token;authority=true;
+      }else{
+        seat=null;token=null;
+      }
+      hydrateFromLiveRow(row,{seat,token,authority});
+      startLivePolling(gameId,authority);
+    }catch(err){
+      console.error(err);
+      setOnlineError(err.message||"Unable to join online game.");
+    }
+  },[]);
+
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const params=new URLSearchParams(window.location.search);
+    const gameId=params.get("game");
+    if(gameId){
+      setJoinCode(gameId);
+      void joinOnlineGame(gameId);
+    }
+    return()=>{if(pollRef.current)clearInterval(pollRef.current);};
+  },[joinOnlineGame]);
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
@@ -447,12 +618,12 @@ export default function KaizenPoker(){
     // So check if discardedId === "8S"
     if(discardedId==="8S"){
       const frozen=isFroz(g,player);
-      if(frozen){g=L(g,`${player}: Capitalize triggers but Frozen!`);setGs(g);then(g);return;}
+      if(frozen){g=L(g,`${player}: Capitalize triggers but Frozen!`);commitGameState(g);then(g);return;}
       const disc=getD(g,player).filter(id=>id!==discardedId);
       if(!disc.length){then(g);return;}
       setModal({type:"pickFromList",title:`${player}: Capitalize! You discarded 8♠ — scrap a card?`,cards:disc,canCancel:true,
         onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,player,"discard",[...getD(g2,player)].filter(x=>x!==id));
-          g2.scrap=[...g2.scrap,id];g2=L(g2,`${player}: Capitalize scraps ${CM[id].name}`);setGs(g2);then(g2);},
+          g2.scrap=[...g2.scrap,id];g2=L(g2,`${player}: Capitalize scraps ${CM[id].name}`);commitGameState(g2);then(g2);},
         onCancel:()=>{setModal(null);then(g);}});return;}
     then(g);};
 
@@ -462,7 +633,7 @@ export default function KaizenPoker(){
     g2=setZ(g2,player,"hand",[...getH(g2,player)].filter(x=>x!==cardId));
     g2=setZ(g2,player,"discard",[...getD(g2,player),cardId]);
     trackEvent(g2,"card_discarded",{cardId,source:"hand"},{playerSlot:player});
-    g2=L(g2,`${player} discards ${CM[cardId].name}`);setGs(g2);
+    g2=L(g2,`${player} discards ${CM[cardId].name}`);commitGameState(g2);
     checkCap(g2,player,cardId,then);};
 
   const offerRefresh=(g,done)=>{const p=g.currentPlayer;if(!getH(g,p).length){done(g);return;}
@@ -478,7 +649,7 @@ export default function KaizenPoker(){
             setUndoState(null);
             g2=drawCards(g2,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"refresh");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}
             done(g2);});}});return;}
-      if(key==="sift"){setUndoState(null);let g2=drawCards(g,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"sift");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}setGs(g2);
+      if(key==="sift"){setUndoState(null);let g2=drawCards(g,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"sift");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}commitGameState(g2);
         setModal({type:"pickDiscard",hand:getH(g2,p),title:"Sift: Discard a card",newCards:g2.drawn||[],
           onPick:id=>{setModal(null);discardFromHand(g2,p,id,done);}});return;}
       if(key==="declutter"){const disc=getD(g,p);if(!disc.length){done(g);return;}
@@ -488,14 +659,14 @@ export default function KaizenPoker(){
           onCancel:()=>{setModal(null);done(g);}});}}});};
 
   // --- UNDO ---
-  const doUndo=()=>{if(undoState){setGs(undoState);setUndoState(null);setModal(null);setFdMode(false);}};
+  const doUndo=()=>{if(undoState){commitGameState(undoState);setUndoState(null);setModal(null);setFdMode(false);}};
 
-  const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)setGs(p=>({...p,newCards:[]}));
+  const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)patchGameState(p=>({...p,newCards:[]}));
     const card=CM[cid],p=gs.currentPlayer;
     if(fdMode){setFdMode(false);const snap=cloneGs(gs);let g=playFD(gs,cid);
       trackEvent(g,"action_played",{cardId:cid,effectId:cid,faceDown:true,actionType:"FaceDown"},{playerSlot:p});
       setUndoState(snap);// Can undo face-down (no info revealed)
-      offerRefresh(g,g2=>{g2=advance(g2);setGs(g2);});return;}
+      offerRefresh(g,g2=>{g2=advance(g2);commitGameState(g2);});return;}
     if(card.type==="Modify"&&((p==="A"&&gs.amends.aNegate)||(p==="B"&&gs.amends.bNegate))){
       setModal({type:"alert",msg:"Negate prevents Modify actions!",onOk:()=>setModal(null)});return;}
     // Info-revealing actions: confirm first
@@ -513,16 +684,16 @@ export default function KaizenPoker(){
       g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
       trackEvent(g,"action_played",{cardId:cid,effectId,faceDown:false,actionType:card.type},{playerSlot:p});
     }
-    if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);setGs(g);return;}
-    if(card.type==="React"){g=L(g,`${p} plays ${card.name} (React)`);g=advance(g);setGs(g);return;}
-    if(card.type==="Remember"){g=L(g,`${p} plays ${card.name} (Remember)`);g=advance(g);setGs(g);return;}
+    if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);commitGameState(g);return;}
+    if(card.type==="React"){g=L(g,`${p} plays ${card.name} (React)`);g=advance(g);commitGameState(g);return;}
+    if(card.type==="Remember"){g=L(g,`${p} plays ${card.name} (Remember)`);g=advance(g);commitGameState(g);return;}
     if(card.type==="Amend"){
       if(effectId==="7C"){g.amends={...g.amends,[opp(p)==="A"?"aFreeze":"bFreeze"]:true};g=L(g,`${p} plays Freeze`);}
       else if(effectId==="7D"){g.amends={...g.amends,[opp(p)==="A"?"aNegate":"bNegate"]:true};g=L(g,`${p} plays Negate`);}
-      g=advance(g);setGs(g);return;}
+      g=advance(g);commitGameState(g);return;}
     g=L(g,`${p} plays ${card.name}`);const frozen=isFroz(g,p);
     const scrapF=(g2,pl,id,reason="effect")=>{g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];trackEvent(g2,"card_scrapped",{cardId:id,reason},{playerSlot:pl});return g2;};
-    const done=g2=>{setUndoState(null);g2=advance(g2);setGs(g2);};// Clear undo after info revealed
+    const done=g2=>{setUndoState(null);g2=advance(g2);commitGameState(g2);};// Clear undo after info revealed
     const pick=(t,cards,filter,onP,onC)=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,
       onPick:id=>{setModal(null);onP(id);},onCancel:onC?()=>{setModal(null);onC();}:undefined});};
     const resolveCopiedImmediate=(g2,nextEffectId)=>resolveAction(cid,nextEffectId,true,g2);
@@ -541,7 +712,7 @@ export default function KaizenPoker(){
         on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];d.push(d.shift());g2=setZ(g2,p,"deck",d);
           g2=L(g2,`${p} puts ${CM[dk[0]].name} on bottom`);done(g2);}});return;}
     // 3D Loot
-    if(effectId==="3D"){g=drawCards(g,p,1);if(g.drawn){trackDraws(g,p,g.drawn,"loot");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}setGs(g);
+    if(effectId==="3D"){g=drawCards(g,p,1);if(g.drawn){trackDraws(g,p,g.drawn,"loot");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}commitGameState(g);
       setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",newCards:g.drawn||[],
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>done(g2));}});return;}
     // 3H Rummage
@@ -580,7 +751,7 @@ export default function KaizenPoker(){
     if(effectId==="4S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
       pick("Unearth: Return from discard",disc,null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
-        g2=L(g2,`${p} unearths ${CM[id].name}`);g2.newCards=[id];setGs(g2);
+        g2=L(g2,`${p} unearths ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
         setModal({type:"pickDiscard",hand:h,title:"Unearth: Discard a card",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // 5C Mill
@@ -592,7 +763,7 @@ export default function KaizenPoker(){
       if(!play.length){g=L(g,"...no other actions.");done(g);return;}
       pick("Recall: Return action to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
-        g2=L(g2,`${p} recalls ${CM[id].name}`);g2.newCards=[id];setGs(g2);
+        g2=L(g2,`${p} recalls ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
         setModal({type:"pickDiscard",hand:h,title:"Recall: Discard",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // 5S Reclaim
@@ -709,17 +880,17 @@ export default function KaizenPoker(){
         g2.newCards=[id];g2=L(g2,`${p} reanimates ${CM[id].name}`);g2.bonusActions++;done(g2);},
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // KC Brainstorm
-    if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];trackDraws(g,p,dr,"brainstorm");g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;setGs(g);
+    if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];trackDraws(g,p,dr,"brainstorm");g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;commitGameState(g);
       setModal({type:"brainstorm",hand:getH(g,p),newCards:dr,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"deck",[...ids,...getDk(g2,p)]);
         g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(" ➠ ")}`);g2.newCards=[];done(g2);}});return;}
     // KD Improvise
     if(effectId==="KD"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
       for(let i=0;i<3&&dk.length;i++){const c=dk.shift();dc.push(c);m.push(c);}
-      g=setZ(g,p,"deck",dk);g=setZ(g,p,"discard",dc);g=L(g,`${p} mills: ${m.map(id=>CM[id].name).join(", ")}`);setGs(g);
+      g=setZ(g,p,"deck",dk);g=setZ(g,p,"discard",dc);g=L(g,`${p} mills: ${m.map(id=>CM[id].name).join(", ")}`);commitGameState(g);
       pick("Improvise: Take from discard",[...getD(g,p)],null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
-        g2=L(g2,`${p} takes ${CM[id].name}`);g2.newCards=[id];setGs(g2);
+        g2=L(g2,`${p} takes ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
         setModal({type:"pickDiscard",hand:h,title:"Improvise: Discard",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // KH Rejuvenate
@@ -744,7 +915,7 @@ export default function KaizenPoker(){
   // SCORING WITH MODIFY RESOLUTION
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
-    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g=L(g,"Resolving modifications...");setGs(g);
+    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g=L(g,"Resolving modifications...");commitGameState(g);
     const first=gs.firstPlayer||"A";
     const firstMods=getModifyEntries(g,first);resolveMods(g,first,firstMods,0);};
 
@@ -757,43 +928,43 @@ export default function KaizenPoker(){
     const entry=mods[i],mid=entry.effectId,mc=CM[mid],hand=getH(g,pl),mk=pl==="A"?"aMods":"bMods";
     const next=(g2)=>resolveMods(g2||g,pl,mods,i+1);
     const modLabel=entry.copiedFrom?`${CM[entry.sourceId]?.name||mc.name} copying ${CM[entry.copiedFrom]?.name||mc.name}`:mc.name;
-    const skip=()=>{let g2=L(g,`${pl}: ${modLabel} — skipped`);setGs(g2);next(g2);};
+    const skip=()=>{let g2=L(g,`${pl}: ${modLabel} — skipped`);commitGameState(g2);next(g2);};
     // Forecast: choose target now, resolve after reveal
     if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
       setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
-        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,kind:"forecast"},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);setGs(g2);next(g2);},
+        onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,kind:"forecast"},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);commitGameState(g2);next(g2);},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Vanish: defer
-    if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);setGs(g2);next(g2);return;}
+    if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);commitGameState(g2);next(g2);return;}
     // Buff
     if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff — pick scoring card to increase rank`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
-        if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
+        if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
     if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf — pick scoring card to decrease rank`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
-        if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
+        if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
     if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge — pick scoring card (±1 rank)`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
-        if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);setGs(g2);next(g2);return;}
+        if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
     if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);
         setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
-          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,suit:s},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g2);next(g2);},
+          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,suit:s},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Clone — one SCORING card becomes copy of another SCORING card
@@ -802,17 +973,17 @@ export default function KaizenPoker(){
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
           setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
-              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
-    if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce — discard empty`);setGs(g2);next(g2);return;}
+    if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce — discard empty`);commitGameState(g2);next(g2);return;}
       setModal({type:"pickFromList",title:`${pl}: Reminisce — pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);
           setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
-              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
-    let g2=L(g,`${pl}: ${modLabel} — not implemented`);setGs(g2);next(g2);};
+    let g2=L(g,`${pl}: ${modLabel} — not implemented`);commitGameState(g2);next(g2);};
 
   // Queen Remember on 2s
   const resolveQ2s=(g,pl,done)=>{
@@ -829,16 +1000,16 @@ export default function KaizenPoker(){
             onPick:r=>{setModal(null);
               if(camo){setModal({type:"twoOptChoice",title:`Also change suit of ${CM[tid].name}? (rank ➠ ${r})`,opt1:"Yes",opt2:"No",
                 on1:()=>{setModal(null);setModal({type:"pickSuit",title:"Pick suit",showHand:hand,
-                  onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
-                on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}});}
-              else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}}});},
+                  onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});},
+                on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);commitGameState(g3);proc(g3,ti+1);}});}
+              else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);commitGameState(g3);proc(g3,ti+1);}}});},
         onSuit:()=>{setModal(null);
           setModal({type:"pickSuit",title:`Camouflage: ${CM[tid].name} ➠ any suit`,showHand:hand,
-            onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];trackEvent(g3,"queen_choice",{source:"camouflage",target:tid,rank:null,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
+            onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];trackEvent(g3,"queen_choice",{source:"camouflage",target:tid,rank:null,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});},
         onBoth:()=>{setModal(null);
           setModal({type:"pickRank",title:`${CM[tid].name}: Pick rank`,ranks:RO,showHand:hand,
             onPick:r=>{setModal(null);setModal({type:"pickSuit",title:`${CM[tid].name}: Pick suit`,showHand:hand,
-              onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});}});},
+              onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});}});},
         onSkip:()=>{setModal(null);proc(g2,ti+1);}});};
     proc(g,0);};
 
@@ -875,7 +1046,7 @@ export default function KaizenPoker(){
     if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,g.mode==="solo"?`You win the chip! (${g.aChips}-${g.bChips})`:`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
     else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,g.mode==="solo"?`The Challenger wins the chip! (${g.aChips}-${g.bChips})`:`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
     else g=L(g,"Tie - no chip awarded.");
-    g.phase="reveal";g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;setGs(g);};
+    g.phase="reveal";g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
 
   // After reveal, process post-score effects and advance
   const advanceFromReveal=()=>{if(!gs)return;let g={...gs};const winner=g._revealWinner;
@@ -896,7 +1067,7 @@ export default function KaizenPoker(){
     procPost(g,effs,0);};
 
   const startNextRound=(g)=>{
-    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);setGs(g);return;}
+    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
     g.round++;g.firstPlayer=g.mode==="solo"?"A":g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
@@ -906,19 +1077,19 @@ export default function KaizenPoker(){
       if(aCW&&!bCW){bD=8;bR=3;}if(bCW&&!aCW){aD=8;aR=3;}if(aCW||bCW)g=L(g,"? SUDDEN DEATH!");
     }
     g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
-    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");trackGameFinished(g,"B");setGs(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
+    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");trackGameFinished(g,"B");commitGameState(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
     if(g.mode!=="solo"){
-      g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");trackGameFinished(g,"A");setGs(g);return;}trackDraws(g,"B",g.drawn||[],"round_start");g.bHand=sortC(g.bHand);
+      g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");trackGameFinished(g,"A");commitGameState(g);return;}trackDraws(g,"B",g.drawn||[],"round_start");g.bHand=sortC(g.bHand);
     }else g.bHand=[];
     g.phase="action";g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
     if(g.mode==="solo")g=L(g,`Challenger Deck: ${g.bDeck.length} cards remain`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
-    trackRoundStart(g);setGs(g);
+    trackRoundStart(g);commitGameState(g);
   };
 
   const procPost=(g,effs,i)=>{if(i>=effs.length){
     trackRoundSummary(g);
-    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);setGs(g);return;}
+    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     const aH=getH(g,"A"),bH=getH(g,"B");
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
     startNextRound(g);return;}
@@ -930,7 +1101,7 @@ export default function KaizenPoker(){
       g2=setZ(g2,e.pl,"deck",[e.target,...getDk(g2,e.pl)]);
       trackEvent(g2,"post_score_effect",{effect:"forecast",target:e.target,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
       g2=L(g2,`${e.pl}: Forecast puts ${CM[e.target].name} on top of the deck`);
-      setGs(g2);procPost(g2,effs,i+1);return;}
+      commitGameState(g2);procPost(g2,effs,i+1);return;}
     if(e.t==="vanish"){if(isFroz(g,e.pl)){g=L(g,`${e.pl}: Vanish — Frozen!`);procPost(g,effs,i+1);return;}
       const activeMods=getAppliedMods(g,e.pl);const effS=new Set(getH(g,e.pl).map(id=>{const m=activeMods.find(x=>x.target===id);return m?.suit||CM[id].suit;}));
       const disc=getD(g,e.pl);const valid=disc.filter(id=>effS.has(CM[id].suit));
@@ -939,7 +1110,7 @@ export default function KaizenPoker(){
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
           trackEvent(g2,"card_scrapped",{cardId:id,reason:"vanish"},{phase:"post_score",playerSlot:e.pl});
-          g2=L(g2,`${e.pl}: Vanish scraps ${CM[id].name}`);setGs(g2);procPost(g2,effs,i+1);},
+          g2=L(g2,`${e.pl}: Vanish scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);},
         onCancel:()=>{setModal(null);procPost(g,effs,i+1);}});return;}
     if(e.t==="capitulate"){if(isFroz(g,e.pl)){procPost(g,effs,i+1);return;}
       const disc=getD(g,e.pl);if(!disc.length){procPost(g,effs,i+1);return;}
@@ -947,7 +1118,7 @@ export default function KaizenPoker(){
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
           trackEvent(g2,"card_scrapped",{cardId:id,reason:"capitulate"},{phase:"post_score",playerSlot:e.pl});
-          g2=L(g2,`${e.pl}: Capitulate scraps ${CM[id].name}`);setGs(g2);procPost(g2,effs,i+1);},
+          g2=L(g2,`${e.pl}: Capitulate scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);},
         onCancel:()=>{setModal(null);procPost(g,effs,i+1);}});return;}
     procPost(g,effs,i+1);};
 
@@ -962,16 +1133,34 @@ export default function KaizenPoker(){
     <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
-      <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat with two players on one screen, or take on the Challenger in the Solo Variant with a revealed lookup hand each round.</p>
+      <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
         <Btn label="Hotseat Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>startGame("hotseat")}/>
         <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
+        <Btn label="Create Online Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={startOnlineGame}/>
       </div>
+      <div style={{width:"100%",display:"grid",gap:8}}>
+        <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Online Game</div>
+        <input
+          value={joinCode}
+          onChange={e=>setJoinCode(e.target.value)}
+          placeholder="Paste game link or game ID"
+          style={{width:"100%",padding:"10px 12px",borderRadius:12,border:"1px solid #334155",background:"#0f172a",color:"#dbe5ee",fontSize:13}}
+        />
+        <div style={{display:"flex",justifyContent:"center"}}>
+          <Btn label="Join Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={()=>joinOnlineGame(joinCode)}/>
+        </div>
+      </div>
+      {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
     </div></div>);
 
   const p=gs.currentPlayer,hand=getH(gs,p);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
-  const canAct=gs.phase==="action"&&actionsLeft>0;
+  const isOnlineMode=gs.mode==="online";
+  const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
+  const canControlSeat=!isOnlineMode||(!!liveSeat&&liveSeat===p);
+  const canUseOnlineControls=(!isOnlineMode||!!liveSeat)&&onlineReady;
+  const canAct=gs.phase==="action"&&actionsLeft>0&&canControlSeat&&onlineReady;
 
   const isSuddenDeath=gs.mode!=="solo"&&(gs.aChips===6||gs.bChips===6);
 
@@ -1087,10 +1276,10 @@ export default function KaizenPoker(){
           </div>}
         <div style={{display:"flex",justifyContent:"center",marginTop:18}}>
           {isFinal
-            ?<Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>setGs(null)}/>
+            ?<Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>clearGameState()}/>
             :(isMatchOver(gs)
-              ?<Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/>
-              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal}/>)}
+              ?<Btn label="New Game" bg="#333" onClick={()=>clearGameState()} disabled={!canUseOnlineControls}/>
+              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal} disabled={!canUseOnlineControls}/>)}
         </div>
       </div>
     );
@@ -1146,6 +1335,18 @@ export default function KaizenPoker(){
             boxShadow:"0 12px 28px #00000044, inset 0 1px 0 #ffffff18",
             animation:"toastPop 0.18s ease-out"
           }}>{toast.msg}</div>
+        </div>}
+        {isOnlineMode&&<div style={{background:"linear-gradient(180deg,#132333dd,#0d1824f2)",border:"1px solid #3b82f655",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",boxShadow:"inset 0 1px 0 #ffffff10"}}>
+          <span style={{fontSize:10,fontWeight:800,color:"#93c5fd",letterSpacing:1.2,textTransform:"uppercase"}}>Online Game</span>
+          {liveSeat
+            ?<span style={{fontSize:11,color:"#dbeafe"}}>You are Player {liveSeat}</span>
+            :<span style={{fontSize:11,color:"#cbd5e1"}}>Spectating</span>}
+          <span style={{fontSize:11,color:"#94a3b8"}}>{onlineStatus}</span>
+          {liveGameId&&<span style={{fontSize:10,color:"#64748b"}}>{liveGameId}</span>}
+          {shareLink&&liveSeat==="A"&&<button onClick={()=>navigator.clipboard?.writeText(shareLink)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",background:"#101923",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,cursor:"pointer"}}>Copy Invite Link</button>}
+          {isOnlineMode&&onlineStatus==="waiting"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player B to join</span>}
+          {isOnlineMode&&!canControlSeat&&gs.phase==="action"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player {p}</span>}
+          {onlineError&&<span style={{fontSize:11,color:"#fca5a5"}}>{onlineError}</span>}
         </div>}
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
@@ -1237,16 +1438,16 @@ export default function KaizenPoker(){
             {canAct&&<span style={{color:pClr,fontSize:10}}>— {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
             {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)}/>}
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
-            {canAct&&undoState&&<Btn label="↩ Undo" bg="#e67e22" onClick={doUndo}/>}
+            {canAct&&undoState&&!isOnlineMode&&<Btn label="↩ Undo" bg="#e67e22" onClick={doUndo}/>}
             {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,p)}/>}</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {sortC(hand).map(id=>(<Card key={id} id={id} onClick={canAct?()=>handlePlayCard(id):undefined}
               glow={canAct?(fdMode?"#888":pClr):undefined} isNew={gs.newCards.includes(id)}/>))}</div></div>
-        {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore}/>}
+        {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{gs.mode==="solo"?(gs.aChips>gs.bChips?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${gs.aChips>=7?"A":"B"} Wins!`}</div>
-          <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>}
+          <Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div>}
         <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
         </div>

@@ -6,6 +6,8 @@ A two-player deckcrafting poker game. Each round: draw seven, play two as action
 
 Visit: `https://dsparks.github.io/kaizen-poker/`
 
+Guest online play is now supported through Supabase-backed live game rows. One player creates an online game, copies the invite link, and the second player joins from another browser.
+
 ## Develop Locally
 
 ```bash
@@ -50,11 +52,12 @@ VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
 If `VITE_ENABLE_ANALYTICS_SYNC` is `false`, the app keeps tracking locally but skips network sync.
 
-### 3. Run the database migration
+### 3. Run the database migrations
 
 Apply:
 
 - [supabase/migrations/0001_analytics_schema.sql](supabase/migrations/0001_analytics_schema.sql)
+- [supabase/migrations/0002_live_games.sql](supabase/migrations/0002_live_games.sql)
 
 That migration creates:
 
@@ -72,6 +75,20 @@ It also creates analytics views:
 - `v_card_deck_win_rates`
 - `v_card_opening_hand_win_rates`
 - `v_card_usage_summary`
+
+The second migration creates the `live_games` table used by guest online multiplayer.
+
+### 4. Guest Online Multiplayer
+
+Once the migrations are applied and the app is built with your Supabase URL/key:
+
+1. Open the app
+2. Click `Create Online Game`
+3. Copy the invite link
+4. Send it to your friend
+5. Your friend opens the link and joins as Player B
+
+The app uses guest seat tokens stored in browser localStorage so refreshes on the same browser keep the seat.
 
 ### 4. Enable analytics on GitHub Pages
 
