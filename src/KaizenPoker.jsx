@@ -227,7 +227,7 @@ function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
         <PreviewCard id={id} selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
         {idx>=0&&<div style={{position:"absolute",top:2,left:2,background:"#f1c40f",color:"#000",borderRadius:10,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{idx+1}</div>}
       </div>);})}</div>
-    {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top→Bottom: {pk.map(id=>CM[id].name).join(" → ")}</div>}
+    {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top ➠ Bottom: {pk.map(id=>CM[id].name).join(" ➠ ")}</div>}
     <Btn label={`Put ${pk.length}/3 on top`} bg={pk.length===3?"#f1c40f":"#333"} disabled={pk.length!==3} onClick={()=>pk.length===3&&onPick(pk)}/></Modal>);}
 
 // Rejuvenate: pick up to 3 to discard
@@ -236,7 +236,7 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
-    <Btn label={`Discard ${pk.length} → Draw ${pk.length}`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
+    <Btn label={`Discard ${pk.length} ➠ Draw ${pk.length}`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
 
 // Deck knowledge tracker — shows cards player has seen (not in their deck)
 function DeckStats({gs,player}){const[show,setShow]=useState(false);
@@ -346,7 +346,7 @@ export default function KaizenPoker(){
     if(discardedId==="8S"){
       const frozen=isFroz(g,player);
       if(frozen){g=L(g,`${player}: Capitalize triggers but Frozen!`);setGs(g);then(g);return;}
-      const disc=getD(g,player);
+      const disc=getD(g,player).filter(id=>id!==discardedId);
       if(!disc.length){then(g);return;}
       setModal({type:"pickFromList",title:`${player}: Capitalize! You discarded 8♠ — scrap a card?`,cards:disc,canCancel:true,
         onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,player,"discard",[...getD(g2,player)].filter(x=>x!==id));
@@ -363,8 +363,8 @@ export default function KaizenPoker(){
     checkCap(g2,player,cardId,then);};
 
   const offerRefresh=(g,done)=>{const p=g.currentPlayer;if(!getH(g,p).length){done(g);return;}
-    const opts=[{label:"Refresh (discard → draw)",key:"refresh"}];
-    if(g.scrap.includes("QH"))opts.push({label:"Sift (draw → discard)",key:"sift"});
+    const opts=[{label:"Refresh (discard ➠ draw)",key:"refresh"}];
+    if(g.scrap.includes("QH"))opts.push({label:"Sift (draw ➠ discard)",key:"sift"});
     if(g.scrap.includes("QS"))opts.push({label:"Declutter (scrap from discard)",key:"declutter"});
     opts.push({label:"Skip",key:"skip"});
     setModal({type:"refreshOpts",opts,onChoice:key=>{setModal(null);
@@ -455,7 +455,7 @@ export default function KaizenPoker(){
           g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);}});return;}
     // 4C Entomb
     if(effectId==="4C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
-      pick("Entomb: Pick from deck → discard",sortC(dk),null,id=>{let g2={...g};
+      pick("Entomb: Pick from deck ➠ discard",sortC(dk),null,id=>{let g2={...g};
         g2=setZ(g2,p,"deck",shuf([...getDk(g2,p)].filter(x=>x!==id)));g2=setZ(g2,p,"discard",[...getD(g2,p),id]);
         g2=L(g2,`${p} entombs ${CM[id].name}`);done(g2);});return;}
     // 4D Gamble
@@ -496,7 +496,7 @@ export default function KaizenPoker(){
         g2=L(g2,`${p} reclaims ${CM[id].name}`);done(g2);});return;}
     // 6C Curse
     if(effectId==="6C"){if(!g.scrap.length){g=L(g,"...scrap empty. Fizzles.");done(g);return;}
-      pick("Curse: Move from scrap → opponent's discard",g.scrap,null,id=>{let g2={...g};
+      pick("Curse: Move from scrap ➠ opponent's discard",g.scrap,null,id=>{let g2={...g};
         g2.scrap=g2.scrap.filter(x=>x!==id);g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);
         g2=L(g2,`${p} curses ${opp(p)} with ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6D Abduct
@@ -606,7 +606,7 @@ export default function KaizenPoker(){
     if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;setGs(g);
       setModal({type:"brainstorm",hand:getH(g,p),newCards:dr,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"deck",[...ids,...getDk(g2,p)]);
-        g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(" → ")}`);g2.newCards=[];done(g2);}});return;}
+        g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(" ➠ ")}`);g2.newCards=[];done(g2);}});return;}
     // KD Improvise
     if(effectId==="KD"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
       for(let i=0;i<3&&dk.length;i++){const c=dk.shift();dc.push(c);m.push(c);}
@@ -661,7 +661,7 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
@@ -669,7 +669,7 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
@@ -677,14 +677,14 @@ export default function KaizenPoker(){
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);setGs(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
-          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${r}`);setGs(g2);next(g2);},
+          onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
     if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
       onPick:tid=>{setModal(null);
         setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
-          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → ${SUITS[s]}`);setGs(g2);next(g2);},
+          onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Clone — one SCORING card becomes copy of another SCORING card
@@ -693,7 +693,7 @@ export default function KaizenPoker(){
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
           setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
-              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
     if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce — discard empty`);setGs(g2);next(g2);return;}
@@ -701,7 +701,7 @@ export default function KaizenPoker(){
         onPick:tid=>{setModal(null);
           setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];
-              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} → copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);setGs(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     let g2=L(g,`${pl}: ${modLabel} — not implemented`);setGs(g2);next(g2);};
 
@@ -716,20 +716,20 @@ export default function KaizenPoker(){
     const proc=(g2,ti)=>{if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
       setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,
         onRank:()=>{setModal(null);
-          setModal({type:"pickRank",title:`Miscalculate: ${CM[tid].name} → any rank`,ranks:RO,showHand:hand,
+          setModal({type:"pickRank",title:`Miscalculate: ${CM[tid].name} ➠ any rank`,ranks:RO,showHand:hand,
             onPick:r=>{setModal(null);
-              if(camo){setModal({type:"twoOptChoice",title:`Also change suit of ${CM[tid].name}? (rank → ${r})`,opt1:"Yes",opt2:"No",
+              if(camo){setModal({type:"twoOptChoice",title:`Also change suit of ${CM[tid].name}? (rank ➠ ${r})`,opt1:"Yes",opt2:"No",
                 on1:()=>{setModal(null);setModal({type:"pickSuit",title:"Pick suit",showHand:hand,
-                  onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} → ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
-                on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];g3=L(g3,`${pl}: ${CM[tid].name} → ${r}`);setGs(g3);proc(g3,ti+1);}});}
-              else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];g3=L(g3,`${pl}: ${CM[tid].name} → ${r}`);setGs(g3);proc(g3,ti+1);}}});},
+                  onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
+                on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}});}
+              else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}`);setGs(g3);proc(g3,ti+1);}}});},
         onSuit:()=>{setModal(null);
-          setModal({type:"pickSuit",title:`Camouflage: ${CM[tid].name} → any suit`,showHand:hand,
-            onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} → ${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
+          setModal({type:"pickSuit",title:`Camouflage: ${CM[tid].name} ➠ any suit`,showHand:hand,
+            onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});},
         onBoth:()=>{setModal(null);
           setModal({type:"pickRank",title:`${CM[tid].name}: Pick rank`,ranks:RO,showHand:hand,
             onPick:r=>{setModal(null);setModal({type:"pickSuit",title:`${CM[tid].name}: Pick suit`,showHand:hand,
-              onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} → ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});}});},
+              onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);setGs(g3);proc(g3,ti+1);}});}});},
         onSkip:()=>{setModal(null);proc(g2,ti+1);}});};
     proc(g,0);};
 
@@ -904,7 +904,7 @@ export default function KaizenPoker(){
             YOUR HAND (Player {p})
             {canAct&&<span style={{color:pClr,fontSize:10}}>— {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
             {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)}/>}
-            {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>← pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
+            {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
             {canAct&&undoState&&<Btn label="↩ Undo" bg="#e67e22" onClick={doUndo}/>}
             {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,p)}/>}</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -942,14 +942,6 @@ export default function KaizenPoker(){
                   <div style={{textAlign:"center"}}><HandBadge ids={h} mods={mods}/></div>
                 </div>);})}
             </div>
-            {/* Next round button */}
-            <div style={{textAlign:"center",marginTop:12}}>
-              {gs.aChips>=7||gs.bChips>=7
-                ?<div><div style={{fontSize:20,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif",marginBottom:8}}>
-                    🏆 Player {gs.aChips>=7?"A":"B"} wins the game!</div>
-                  <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>
-                :<Btn label="Next Round →" bg="#f1c40f" onClick={advanceFromReveal}/>}
-            </div>
           </div>);
         })()}
 
@@ -960,7 +952,7 @@ export default function KaizenPoker(){
           <div style={{padding:"10px 14px",borderRadius:14,background:"linear-gradient(180deg,#0d151df2,#091018f2)",border:"1px solid #2a3644",boxShadow:"0 18px 36px #00000044"}}>
             {gs.aChips>=7||gs.bChips>=7
               ?<Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/>
-              :<Btn label="Next Round →" bg="#f1c40f" onClick={advanceFromReveal}/>}
+              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal}/>}
           </div>
         </div>}
         <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
