@@ -175,6 +175,14 @@ function isMatchOver(gs){
 function getMatchWinner(gs){
   return gs.mode==="solo" ? (gs.aChips>gs.bChips?"A":"B") : (gs.aChips>=7?"A":"B");
 }
+function getRoundRequirements(gs){
+  if(gs.mode==="solo")return {aActions:2,bActions:2,aDraw:7,bDraw:0,suddenDeath:false};
+  const aClose=gs.aChips===6,bClose=gs.bChips===6;
+  let aActions=2,bActions=2,aDraw=7,bDraw=7;
+  if(aClose&&!bClose){bDraw=8;bActions=3;}
+  if(bClose&&!aClose){aDraw=8;aActions=3;}
+  return {aActions,bActions,aDraw,bDraw,suddenDeath:aClose||bClose};
+}
 function initGame(mode="hotseat"){const all=shuf(CARDS.map(c=>c.id));
   const startedAt=new Date().toISOString();
   const gameId=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():`kp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -1072,10 +1080,8 @@ export default function KaizenPoker(){
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
     g.round++;g.firstPlayer=g.mode==="solo"?"A":g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
     g=L(g,`=== ROUND ${g.round} === ${g.mode==="solo"?"Solo Mode":`Player ${g.firstPlayer} acts first`}`);
-    let aR=2,bR=2,aD=7,bD=7;const aCW=g.aChips===6,bCW=g.bChips===6;
-    if(g.mode!=="solo"){
-      if(aCW&&!bCW){bD=8;bR=3;}if(bCW&&!aCW){aD=8;aR=3;}if(aCW||bCW)g=L(g,"? SUDDEN DEATH!");
-    }
+    const {aActions:aR,bActions:bR,aDraw:aD,bDraw:bD,suddenDeath}=getRoundRequirements(g);
+    if(suddenDeath)g=L(g,"⚡ SUDDEN DEATH!");
     g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
     g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");trackGameFinished(g,"B");commitGameState(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
     if(g.mode!=="solo"){
@@ -1446,7 +1452,7 @@ export default function KaizenPoker(){
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
-          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{gs.mode==="solo"?(gs.aChips>gs.bChips?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${gs.aChips>=7?"A":"B"} Wins!`}</div>
+          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{gs.mode==="solo"?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
           <Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div>}
         <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
