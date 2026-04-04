@@ -933,6 +933,66 @@ export default function KaizenPoker(){
     }
     return items;
   };
+  const renderShowdown=(isFinal=false)=>{
+    const w=gs._revealWinner,aE=gs._revealAE,bE=gs._revealBE;
+    const aH=getH(gs,"A"),bH=getH(gs,"B");
+    const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
+    const winnerPlayer=w==="A"?"A":w==="B"?"B":null;
+    const wText=isFinal
+      ?(w==="A"?"Player A wins the game!":w==="B"?"Player B wins the game!":"Game ends in a tie!")
+      :(w==="A"?"Player A wins the chip!":w==="B"?"Player B wins the chip!":"Tie — no chip awarded");
+    const postQueue=revealPostQueue(gs);
+    const shell=(
+      <div style={{padding:isFinal?24:16,background:`linear-gradient(180deg,${w==="A"?"#241311f2":w==="B"?"#101a27f2":"#101722ee"},#0a0f16f4)`,borderRadius:isFinal?28:22,border:`2px solid ${wClr}55`,boxShadow:isFinal?`0 40px 100px ${wClr}33,inset 0 1px 0 #ffffff18,0 0 0 1px #ffffff08`:`0 24px 60px ${wClr}22,inset 0 1px 0 #ffffff12`,animation:"revealRise 0.35s ease-out",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%"}}>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
+        {isFinal&&<>
+          <div style={{position:"absolute",top:-110,left:-80,width:260,height:260,borderRadius:"50%",background:`radial-gradient(circle,${wClr}33 0%,transparent 68%)`,pointerEvents:"none"}}/>
+          <div style={{position:"absolute",bottom:-120,right:-60,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,transparent 72%)",pointerEvents:"none"}}/>
+        </>}
+        <div style={{textAlign:"center",marginBottom:isFinal?16:12,position:"relative"}}>
+          <div style={{fontSize:isFinal?11:10,fontWeight:800,color:"#7f93a8",letterSpacing:isFinal?4:3,textTransform:"uppercase",marginBottom:6}}>{isFinal?"Final Showdown":"Showdown"}</div>
+          <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:isFinal?14:10,marginBottom:4}}>
+            {w!=="TIE"&&<Chip filled color={w==="A"?"#d85745":"#338bd2"} label={isFinal?"✦":"☀"} active/>}
+            <div style={{fontSize:isFinal?42:24,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",textShadow:`0 0 ${isFinal?28:18}px ${wClr}55`,lineHeight:1.08}}>{wText}</div>
+            {w!=="TIE"&&<Chip filled color={w==="A"?"#d85745":"#338bd2"} label={isFinal?"✦":"☀"} active/>}
+          </div>
+          <div style={{fontSize:isFinal?18:13,color:isFinal?"#dce7f2":"#90a4b8",fontWeight:isFinal?700:400}}>{gs.aChips} — {gs.bChips}</div>
+          {isFinal&&winnerPlayer&&<div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:999,background:"#0b1219dd",border:`1px solid ${wClr}55`,boxShadow:`0 12px 28px ${wClr}22`}}>
+            <span style={{fontSize:10,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#f3d7a4"}}>Champion</span>
+            <span style={{fontSize:13,color:"#e8f1f9"}}>Player {winnerPlayer} closes it out</span>
+          </div>}
+          {!isFinal&&postQueue.length>0&&<div style={{marginTop:10,display:"inline-flex",gap:8,flexWrap:"wrap",justifyContent:"center",padding:"7px 12px",borderRadius:999,background:"#0b1219cc",border:"1px solid #425160",boxShadow:"0 10px 24px #00000024"}}>
+            <span style={{fontSize:9,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#d8c08d"}}>Up Next</span>
+            <span style={{fontSize:11,color:"#dbe5ee"}}>{postQueue.join("  •  ")}</span>
+          </div>}
+        </div>
+        <div style={{display:"flex",gap:isFinal?20:16,justifyContent:"center",flexWrap:"wrap"}}>
+          {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:getAppliedMods(gs,"A")},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:getAppliedMods(gs,"B")}].map(({pl,hand:h,ev,clr,mods})=>{
+            const isWinner=w===pl;const isTie=w==="TIE";
+            return(<div key={pl} style={{opacity:!isWinner&&!isTie?0.5:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:isWinner?`${clr}14`:"transparent",border:isWinner?`1px solid ${clr}44`:"1px solid transparent",boxShadow:isWinner&&isFinal?`0 18px 42px ${clr}22`:"none"}}>
+              <div style={{fontSize:isFinal?13:12,fontWeight:700,color:clr,marginBottom:6,textAlign:"center",letterSpacing:1}}>
+                PLAYER {pl} {isWinner&&"👑"}</div>
+              <div style={{display:"flex",gap:5,marginBottom:6}}>
+                {sortC(h).map(id=>{
+                  const mod=mods.find(m=>m.target===id);
+                  return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
+                    <PreviewCard id={id} glow={isWinner?clr:undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
+                  </div>);})}
+              </div>
+              <div style={{textAlign:"center"}}><HandBadge ids={h} mods={mods}/></div>
+              <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:isWinner?"#f3d7a4":"#7f93a8",letterSpacing:.4}}>
+                {ev.handName} {isFinal?(isWinner&&w!=="TIE"?"wins the game":"makes the final hand"):(isWinner&&w!=="TIE"?"claims the chip":"holds")}
+              </div>
+            </div>);})}
+        </div>
+        {isFinal&&<div style={{display:"flex",justifyContent:"center",marginTop:18}}>
+          <Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>setGs(null)}/>
+        </div>}
+      </div>
+    );
+    if(!isFinal)return shell;
+    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}>{shell}</div>;
+  };
 
   return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
@@ -1015,61 +1075,17 @@ export default function KaizenPoker(){
             {sortC(hand).map(id=>(<Card key={id} id={id} onClick={canAct?()=>handlePlayCard(id):undefined}
               glow={canAct?(fdMode?"#888":pClr):undefined} isNew={gs.newCards.includes(id)}/>))}</div></div>
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore}/>}
+        {/* REVEAL / GAME END SHOWDOWN */}
+        {gs.phase==="reveal"&&renderShowdown(false)}
 
-        {/* REVEAL PHASE — show both hands */}
-        {gs.phase==="reveal"&&(()=>{
-          const w=gs._revealWinner,aE=gs._revealAE,bE=gs._revealBE;
-          const aH=getH(gs,"A"),bH=getH(gs,"B");
-          const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
-          const wText=w==="A"?"Player A wins the chip!":w==="B"?"Player B wins the chip!":"Tie — no chip awarded";
-          const postQueue=revealPostQueue(gs);
-          return(<div style={{padding:16,background:`linear-gradient(180deg,${w==="A"?"#241311f2":w==="B"?"#101a27f2":"#101722ee"},#0a0f16f4)`,borderRadius:22,border:`2px solid ${wClr}44`,boxShadow:`0 24px 60px ${wClr}22,inset 0 1px 0 #ffffff12`,animation:"revealRise 0.35s ease-out",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
-            {/* Winner banner */}
-            <div style={{textAlign:"center",marginBottom:12,position:"relative"}}>
-              <div style={{fontSize:10,fontWeight:800,color:"#7f93a8",letterSpacing:3,textTransform:"uppercase",marginBottom:6}}>Showdown</div>
-              <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginBottom:4}}>
-                {w!=="TIE"&&<Chip filled color={w==="A"?"#d85745":"#338bd2"} label="★" active/>}
-                <div style={{fontSize:24,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",textShadow:`0 0 18px ${wClr}44`,lineHeight:1.15}}>{wText}</div>
-                {w!=="TIE"&&<Chip filled color={w==="A"?"#d85745":"#338bd2"} label="★" active/>}
-              </div>
-              <div style={{fontSize:13,color:"#90a4b8"}}>{gs.aChips} — {gs.bChips}</div>
-              {postQueue.length>0&&<div style={{marginTop:10,display:"inline-flex",gap:8,flexWrap:"wrap",justifyContent:"center",padding:"7px 12px",borderRadius:999,background:"#0b1219cc",border:"1px solid #425160",boxShadow:"0 10px 24px #00000024"}}>
-                <span style={{fontSize:9,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#d8c08d"}}>Up Next</span>
-                <span style={{fontSize:11,color:"#dbe5ee"}}>{postQueue.join("  •  ")}</span>
-              </div>}
-            </div>
-            {/* Both hands side by side */}
-            <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
-              {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:getAppliedMods(gs,"A")},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:getAppliedMods(gs,"B")}].map(({pl,hand:h,ev,clr,mods})=>{
-                const isWinner=w===pl;const isTie=w==="TIE";
-                return(<div key={pl} style={{opacity:!isWinner&&!isTie?0.5:1,transition:"all 0.3s",padding:"8px 10px 10px",borderRadius:16,background:isWinner?`${clr}11`:"transparent",border:isWinner?`1px solid ${clr}33`:"1px solid transparent"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:clr,marginBottom:4,textAlign:"center",letterSpacing:1}}>
-                    PLAYER {pl} {isWinner&&"👑"}</div>
-                  <div style={{display:"flex",gap:5,marginBottom:6}}>
-                    {sortC(h).map(id=>{
-                      const mod=mods.find(m=>m.target===id);
-                      return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
-                        <PreviewCard id={id} glow={isWinner?clr:undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
-                      </div>);})}
-                  </div>
-                  <div style={{textAlign:"center"}}><HandBadge ids={h} mods={mods}/></div>
-                  <div style={{textAlign:"center",marginTop:6,fontSize:10,color:isWinner?"#f3d7a4":"#7f93a8",letterSpacing:.4}}>
-                    {ev.handName} {isWinner&&w!=="TIE"?"claims the chip":"holds"}
-                  </div>
-                </div>);})}
-            </div>
-          </div>);
-        })()}
-
-        {gs.phase==="gameOver"&&<div style={{textAlign:"center",padding:20}}>
+        {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>Game Over — Player {gs.aChips>=7?"A":"B"} Wins!</div>
           <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>}
         {gs.phase==="reveal"&&<div style={{position:"sticky",bottom:10,zIndex:2,display:"flex",justifyContent:"center",paddingTop:4}}>
           <div style={{padding:"10px 14px",borderRadius:14,background:"linear-gradient(180deg,#0d151df2,#091018f2)",border:"1px solid #2a3644",boxShadow:"0 18px 36px #00000044"}}>
             {gs.aChips>=7||gs.bChips>=7
               ?<Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/>
-              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal}/>}
+              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal}/>} 
           </div>
         </div>}
         <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
@@ -1082,6 +1098,7 @@ export default function KaizenPoker(){
         <div ref={el=>{if(el)el.scrollTop=el.scrollHeight;}} style={{flex:1,overflow:"auto",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
           {gs.log.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
     </div>
+    {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
     {/* MODALS */}
     {modal?.type==="refreshOpts"&&<Modal title="Face-Down Options">
       <p style={{color:"#aaa",fontSize:12,marginBottom:10}}>Choose:</p>
