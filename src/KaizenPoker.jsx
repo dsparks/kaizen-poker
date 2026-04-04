@@ -190,7 +190,7 @@ function initGame(mode="hotseat"){const all=shuf(CARDS.map(c=>c.id));
   return{mode,aDeck:all.slice(7,26),bDeck:mode==="solo"?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:mode==="solo"?[]:sortC(all.slice(26,33)),
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
-    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,
+    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,_remotePrompt:null,
     _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 
@@ -503,6 +503,26 @@ export default function KaizenPoker(){
     const free=queued.filter(m=>!m.sourceId);
     return [...free,...getP(g,pl).flatMap(a=>a.faceDown?[]:queued.filter(m=>m.sourceId===a.id))];
   };
+  const getCurrentSeat=()=>liveSeat||onlineRef.current.seat||null;
+  const finishActionResolution=g2=>{setUndoState(null);g2=advance(g2);commitGameState(g2);return g2;};
+  const queueRemotePrompt=(g,prompt)=>{let g2=cloneGs(g);g2._remotePrompt=prompt;commitGameState(g2);return g2;};
+  const resolveRemotePromptPick=(baseGs,prompt,id)=>{
+    let g=cloneGs(baseGs);g._remotePrompt=null;
+    if(prompt.kind==="abdicate"){
+      g=setZ(g,prompt.player,"hand",[...getH(g,prompt.player)].filter(x=>x!==id));
+      g=setZ(g,prompt.player,"discard",[...getD(g,prompt.player),id]);
+      g=L(g,`${prompt.player} discards ${CM[id].name} (Abdicate)`);
+      g=drawCards(g,prompt.player,1);if(g.drawn){trackDraws(g,prompt.player,g.drawn,"abdicate");g=L(g,`${prompt.player} draws`);}
+      finishActionResolution(g);return;
+    }
+    if(prompt.kind==="rummage_opp"){
+      discardFromHand(g,prompt.player,id,g2=>{
+        g2._remotePrompt=null;
+        g2=drawCards(g2,prompt.player,1);if(g2.drawn){trackDraws(g2,prompt.player,g2.drawn,"rummage");g2=L(g2,`${prompt.player} draws`);}
+        finishActionResolution(g2);
+      });
+    }
+  };
 
   const buildFreshGame=(mode="hotseat")=>{let g=initGame(mode);g=L(g,`=== ROUND 1 === ${mode==="solo"?"Solo Mode":"Player A"} acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
@@ -575,6 +595,22 @@ export default function KaizenPoker(){
         if(flow.player!==g2.firstPlayer){finalScore(g2);return;}
         resolveMods(g2,nextPlayer,getModifyEntries(g2,nextPlayer),0);
       },flow.index||0);
+    }
+  },[gs,modal,liveSeat]);
+
+  useEffect(()=>{
+    if(!gs||!gs._remotePrompt||modal)return;
+    const prompt=gs._remotePrompt;
+    const currentSeat=getCurrentSeat();
+    if(!onlineRef.current.active||!currentSeat||currentSeat!==prompt.player)return;
+    if(prompt.type==="pickDiscardFromHand"){
+      setModal({
+        type:"pickDiscard",
+        hand:getH(gs,prompt.player),
+        title:prompt.title,
+        filter:prompt.faceOnly?(id=>FACE.includes(CM[id].rank)):undefined,
+        onPick:id=>{setModal(null);resolveRemotePromptPick(gs,prompt,id);}
+      });
     }
   },[gs,modal,liveSeat]);
 
@@ -764,6 +800,10 @@ export default function KaizenPoker(){
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>{
           g2=drawCards(g2,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"rummage");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
       on2:()=>{setModal(null);const oh=getH(g,opp(p));
+        if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
+          queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"rummage_opp",player:opp(p),title:`${opp(p)} must discard (then draws)`});
+          return;
+        }
         setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard (then draws)`,
           onPick:id=>{setModal(null);discardFromHand(g,opp(p),id,g2=>{
             g2=drawCards(g2,opp(p),1);if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"rummage");g2=L(g2,`${opp(p)} draws`);}done(g2);});}});}});return;}
@@ -844,6 +884,10 @@ export default function KaizenPoker(){
     // 7H Abdicate
     if(effectId==="7H"){const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
       if(!faces.length){g=L(g,`${opp(p)} has no face cards.`);g=drawCards(g,opp(p),1);if(g.drawn){trackDraws(g,opp(p),g.drawn,"abdicate");g=L(g,`${opp(p)} draws`);}done(g);return;}
+      if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
+        queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"abdicate",player:opp(p),title:`${opp(p)} must discard a face card`,faceOnly:true});
+        return;
+      }
       setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard a face card`,filter:id=>FACE.includes(CM[id].rank),
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,opp(p),"hand",[...getH(g2,opp(p))].filter(x=>x!==id));
           g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);g2=L(g2,`${opp(p)} discards ${CM[id].name} (Abdicate)`);
@@ -959,7 +1003,7 @@ export default function KaizenPoker(){
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
     const first=gs.firstPlayer||"A";
-    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g.currentPlayer=first;g._scoreFlow={stage:"mods",player:first,index:0};g=L(g,"Resolving modifications...");commitGameState(g);
+    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g._remotePrompt=null;g.currentPlayer=first;g._scoreFlow={stage:"mods",player:first,index:0};g=L(g,"Resolving modifications...");commitGameState(g);
     const firstMods=getModifyEntries(g,first);resolveMods(g,first,firstMods,0);};
 
   const resolveMods=(g,pl,mods,i)=>{
@@ -1045,6 +1089,13 @@ export default function KaizenPoker(){
     const hand=getH(g,pl);
     const twos=hand.filter(id=>CM[id].rank==="2"&&!modded.has(id));
     const misc=g.scrap.includes("QC"),camo=g.scrap.includes("QD");
+    const queenSourceLabel=misc&&camo
+      ?"Miscalculate + Camouflage"
+      :misc
+      ?"Miscalculate"
+      :camo
+      ?"Camouflage"
+      :"";
     if(!twos.length||(!misc&&!camo)){done(g);return;}
     const proc=(g2,ti)=>{if(g2.currentPlayer!==pl||g2._scoreFlow?.stage!=="q2s"||g2._scoreFlow?.player!==pl||g2._scoreFlow?.index!==ti){
         g2={...g2,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:ti}};
@@ -1052,7 +1103,7 @@ export default function KaizenPoker(){
       }
       if(onlineRef.current.active&&(liveSeat||onlineRef.current.seat)&&((liveSeat||onlineRef.current.seat)!==pl))return;
       if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
-      setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,
+      setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,queenSourceLabel,
         onRank:()=>{setModal(null);
           setModal({type:"pickRank",title:`Miscalculate: ${CM[tid].name} ➠ any rank`,ranks:RO,showHand:hand,
             onPick:r=>{setModal(null);
@@ -1126,7 +1177,7 @@ export default function KaizenPoker(){
 
   const startNextRound=(g)=>{
     if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
-    g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];
+    g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g._remotePrompt=null;
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
     g.round++;g.firstPlayer=g.mode==="solo"?"A":g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
     g=L(g,`=== ROUND ${g.round} === ${g.mode==="solo"?"Solo Mode":`Player ${g.firstPlayer} acts first`}`);
@@ -1597,10 +1648,11 @@ export default function KaizenPoker(){
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
         {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:SC[s],fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{SUITS[s]}</button>))}</div>
       {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/></div>}</Modal>}
-    {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}`}>
+    {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}${modal.queenSourceLabel?` (${modal.queenSourceLabel})`:""}`}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Card id={modal.cardId}/></div>
+      <p style={{color:"#d8c08d",fontSize:11,textAlign:"center",marginBottom:6}}>Remember: {modal.queenSourceLabel||"Remember effects"}</p>
       <p style={{color:"#aaa",fontSize:11,textAlign:"center",marginBottom:10}}>Unmodified 2 — Queen effects available:</p>
       <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
         {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg="#9b59b6" onClick={modal.onBoth}/>}
