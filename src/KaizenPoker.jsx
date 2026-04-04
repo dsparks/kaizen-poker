@@ -173,7 +173,7 @@ function initGame(mode="hotseat"){const all=shuf(CARDS.map(c=>c.id));
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
     log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,
-    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
+    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 
 // ============================================================
@@ -299,7 +299,8 @@ function DeckStats({gs,player}){const[show,setShow]=useState(false);
   const disc=player==="A"?gs.aDiscard:gs.bDiscard;
   const myPlay=(player==="A"?gs.aPlay:gs.bPlay).map(a=>a.id);
   const oppPlay=(player==="A"?gs.bPlay:gs.aPlay).filter(a=>!a.faceDown).map(a=>a.id);
-  const seen=[...hand,...disc,...myPlay,...oppPlay,...gs.scrap];
+  const soloSeen=player==="B"&&gs.mode==="solo"?(gs._soloRevealedCards||[]):[];
+  const seen=[...hand,...disc,...myPlay,...oppPlay,...gs.scrap,...soloSeen];
   const deckSize=(player==="A"?gs.aDeck:gs.bDeck).length;
   const rc={},sc={};seen.forEach(id=>{const c=CM[id];rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
   const clr=player==="A"?"#e74c3c":"#3498db";
@@ -863,6 +864,7 @@ export default function KaizenPoker(){
       if(soloCard){
         g.bDeck=g.bDeck.slice(1);
         g._soloReveal={cardId:soloCard,handName:bE.handName,description:bE.description,handRank:bE.handRank};
+        g._soloRevealedCards=[...(g._soloRevealedCards||[]),soloCard];
         trackEvent(g,"challenger_revealed",{cardId:soloCard,handName:bE.handName,description:bE.description},{phase:"score",playerSlot:"B"});
         g=L(g,`Challenger reveals ${CM[soloCard].rank}${SUITS[CM[soloCard].suit]}: ${bE.handName}`);
       }else{
@@ -1063,21 +1065,6 @@ export default function KaizenPoker(){
                 </div>
               </div>
             </div>
-            <div style={{padding:isFinal?"12px 14px":"10px 12px",borderRadius:16,background:"#0c141dcc",border:"1px solid #334155",boxShadow:"inset 0 1px 0 #ffffff10"}}>
-              <div style={{fontSize:10,fontWeight:800,color:"#d8c08d",letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,textAlign:"center"}}>Challenger Lookup</div>
-              <div style={{display:"grid",gap:6}}>
-                {CHALLENGER_ROWS.map(row=>{
-                  const active=soloRow?.rank===row.rank;
-                  return(
-                    <div key={row.rank} style={{display:"grid",gridTemplateColumns:"48px 150px 1fr",gap:8,alignItems:"center",padding:"6px 8px",borderRadius:10,background:active?"linear-gradient(90deg,#245b811f,#0f2234cc)":"#0a1118aa",border:active?"1px solid #3498db66":"1px solid #24313f"}}>
-                      <div style={{fontSize:12,fontWeight:900,color:active?"#8fd0ff":"#dfe8ef"}}>{row.rankLabel}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:active?"#f5fbff":"#c8d6e2"}}>{row.handName}</div>
-                      <div style={{fontSize:11,color:active?"#dceaf6":"#92a4b5",lineHeight:1.35}}>{row.description}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
           :<div style={{display:"flex",gap:isFinal?20:16,justifyContent:"center",flexWrap:"wrap"}}>
             {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:getAppliedMods(gs,"A")},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:getAppliedMods(gs,"B")}].map(({pl,hand:h,ev,clr,mods})=>{
@@ -1098,12 +1085,16 @@ export default function KaizenPoker(){
                 </div>
               </div>);})}
           </div>}
-        {isFinal&&<div style={{display:"flex",justifyContent:"center",marginTop:18}}>
-          <Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>setGs(null)}/>
-        </div>}
+        <div style={{display:"flex",justifyContent:"center",marginTop:18}}>
+          {isFinal
+            ?<Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>setGs(null)}/>
+            :(isMatchOver(gs)
+              ?<Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/>
+              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal}/>)}
+        </div>
       </div>
     );
-    if(!isFinal)return shell;
+    if(!isFinal)return <div style={{position:"fixed",inset:0,zIndex:25,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(13,21,29,.18) 0%,rgba(10,15,22,.78) 38%,rgba(5,8,12,.9) 100%)",backdropFilter:"blur(6px)"}}>{shell}</div>;
     return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}>{shell}</div>;
   };
 
@@ -1165,18 +1156,49 @@ export default function KaizenPoker(){
         {gs.mode==="solo"
           ?<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>
             <div style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#11293ad8,#0b1c28dc)",border:"1px solid #658dbb55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
-              <div style={{fontSize:9,color:"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>CHALLENGER DECK</div>
-              <div style={{display:"flex",gap:12,alignItems:"center",minHeight:95,flexWrap:"wrap"}}>
-                <div style={{display:"flex",gap:4}}>
-                  {Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><div key={i} style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",boxShadow:"0 8px 18px #00000033",transform:`translateX(${i*-46}px)`}}/>)}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                <div style={{fontSize:9,color:"#89b8ff",fontWeight:800,letterSpacing:1}}>CHALLENGER DECK</div>
+                <button
+                  onClick={()=>setModal({type:"soloLookup",activeRank:gs._soloReveal?.cardId?CM[gs._soloReveal.cardId].rank:null})}
+                  style={{
+                    padding:"4px 10px",
+                    borderRadius:999,
+                    border:"1px solid #334155",
+                    color:"#c7d2de",
+                    fontSize:10,
+                    textTransform:"uppercase",
+                    letterSpacing:1,
+                    background:"#101923",
+                    cursor:"pointer",
+                    fontWeight:700,
+                    boxShadow:"inset 0 1px 0 #ffffff12"
+                  }}
+                >
+                  Challenger Lookup
+                </button>
+              </div>
+              <div style={{display:"flex",gap:16,alignItems:"center",minHeight:95}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:"1 1 auto"}}>
+                  <div style={{display:"flex",alignItems:"center",minWidth:gs._soloRevealedCards?.length?110:0}}>
+                    {(gs._soloRevealedCards||[]).map((id,i)=>{
+                      const isLatest=i===((gs._soloRevealedCards||[]).length-1);
+                      return(
+                        <div key={`${id}-${i}`} style={{marginLeft:i===0?0:-42,position:"relative",zIndex:i+1}}>
+                          <PreviewCard id={id} glow={isLatest?"#3498db":undefined}/>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{display:"grid",gap:6,minWidth:0}}>
+                    <div style={{fontSize:12,color:"#dbe5ee",fontWeight:700}}>
+                      {gs.bDeck.length} card{gs.bDeck.length!==1?"s":""} remain
+                      {(gs._soloRevealedCards?.length||0)>0&&<span style={{color:"#89b8ff",fontWeight:600}}> · {(gs._soloRevealedCards||[]).length} revealed</span>}
+                    </div>
+                    <div style={{fontSize:10,color:"#8ca0b3",lineHeight:1.4,whiteSpace:"normal"}}>Sweep over the revealed stack to inspect what the Challenger has shown so far.</div>
+                  </div>
                 </div>
-                <div style={{display:"grid",gap:6}}>
-                  <div style={{fontSize:12,color:"#dbe5ee",fontWeight:700}}>{gs.bDeck.length} card{gs.bDeck.length!==1?"s":""} remain</div>
-                  <div style={{fontSize:10,color:"#8ca0b3",lineHeight:1.4}}>At reveal, flip the top Challenger card and map its rank to a showdown hand.</div>
-                  {gs._soloReveal?.cardId&&<div style={{display:"flex",alignItems:"center",gap:8,fontSize:10,color:"#dbe5ee"}}>
-                    <span style={{color:"#f3d7a4",fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>Revealed</span>
-                    <PreviewCard id={gs._soloReveal.cardId}/>
-                  </div>}
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  {Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><div key={i} style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",boxShadow:"0 8px 18px #00000033",transform:`translateX(${i*-46}px)`}}/>)}
                 </div>
               </div>
             </div>
@@ -1222,18 +1244,9 @@ export default function KaizenPoker(){
               glow={canAct?(fdMode?"#888":pClr):undefined} isNew={gs.newCards.includes(id)}/>))}</div></div>
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
-        {gs.phase==="reveal"&&renderShowdown(false)}
-
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{gs.mode==="solo"?(gs.aChips>gs.bChips?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${gs.aChips>=7?"A":"B"} Wins!`}</div>
           <Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/></div>}
-        {gs.phase==="reveal"&&<div style={{position:"sticky",bottom:10,zIndex:2,display:"flex",justifyContent:"center",paddingTop:4}}>
-          <div style={{padding:"10px 14px",borderRadius:14,background:"linear-gradient(180deg,#0d151df2,#091018f2)",border:"1px solid #2a3644",boxShadow:"0 18px 36px #00000044"}}>
-            {isMatchOver(gs)
-              ?<Btn label="New Game" bg="#333" onClick={()=>setGs(null)}/>
-              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal}/>} 
-          </div>
-        </div>}
         <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
         </div>
@@ -1244,6 +1257,7 @@ export default function KaizenPoker(){
         <div ref={el=>{if(el)el.scrollTop=el.scrollHeight;}} style={{flex:1,overflow:"auto",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
           {gs.log.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
     </div>
+    {gs.phase==="reveal"&&renderShowdown(false)}
     {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
     {/* MODALS */}
     {modal?.type==="refreshOpts"&&<Modal title="Face-Down Options">
@@ -1262,6 +1276,28 @@ export default function KaizenPoker(){
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#f1c40f":undefined}/>;})}</div>
       {modal.canCancel&&<Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/>}</Modal>}
+    {modal?.type==="soloLookup"&&<Modal title="Challenger Lookup">
+      <div style={{display:"grid",gap:6}}>
+        <div style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"0 8px",fontSize:10,fontWeight:800,color:"#d8c08d",letterSpacing:1.2,textTransform:"uppercase"}}>
+          <div>Rank</div>
+          <div>Maps To</div>
+          <div>Definition</div>
+        </div>
+        {CHALLENGER_ROWS.map(row=>{
+          const active=modal.activeRank===row.rank;
+          return(
+            <div key={row.rank} style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"6px 8px",borderRadius:10,background:active?"linear-gradient(90deg,#245b811f,#0f2234cc)":"#0a1118aa",border:active?"1px solid #3498db66":"1px solid #24313f"}}>
+              <div style={{fontSize:12,fontWeight:900,color:active?"#8fd0ff":"#dfe8ef"}}>{row.rank} ➠</div>
+              <div style={{fontSize:12,fontWeight:700,color:active?"#f5fbff":"#c8d6e2"}}>{row.handName}</div>
+              <div style={{fontSize:11,color:active?"#dceaf6":"#92a4b5",lineHeight:1.35}}>{row.description}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{display:"flex",justifyContent:"center",marginTop:12}}>
+        <Btn label="Close" bg="#333" onClick={()=>setModal(null)}/>
+      </div>
+    </Modal>}
     {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick}/>}
     {modal?.type==="twoChoice"&&<Modal title={modal.title}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Card id={modal.card}/></div>
