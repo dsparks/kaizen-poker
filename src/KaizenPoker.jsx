@@ -382,9 +382,10 @@ export default function KaizenPoker(){
       if(key==="refresh"){setModal({type:"pickDiscard",hand:getH(g,p),title:"Refresh: Discard (then draw)",
         onPick:id=>{setModal(null);
           discardFromHand(g,p,id,g2=>{
+            setUndoState(null);
             g2=drawCards(g2,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}
             done(g2);});}});return;}
-      if(key==="sift"){let g2=drawCards(g,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}setGs(g2);
+      if(key==="sift"){setUndoState(null);let g2=drawCards(g,p,1);if(g2.drawn){g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}setGs(g2);
         setModal({type:"pickDiscard",hand:getH(g2,p),title:"Sift: Discard a card",newCards:g2.drawn||[],
           onPick:id=>{setModal(null);discardFromHand(g2,p,id,done);}});return;}
       if(key==="declutter"){const disc=getD(g,p);if(!disc.length){done(g);return;}
@@ -838,7 +839,7 @@ export default function KaizenPoker(){
   const sdPlayer=gs.aChips===6?"A":gs.bChips===6?"B":null;// who could win
 
   const pClr=p==="A"?"#e74c3c":"#3498db";
-  const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><Chip key={pl+i} label={`${i+1}`} filled={i<count} color={color} active={i===count-1&&count>0}/>);
+  const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
   const revealPostQueue=(g)=>{
     const items=[];
     for(const pl of["A","B"]){
@@ -853,16 +854,13 @@ export default function KaizenPoker(){
     return items;
   };
 
-  return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#356e55 0%,#1d4e3d 30%,#123227 62%,#091611 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes chipSpark{0%{transform:translateY(8px) scale(.88);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-chip-rack>*{animation:chipSpark .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
+  return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-      <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(135deg,rgba(255,255,255,.018) 0 2px,transparent 2px 10px), radial-gradient(circle at 20% 18%,rgba(255,255,255,.04),transparent 22%), radial-gradient(circle at 80% 30%,rgba(0,0,0,.12),transparent 30%)",opacity:.55}}/>
-      <div style={{position:"absolute",inset:10,borderRadius:34,background:"linear-gradient(180deg,#5a4228,#2d2115)",boxShadow:"0 30px 60px #00000035"}}/>
-      <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a,inset 0 0 60px #00000018"}}/>
+      <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
       <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
       <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)",animation:"floatGlow 10s ease-in-out infinite"}}/>
-      <div style={{position:"absolute",inset:24,borderRadius:26,boxShadow:"inset 0 0 0 999px rgba(7,20,15,.08), inset 0 0 140px rgba(0,0,0,.18)"}}/>
     </div>
     <div style={{padding:"10px 16px",borderBottom:isSuddenDeath?"2px solid #d27d5c":"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"linear-gradient(180deg,#4b1f18dd,#1c120ddd)":"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
@@ -872,13 +870,13 @@ export default function KaizenPoker(){
       </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>⚡ SUDDEN DEATH</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
-        <div style={{padding:"7px 12px",borderRadius:14,background:"linear-gradient(180deg,#101a23ee,#091019ee)",border:"1px solid #415163",display:"flex",alignItems:"center",gap:10,boxShadow:"0 12px 22px #00000026,inset 0 1px 0 #ffffff12"}}>
-          <span style={{color:"#ff9a9a",fontWeight:900,letterSpacing:1}}>A {gs.aChips}</span>
-          <span className="kp-chip-rack" style={{display:"flex",gap:5}}>{chipStrip("A",gs.aChips,"#d85745")}</span>
+        <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"#e74c3c",fontWeight:800}}>A {gs.aChips}</span>
+          <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#e74c3c")}</span>
         </div>
-        <div style={{padding:"7px 12px",borderRadius:14,background:"linear-gradient(180deg,#101a23ee,#091019ee)",border:"1px solid #415163",display:"flex",alignItems:"center",gap:10,boxShadow:"0 12px 22px #00000026,inset 0 1px 0 #ffffff12"}}>
-          <span style={{color:"#8fc5ff",fontWeight:900,letterSpacing:1}}>B {gs.bChips}</span>
-          <span className="kp-chip-rack" style={{display:"flex",gap:5}}>{chipStrip("B",gs.bChips,"#338bd2")}</span>
+        <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"#3498db",fontWeight:800}}>B {gs.bChips}</span>
+          <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#3498db")}</span>
         </div>
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
