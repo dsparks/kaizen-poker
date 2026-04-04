@@ -561,8 +561,9 @@ export default function KaizenPoker(){
   useEffect(()=>{
     if(!gs||gs.phase!=="score"||modal)return;
     const flow=gs._scoreFlow;
+    const currentSeat=liveSeat||onlineRef.current.seat||null;
     if(!flow)return;
-    if(onlineRef.current.active&&seatPlayer&&seatPlayer!==flow.player)return;
+    if(onlineRef.current.active&&currentSeat&&currentSeat!==flow.player)return;
     if(flow.stage==="mods"){
       resolveMods(gs,flow.player,getModifyEntries(gs,flow.player),flow.index||0);
       return;
@@ -575,7 +576,7 @@ export default function KaizenPoker(){
         resolveMods(g2,nextPlayer,getModifyEntries(g2,nextPlayer),0);
       },flow.index||0);
     }
-  },[gs,modal,seatPlayer]);
+  },[gs,modal,liveSeat]);
 
   const startOnlineGame=async()=>{
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
@@ -966,7 +967,7 @@ export default function KaizenPoker(){
       g={...g,currentPlayer:pl,_scoreFlow:{stage:"mods",player:pl,index:i}};
       commitGameState(g);
     }
-    if(onlineRef.current.active&&seatPlayer&&seatPlayer!==pl)return;
+    if(onlineRef.current.active&&(liveSeat||onlineRef.current.seat)&&((liveSeat||onlineRef.current.seat)!==pl))return;
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
       if(g2.mode==="solo"){finalScore(g2);return;}
       const nextPlayer=opp(pl);
@@ -1038,7 +1039,7 @@ export default function KaizenPoker(){
       g={...g,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:tiStart}};
       commitGameState(g);
     }
-    if(onlineRef.current.active&&seatPlayer&&seatPlayer!==pl)return;
+    if(onlineRef.current.active&&(liveSeat||onlineRef.current.seat)&&((liveSeat||onlineRef.current.seat)!==pl))return;
     const mk=pl==="A"?"aMods":"bMods";
     const modded=new Set(getAppliedMods(g,pl).map(m=>m.target));
     const hand=getH(g,pl);
@@ -1049,7 +1050,7 @@ export default function KaizenPoker(){
         g2={...g2,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:ti}};
         commitGameState(g2);
       }
-      if(onlineRef.current.active&&seatPlayer&&seatPlayer!==pl)return;
+      if(onlineRef.current.active&&(liveSeat||onlineRef.current.seat)&&((liveSeat||onlineRef.current.seat)!==pl))return;
       if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
       setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,
         onRank:()=>{setModal(null);
@@ -1223,7 +1224,7 @@ export default function KaizenPoker(){
   const isSuddenDeath=gs.mode!=="solo"&&(gs.aChips===6||gs.bChips===6);
 
   const pClr=viewerPlayer==="A"?"#e74c3c":"#3498db";
-  const chipGoal=gs.mode==="solo"?(gs._soloTarget||SOLO_TARGET_CHIPS):7;
+  const chipGoal=gs.mode==="solo"?7:7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
   const revealPostQueue=(g)=>{
     const items=[];
