@@ -281,9 +281,23 @@ function PublicZones({gs,extraControls}){const[exp,setExp]=useState(null);
 export default function KaizenPoker(){
   const[gs,setGs]=useState(null);const[modal,setModal]=useState(null);const[fdMode,setFdMode]=useState(false);
   const[undoState,setUndoState]=useState(null); // snapshot before last action, for undo
+  const[toast,setToast]=useState(null);
   const logRef=useRef(null);
+  const toastTimerRef=useRef(null);
 
-  const L=(gs,msg)=>({...gs,log:[...gs.log,msg]});
+  const flashToast=(msg,tone="info")=>{
+    if(toastTimerRef.current)clearTimeout(toastTimerRef.current);
+    setToast({msg,tone,key:Date.now()+Math.random()});
+    toastTimerRef.current=setTimeout(()=>setToast(null),1800);
+  };
+  const maybeToastLog=msg=>{
+    const clean=msg.replace(/^\.\.\./,"").replace(/\.$/,"").trim();
+    if(!clean)return;
+    if(/Frozen/i.test(clean)){flashToast(clean,"frozen");return;}
+    if(/Fizzles?/i.test(clean)){flashToast(clean,"fizzle");return;}
+    if(/cancelled/i.test(clean)){flashToast(clean,"cancel");}
+  };
+  const L=(gs,msg)=>{maybeToastLog(msg);return {...gs,log:[...gs.log,msg]};};
   const getH=(gs,p)=>p==="A"?gs.aHand:gs.bHand;const getD=(gs,p)=>p==="A"?gs.aDiscard:gs.bDiscard;
   const getDk=(gs,p)=>p==="A"?gs.aDeck:gs.bDeck;const getP=(gs,p)=>p==="A"?gs.aPlay:gs.bPlay;
   const opp=p=>p==="A"?"B":"A";
@@ -817,7 +831,7 @@ export default function KaizenPoker(){
   const chipStrip=(pl,count,color)=>Array.from({length:7},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
 
   return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
+    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
       <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
@@ -843,6 +857,28 @@ export default function KaizenPoker(){
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
       <div className="kp-main-column" style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
+        {toast&&<div key={toast.key} style={{position:"sticky",top:6,zIndex:5,display:"flex",justifyContent:"center",pointerEvents:"none",marginBottom:-2}}>
+          <div style={{
+            padding:"8px 14px",
+            borderRadius:999,
+            fontSize:12,
+            fontWeight:800,
+            letterSpacing:.2,
+            color:toast.tone==="frozen"?"#d8f0ff":toast.tone==="cancel"?"#e6dfd2":"#fff0cf",
+            background:toast.tone==="frozen"
+              ?"linear-gradient(180deg,#21455ddf,#143041f2)"
+              :toast.tone==="cancel"
+              ?"linear-gradient(180deg,#3b3428df,#241f18f2)"
+              :"linear-gradient(180deg,#5a341fdf,#392114f2)",
+            border:toast.tone==="frozen"
+              ?"1px solid #6fb6e066"
+              :toast.tone==="cancel"
+              ?"1px solid #b49c7a55"
+              :"1px solid #f0a35a66",
+            boxShadow:"0 12px 28px #00000044, inset 0 1px 0 #ffffff18",
+            animation:"toastPop 0.18s ease-out"
+          }}>{toast.msg}</div>
+        </div>}
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
           return(<div style={{background:"linear-gradient(180deg,#18372bdd,#11271fff)",border:"1px solid #8f744333",borderRadius:8,padding:"6px 10px",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",boxShadow:"inset 0 1px 0 #f0e0b10d"}}>
