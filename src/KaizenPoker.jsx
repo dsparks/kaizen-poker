@@ -558,6 +558,25 @@ export default function KaizenPoker(){
     },1200);
   };
 
+  useEffect(()=>{
+    if(!gs||gs.phase!=="score"||modal)return;
+    const flow=gs._scoreFlow;
+    if(!flow)return;
+    if(onlineRef.current.active&&liveSeat&&liveSeat!==flow.player)return;
+    if(flow.stage==="mods"){
+      resolveMods(gs,flow.player,getModifyEntries(gs,flow.player),flow.index||0);
+      return;
+    }
+    if(flow.stage==="q2s"){
+      resolveQ2s(gs,flow.player,g2=>{
+        if(g2.mode==="solo"){finalScore(g2);return;}
+        const nextPlayer=opp(flow.player);
+        if(flow.player!==g2.firstPlayer){finalScore(g2);return;}
+        resolveMods(g2,nextPlayer,getModifyEntries(g2,nextPlayer),0);
+      },flow.index||0);
+    }
+  },[gs,modal,liveSeat]);
+
   const startOnlineGame=async()=>{
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
     try{
@@ -938,11 +957,16 @@ export default function KaizenPoker(){
   // SCORING WITH MODIFY RESOLUTION
   // ============================================================
   const doScore=()=>{if(!gs)return;let g=cloneGs(gs);
-    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g=L(g,"Resolving modifications...");commitGameState(g);
     const first=gs.firstPlayer||"A";
+    g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g.currentPlayer=first;g._scoreFlow={stage:"mods",player:first,index:0};g=L(g,"Resolving modifications...");commitGameState(g);
     const firstMods=getModifyEntries(g,first);resolveMods(g,first,firstMods,0);};
 
   const resolveMods=(g,pl,mods,i)=>{
+    if(g.currentPlayer!==pl||g._scoreFlow?.stage!=="mods"||g._scoreFlow?.player!==pl||g._scoreFlow?.index!==i){
+      g={...g,currentPlayer:pl,_scoreFlow:{stage:"mods",player:pl,index:i}};
+      commitGameState(g);
+    }
+    if(onlineRef.current.active&&liveSeat&&liveSeat!==pl)return;
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
       if(g2.mode==="solo"){finalScore(g2);return;}
       const nextPlayer=opp(pl);
@@ -1009,14 +1033,24 @@ export default function KaizenPoker(){
     let g2=L(g,`${pl}: ${modLabel} — not implemented`);commitGameState(g2);next(g2);};
 
   // Queen Remember on 2s
-  const resolveQ2s=(g,pl,done)=>{
+  const resolveQ2s=(g,pl,done,tiStart=0)=>{
+    if(g.currentPlayer!==pl||g._scoreFlow?.stage!=="q2s"||g._scoreFlow?.player!==pl||g._scoreFlow?.index!==tiStart){
+      g={...g,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:tiStart}};
+      commitGameState(g);
+    }
+    if(onlineRef.current.active&&liveSeat&&liveSeat!==pl)return;
     const mk=pl==="A"?"aMods":"bMods";
     const modded=new Set(getAppliedMods(g,pl).map(m=>m.target));
     const hand=getH(g,pl);
     const twos=hand.filter(id=>CM[id].rank==="2"&&!modded.has(id));
     const misc=g.scrap.includes("QC"),camo=g.scrap.includes("QD");
     if(!twos.length||(!misc&&!camo)){done(g);return;}
-    const proc=(g2,ti)=>{if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
+    const proc=(g2,ti)=>{if(g2.currentPlayer!==pl||g2._scoreFlow?.stage!=="q2s"||g2._scoreFlow?.player!==pl||g2._scoreFlow?.index!==ti){
+        g2={...g2,currentPlayer:pl,_scoreFlow:{stage:"q2s",player:pl,index:ti}};
+        commitGameState(g2);
+      }
+      if(onlineRef.current.active&&liveSeat&&liveSeat!==pl)return;
+      if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
       setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,
         onRank:()=>{setModal(null);
           setModal({type:"pickRank",title:`Miscalculate: ${CM[tid].name} ➠ any rank`,ranks:RO,showHand:hand,
@@ -1034,7 +1068,7 @@ export default function KaizenPoker(){
             onPick:r=>{setModal(null);setModal({type:"pickSuit",title:`${CM[tid].name}: Pick suit`,showHand:hand,
               onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} ➠ ${r}${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});}});},
         onSkip:()=>{setModal(null);proc(g2,ti+1);}});};
-    proc(g,0);};
+    proc(g,tiStart);};
 
   // Finalize scoring — show reveal
   const finalScore=(g)=>{const aH=getH(g,"A"),bH=getH(g,"B"),aM=getAppliedMods(g,"A"),bM=getAppliedMods(g,"B");
@@ -1069,7 +1103,7 @@ export default function KaizenPoker(){
     if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,g.mode==="solo"?`You win the chip! (${g.aChips}-${g.bChips})`:`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
     else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,g.mode==="solo"?`The Challenger wins the chip! (${g.aChips}-${g.bChips})`:`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
     else g=L(g,"Tie - no chip awarded.");
-    g.phase="reveal";g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
+    g.phase="reveal";g.currentPlayer=g.firstPlayer;g._scoreFlow=null;g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
 
   // After reveal, process post-score effects and advance
   const advanceFromReveal=()=>{if(!gs)return;let g={...gs};const winner=g._revealWinner;
@@ -1175,17 +1209,19 @@ export default function KaizenPoker(){
       {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
     </div></div>);
 
-  const p=gs.currentPlayer,hand=getH(gs,p);
-  const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const isOnlineMode=gs.mode==="online";
+  const actingPlayer=gs.currentPlayer;
+  const viewerPlayer=isOnlineMode&&liveSeat?liveSeat:actingPlayer;
+  const hand=getH(gs,viewerPlayer);
+  const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
-  const canControlSeat=!isOnlineMode||(!!liveSeat&&liveSeat===p);
-  const canUseOnlineControls=(!isOnlineMode||!!liveSeat)&&onlineReady;
+  const canControlSeat=!isOnlineMode||(!!liveSeat&&liveSeat===actingPlayer);
+  const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!liveSeat&&liveSeat===actingPlayer);
   const canAct=gs.phase==="action"&&actionsLeft>0&&canControlSeat&&onlineReady;
 
   const isSuddenDeath=gs.mode!=="solo"&&(gs.aChips===6||gs.bChips===6);
 
-  const pClr=p==="A"?"#e74c3c":"#3498db";
+  const pClr=viewerPlayer==="A"?"#e74c3c":"#3498db";
   const chipGoal=gs.mode==="solo"?(gs._soloTarget||SOLO_TARGET_CHIPS):7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
   const revealPostQueue=(g)=>{
@@ -1320,7 +1356,7 @@ export default function KaizenPoker(){
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
       <span style={{color:"#445"}}>Round {gs.round}</span>
       <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
-        {gs.phase==="action"?(gs.mode==="solo"?"Action - Solo Player":`Action - Player ${p}`):gs.phase==="score"?"Scoring":gs.phase==="reveal"?"Reveal":"Game Over"}
+        {gs.phase==="action"?(gs.mode==="solo"?"Action - Solo Player":`Action - Player ${actingPlayer}`):gs.phase==="score"?"Scoring":gs.phase==="reveal"?"Reveal":"Game Over"}
       </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>⚡ SUDDEN DEATH</span>}
       <button onClick={()=>setModal({type:"mainMenu"})} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
@@ -1367,7 +1403,7 @@ export default function KaizenPoker(){
           {liveGameId&&<span style={{fontSize:10,color:"#64748b"}}>{liveGameId}</span>}
           {shareLink&&liveSeat==="A"&&<button onClick={()=>navigator.clipboard?.writeText(shareLink)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",background:"#101923",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,cursor:"pointer"}}>Copy Invite Link</button>}
           {isOnlineMode&&onlineStatus==="waiting"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player B to join</span>}
-          {isOnlineMode&&!canControlSeat&&gs.phase==="action"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player {p}</span>}
+          {isOnlineMode&&!canControlSeat&&gs.phase==="action"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player {actingPlayer}</span>}
           {onlineError&&<span style={{fontSize:11,color:"#fca5a5"}}>{onlineError}</span>}
         </div>}
         {/* Remember */}
@@ -1440,7 +1476,7 @@ export default function KaizenPoker(){
               </div>
             </div>
           </div>
-          :<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
+          :<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
             <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
             <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
               {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} className="kp-action-slot" style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033"}}>
@@ -1454,14 +1490,14 @@ export default function KaizenPoker(){
                 </div>)}</div></div>))}</div>}
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>}/>
         {/* Hand */}
-        <div style={{padding:"14px 16px",borderRadius:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${p==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
-          <div style={{fontSize:11,color:p==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            YOUR HAND (Player {p})
+        <div style={{padding:"14px 16px",borderRadius:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${viewerPlayer==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
+          <div style={{fontSize:11,color:viewerPlayer==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            YOUR HAND (Player {viewerPlayer})
             {canAct&&<span style={{color:pClr,fontSize:10}}>— {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
             {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)}/>}
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
             {canAct&&undoState&&!isOnlineMode&&<Btn label="↩ Undo" bg="#e67e22" onClick={doUndo}/>}
-            {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,p)}/>}</div>
+            {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,viewerPlayer)}/>}</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {sortC(hand).map(id=>(<Card key={id} id={id} onClick={canAct?()=>handlePlayCard(id):undefined}
               glow={canAct?(fdMode?"#888":pClr):undefined} isNew={gs.newCards.includes(id)}/>))}</div></div>
