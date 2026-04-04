@@ -361,39 +361,49 @@ export default function KaizenPoker(){
   const[liveSeat,setLiveSeat]=useState(null);
   const[liveGameId,setLiveGameId]=useState(null);
   const gameTransport=createGameTransport({setGs});
-  const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1});
+  const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()});
   const pollRef=useRef(null);
   const analyticsAuthorityRef=useRef(true);
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(onlineRef.current.active&&onlineRef.current.gameId&&onlineRef.current.seat){
       const status=nextGs.phase==="gameOver"?"finished":"active";
-      void updateLiveGame({
-        gameId:onlineRef.current.gameId,
-        state:nextGs,
-        tracked:trackedRef.current,
-        expectedVersion:onlineRef.current.version||1,
-        seat:onlineRef.current.seat,
-        token:onlineRef.current.token,
-        status,
-      }).then(row=>{
-        if(!row)return;
-        onlineRef.current.version=row.version;
-        setOnlineStatus(row.status||"active");
-      }).catch(async err=>{
-        console.error("Live game update failed",err);
-        setOnlineError(err.message||"Live update failed.");
-        try{
-          const fresh=await fetchLiveGame(onlineRef.current.gameId);
-          if(fresh?.state){
-            onlineRef.current.version=fresh.version||onlineRef.current.version;
-            gameTransport.commit(fresh.state);
-            if(fresh.tracked&&analyticsAuthorityRef.current)setTracked(fresh.tracked);
+      const expectedVersion=onlineRef.current.version||1;
+      onlineRef.current.version=expectedVersion+1;
+      onlineRef.current.pendingWrites=(onlineRef.current.pendingWrites||0)+1;
+      setOnlineStatus(status==="finished"?"finished":"syncing");
+      onlineRef.current.writeChain=(onlineRef.current.writeChain||Promise.resolve())
+        .then(()=>updateLiveGame({
+          gameId:onlineRef.current.gameId,
+          state:nextGs,
+          tracked:trackedRef.current,
+          expectedVersion,
+          seat:onlineRef.current.seat,
+          token:onlineRef.current.token,
+          status,
+        }))
+        .then(row=>{
+          onlineRef.current.pendingWrites=Math.max(0,(onlineRef.current.pendingWrites||1)-1);
+          if(!row)return;
+          onlineRef.current.version=Math.max(onlineRef.current.version||1,row.version||1);
+          if(onlineRef.current.pendingWrites===0)setOnlineStatus(row.status||"active");
+        })
+        .catch(async err=>{
+          onlineRef.current.pendingWrites=0;
+          console.error("Live game update failed",err);
+          setOnlineError(err.message||"Live update failed.");
+          try{
+            const fresh=await fetchLiveGame(onlineRef.current.gameId);
+            if(fresh?.state){
+              onlineRef.current.version=fresh.version||onlineRef.current.version;
+              gameTransport.commit(fresh.state);
+              if(fresh.tracked&&analyticsAuthorityRef.current)setTracked(fresh.tracked);
+              setOnlineStatus(fresh.status||"active");
+            }
+          }catch(innerErr){
+            console.error("Live game resync failed",innerErr);
           }
-        }catch(innerErr){
-          console.error("Live game resync failed",innerErr);
-        }
-      });
+        });
     }
     return nextGs;
   };
@@ -401,7 +411,7 @@ export default function KaizenPoker(){
   const clearGameState=()=>{
     if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;}
     if(typeof window!=="undefined") window.history.replaceState({}, "", window.location.pathname);
-    onlineRef.current={active:false,gameId:null,seat:null,token:null,version:1};
+    onlineRef.current={active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()};
     analyticsAuthorityRef.current=true;
     setJoinCode("");
     setShareLink("");
@@ -511,7 +521,7 @@ export default function KaizenPoker(){
       const nextUrl=`${window.location.pathname}?game=${row.id}`;
       window.history.replaceState({}, "", nextUrl);
     }
-    onlineRef.current={active:true,gameId:row.id,seat,token,version:row.version||1};
+    onlineRef.current={active:true,gameId:row.id,seat,token,version:row.version||1,pendingWrites:0,writeChain:Promise.resolve()};
     analyticsAuthorityRef.current=authority;
     setLiveGameId(row.id);
     setLiveSeat(seat);
@@ -531,10 +541,15 @@ export default function KaizenPoker(){
       try{
         const row=await fetchLiveGame(gameId);
         if(!row?.state)return;
-        if((row.version||1)!==(onlineRef.current.version||1)){
-          onlineRef.current.version=row.version||1;
+        const rowVersion=row.version||1;
+        const localVersion=onlineRef.current.version||1;
+        const pendingWrites=onlineRef.current.pendingWrites||0;
+        if(pendingWrites>0&&rowVersion<localVersion) return;
+        if(rowVersion!==localVersion){
+          onlineRef.current.version=rowVersion;
           gameTransport.commit(row.state);
           if(row.tracked&&authority)setTracked(row.tracked);
+          setOnlineError("");
         }
         setOnlineStatus(row.status||"active");
       }catch(err){
