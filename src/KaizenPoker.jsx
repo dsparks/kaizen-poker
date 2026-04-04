@@ -1020,7 +1020,7 @@ export default function KaizenPoker(){
         </div>
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
-      <div className="kp-main-column" style={{flex:1,padding:16,display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
+      <div className="kp-main-column" style={{flex:1,minWidth:0,padding:16,display:"flex",flexDirection:"column",gap:12,overflowY:"auto",overflowX:"hidden"}}>
         {toast&&<div key={toast.key} style={{position:"sticky",top:6,zIndex:5,display:"flex",justifyContent:"center",pointerEvents:"none",marginBottom:-2}}>
           <div style={{
             padding:"8px 14px",
@@ -1049,7 +1049,7 @@ export default function KaizenPoker(){
             <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
             {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" — "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
         {/* Play areas */}
-        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:1,minWidth:280,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>{[opp(p),p].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
           <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
           <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
             {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} className="kp-action-slot" style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033"}}>
