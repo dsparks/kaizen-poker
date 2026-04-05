@@ -3,6 +3,7 @@ export const RULES_VERSION = "2026-04-stats-v1";
 export const ANALYTICS_SOURCE = "local_hotseat";
 export const SOLO_ANALYTICS_SOURCE = "solo_variant";
 export const ONLINE_ANALYTICS_SOURCE = "online_guest";
+export const TUTORIAL_ANALYTICS_SOURCE = "tutorial";
 const ACTIVE_GAME_KEY = "kaizenPoker.activeTrackedGame";
 const COMPLETED_GAMES_KEY = "kaizenPoker.completedTrackedGames";
 const GUEST_PROFILE_PREFIX = "kaizenPoker.guestProfile.";
@@ -22,15 +23,24 @@ export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
   return profile;
 }
 
-const analyticsSourceForMode = mode => mode === "solo" ? SOLO_ANALYTICS_SOURCE : mode === "online" ? ONLINE_ANALYTICS_SOURCE : ANALYTICS_SOURCE;
+const analyticsSourceForMode = mode =>
+  mode === "tutorial"
+    ? TUTORIAL_ANALYTICS_SOURCE
+    : mode === "solo"
+    ? SOLO_ANALYTICS_SOURCE
+    : mode === "online"
+    ? ONLINE_ANALYTICS_SOURCE
+    : ANALYTICS_SOURCE;
 
 export function buildTrackedGame(gs) {
   const startedAt = gs._createdAt || nowIso();
   const source = analyticsSourceForMode(gs.mode);
   const players = {
-    A: getOrCreateGuestProfile("A", gs.mode === "solo" ? "Solo Player" : "Guest A"),
+    A: getOrCreateGuestProfile("A", gs.mode === "solo" ? "Solo Player" : gs.mode === "tutorial" ? "Learner" : "Guest A"),
     B: gs.mode === "solo"
       ? getOrCreateGuestProfile("SOLO_CHALLENGER", "Challenger")
+      : gs.mode === "tutorial"
+      ? getOrCreateGuestProfile("TUTORIAL_GUIDE", "Tutorial Computer")
       : getOrCreateGuestProfile("B", "Guest B"),
   };
   const tracked = {

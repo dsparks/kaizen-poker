@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import {
   archiveCompletedTrackedGame,
@@ -19,6 +20,12 @@ import {
   updateLiveGame,
 } from "./liveGameClient.js";
 import { syncTrackedGame } from "./supabaseAnalytics.js";
+import {
+  getTutorialPrompt,
+  getTutorialRoundSetup,
+  TUTORIAL_INITIAL_DECKS,
+  TUTORIAL_TOTAL_ROUNDS,
+} from "./tutorialScript.js";
 
 // ============================================================
 // DATA (unchanged)
@@ -163,6 +170,18 @@ export function evalHand(cardIds,mods=[]){
 export function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHand(b,bm);
   if(ae.handRank!==be.handRank)return ae.handRank>be.handRank?"A":"B";
   for(let i=0;i<ae.rankVals.length;i++){if(ae.rankVals[i]>be.rankVals[i])return"A";if(ae.rankVals[i]<be.rankVals[i])return"B";}return"TIE";}
+function displayOrder(cardIds,mods=[]){
+  const scored=evalHand(cardIds,mods);
+  const effById=Object.fromEntries(scored.effective.map(c=>[c.id,c]));
+  if((scored.handRank===5||scored.handRank===9||scored.handRank===10)&&scored.rankVals[0]===3){
+    return [...cardIds].sort((a,b)=>{
+      const av=effById[a]?.rank==="A"?-1:RV[effById[a]?.rank??CM[a].rank];
+      const bv=effById[b]?.rank==="A"?-1:RV[effById[b]?.rank??CM[b].rank];
+      return av-bv||SO.indexOf((effById[a]?.suit??CM[a].suit))-SO.indexOf((effById[b]?.suit??CM[b].suit));
+    });
+  }
+  return sortC(cardIds);
+}
 function evalChallenger(cardId){
   const card=CM[cardId];
   const lookup=card?CHALLENGER_LOOKUP[card.rank]:null;
@@ -170,9 +189,11 @@ function evalChallenger(cardId){
   return {card,rank:card.rank,...lookup};
 }
 function isMatchOver(gs){
+  if(gs.mode==="tutorial")return false;
   return gs.mode==="solo" ? (gs.aChips+gs.bChips)>=(gs._soloTarget||SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
 }
 function getMatchWinner(gs){
+  if(gs.mode==="tutorial")return gs.aChips>=gs.bChips?"A":"B";
   return gs.mode==="solo" ? (gs.aChips>gs.bChips?"A":"B") : (gs.aChips>=7?"A":"B");
 }
 function getRoundRequirements(gs){
@@ -193,6 +214,51 @@ function initGame(mode="hotseat"){const all=shuf(CARDS.map(c=>c.id));
     log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,_remotePrompt:null,
     _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
+function tutorialRoundState(roundNumber,baseState=null){
+  const setup=getTutorialRoundSetup(roundNumber);
+  if(!setup)return null;
+  const seed=baseState?cloneGs(baseState):initGame("tutorial");
+  return {
+    ...seed,
+    mode:"tutorial",
+    round:roundNumber,
+    firstPlayer:"A",
+    currentPlayer:"A",
+    phase:"action",
+    regularActionsPlayed:0,
+    actionsRequired:2,
+    bonusActions:0,
+    aHand:sortC([...(setup.aHand||[])]),
+    bHand:sortC([...(setup.bHand||[])]),
+    aDeck:[...(setup.aDeck||[])],
+    bDeck:[...(setup.bDeck||[])],
+    aDiscard:[...(setup.aDiscard||[])],
+    bDiscard:[...(setup.bDiscard||[])],
+    scrap:[...(setup.scrap||[])],
+    aPlay:[],
+    bPlay:[],
+    aMods:[],
+    bMods:[],
+    aForecast:[],
+    bForecast:[],
+    newCards:[],
+    amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},
+    _aReq:2,
+    _bReq:2,
+    _remotePrompt:null,
+    _scoreFlow:null,
+    _revealAE:null,
+    _revealBE:null,
+    _revealWinner:null,
+    _soloReveal:null,
+    _tutorialRound:roundNumber,
+    _tutorialComplete:false,
+    _aInitialDeck:[...TUTORIAL_INITIAL_DECKS.A],
+    _bInitialDeck:[...TUTORIAL_INITIAL_DECKS.B],
+    _aInitialHand:roundNumber===1?sortC([...(setup.aHand||[])]):[...TUTORIAL_INITIAL_DECKS.A.slice(0,7)],
+    _bInitialHand:roundNumber===1?sortC([...(setup.bHand||[])]):[...TUTORIAL_INITIAL_DECKS.B.slice(0,7)],
+  };
+}
 
 // ============================================================
 // SIMPLE UI COMPONENTS
@@ -524,9 +590,12 @@ export default function KaizenPoker(){
     }
   };
 
-  const buildFreshGame=(mode="hotseat")=>{let g=initGame(mode);g=L(g,`=== ROUND 1 === ${mode==="solo"?"Solo Mode":"Player A"} acts first`);
+  const buildFreshGame=(mode="hotseat")=>{
+    let g=mode==="tutorial"?tutorialRoundState(1):initGame(mode);
+    g=L(g,`=== ROUND 1 === ${mode==="solo"?"Solo Mode":mode==="tutorial"?"Tutorial begins":"Player A"} acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     if(mode==="solo")g=L(g,`Challenger Deck: ${g.bDeck.length} cards ready`);
+    else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setTracked(buildTrackedGame(g));commitGameState(g);};
   const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setTracked(buildTrackedGame(nextGs));commitGameState(nextGs);};
@@ -613,6 +682,28 @@ export default function KaizenPoker(){
       });
     }
   },[gs,modal,liveSeat]);
+
+  const tutorialPrompt=gs?.mode==="tutorial"?getTutorialPrompt(gs,modal,fdMode):null;
+  const tutorialAllows=(kind,value=null)=>{
+    if(gs?.mode!=="tutorial")return true;
+    const expect=tutorialPrompt?.expect;
+    if(!expect)return true;
+    if(expect.kind==="none")return false;
+    if(expect.kind==="menu")return kind==="menu";
+    if(expect.kind!==kind)return false;
+    return expect.value==null||expect.value===value;
+  };
+
+  useEffect(()=>{
+    if(!gs||gs.mode!=="tutorial"||gs.phase!=="action"||gs.currentPlayer!=="B"||modal||fdMode)return;
+    const setup=getTutorialRoundSetup(gs._tutorialRound||1);
+    const actions=setup?.computerActions||[];
+    const played=(gs.bPlay||[]).length;
+    if(played>=actions.length)return;
+    const nextId=actions[played];
+    const timer=setTimeout(()=>resolveAction(nextId,nextId,false,gs),650);
+    return()=>clearTimeout(timer);
+  },[gs,modal,fdMode]);
 
   const startOnlineGame=async()=>{
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
@@ -749,7 +840,7 @@ export default function KaizenPoker(){
     if(card.type==="Modify"&&((p==="A"&&gs.amends.aNegate)||(p==="B"&&gs.amends.bNegate))){
       setModal({type:"alert",msg:"Negate prevents Modify actions!",onOk:()=>setModal(null)});return;}
     // Info-revealing actions: confirm first
-    if(REVEALS.has(cid)){
+    if(gs.mode!=="tutorial"&&REVEALS.has(cid)){
       setModal({type:"confirm",title:`Play ${card.name}?`,msg:`This will reveal new information and can't be undone.`,card:cid,
         onYes:()=>{setModal(null);setUndoState(null);resolveAction(cid);},
         onNo:()=>{setModal(null);}});return;}
@@ -1176,6 +1267,31 @@ export default function KaizenPoker(){
     procPost(g,effs,0);};
 
   const startNextRound=(g)=>{
+    if(g.mode==="tutorial"){
+      const nextRound=(g._tutorialRound||g.round||1)+1;
+      const nextSetup=tutorialRoundState(nextRound,g);
+      if(!nextSetup){
+        const winner=g.aChips>=g.bChips?"A":"B";
+        g.phase="tutorialDone";
+        g.currentPlayer="A";
+        g.actionsRequired=0;
+        g.regularActionsPlayed=0;
+        g.bonusActions=0;
+        g._tutorialComplete=true;
+        g._scoreFlow=null;
+        g._remotePrompt=null;
+        g=L(g,"=== Tutorial complete ===");
+        trackGameFinished(g,winner);
+        commitGameState(g);
+        return;
+      }
+      let g2=nextSetup;
+      g2.log=[...g.log];
+      g2=L(g2,`=== ROUND ${g2.round} === Tutorial continues`);
+      g2=L(g2,`A: ${g2.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
+      g2=L(g2,`Tutorial Opponent: ${g2.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
+      trackRoundStart(g2);commitGameState(g2);return;
+    }
     if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g._remotePrompt=null;
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
@@ -1240,9 +1356,10 @@ export default function KaizenPoker(){
     <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
-      <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
+      <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
         <Btn label="Hotseat Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>startGame("hotseat")}/>
+        <Btn label="Tutorial" bg="linear-gradient(135deg,#7dd3fc,#38bdf8)" onClick={()=>startGame("tutorial")}/>
         <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
         <Btn label="Create Online Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={startOnlineGame}/>
       </div>
@@ -1264,7 +1381,7 @@ export default function KaizenPoker(){
   const isOnlineMode=gs.mode==="online";
   const actingPlayer=gs.currentPlayer;
   const seatPlayer=isOnlineMode?(liveSeat||onlineRef.current.seat||null):null;
-  const viewerPlayer=isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
+  const viewerPlayer=gs.mode==="tutorial"?"A":isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
@@ -1275,7 +1392,7 @@ export default function KaizenPoker(){
   const isSuddenDeath=gs.mode!=="solo"&&(gs.aChips===6||gs.bChips===6);
 
   const pClr=viewerPlayer==="A"?"#e74c3c":"#3498db";
-  const chipGoal=gs.mode==="solo"?7:7;
+  const chipGoal=7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
   const revealPostQueue=(g)=>{
     const items=[];
@@ -1336,7 +1453,7 @@ export default function KaizenPoker(){
                   YOU {w==="A"&&"*"}
                 </div>
                 <div style={{display:"flex",gap:5,justifyContent:"center",marginBottom:6,flexWrap:"wrap"}}>
-                  {sortC(aH).map(id=>{
+                  {displayOrder(aH,getAppliedMods(gs,"A")).map(id=>{
                     const mod=getAppliedMods(gs,"A").find(m=>m.target===id);
                     return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
                       <PreviewCard id={id} glow={w==="A"?"#e74c3c":undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
@@ -1372,7 +1489,7 @@ export default function KaizenPoker(){
                 <div style={{fontSize:isFinal?13:12,fontWeight:700,color:clr,marginBottom:6,textAlign:"center",letterSpacing:1}}>
                   PLAYER {pl} {isWinner&&"*"}</div>
                 <div style={{display:"flex",gap:5,marginBottom:6}}>
-                  {sortC(h).map(id=>{
+                  {displayOrder(h,mods).map(id=>{
                     const mod=mods.find(m=>m.target===id);
                     return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
                       <PreviewCard id={id} glow={isWinner?clr:undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
@@ -1389,7 +1506,7 @@ export default function KaizenPoker(){
             ?<Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>clearGameState()}/>
             :(isMatchOver(gs)
               ?<Btn label="New Game" bg="#333" onClick={()=>clearGameState()} disabled={!canUseOnlineControls}/>
-              :<Btn label="Next Round ➠" bg="#f1c40f" onClick={advanceFromReveal} disabled={!canUseOnlineControls}/>)}
+              :<Btn label={gs.mode==="tutorial"&&gs._tutorialRound===TUTORIAL_TOTAL_ROUNDS?"Finish Tutorial":"Next Round ➠"} bg="#f1c40f" onClick={advanceFromReveal} disabled={!canUseOnlineControls||!tutorialAllows("next")}/>)}
         </div>
       </div>
     );
@@ -1409,7 +1526,15 @@ export default function KaizenPoker(){
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
       <span style={{color:"#445"}}>Round {gs.round}</span>
       <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
-        {gs.phase==="action"?(gs.mode==="solo"?"Action - Solo Player":`Action - Player ${actingPlayer}`):gs.phase==="score"?"Scoring":gs.phase==="reveal"?"Reveal":"Game Over"}
+        {gs.phase==="action"
+          ?(gs.mode==="solo"?"Action - Solo Player":gs.mode==="tutorial"?(actingPlayer==="A"?"Action - Learner":"Action - Tutorial Opponent"):`Action - Player ${actingPlayer}`)
+          :gs.phase==="score"
+          ?"Scoring"
+          :gs.phase==="reveal"
+          ?"Reveal"
+          :gs.phase==="tutorialDone"
+          ?"Tutorial Complete"
+          :"Game Over"}
       </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>⚡ SUDDEN DEATH</span>}
       <button onClick={()=>setModal({type:"mainMenu"})} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
@@ -1547,21 +1672,25 @@ export default function KaizenPoker(){
           <div style={{fontSize:11,color:viewerPlayer==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             YOUR HAND (Player {viewerPlayer})
             {canAct&&<span style={{color:pClr,fontSize:10}}>— {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
-            {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)}/>}
+            {canAct&&!fdMode&&<Btn label="Play Face-Down ▼" bg="#555" onClick={()=>setFdMode(true)} disabled={!tutorialAllows("faceDownToggle")}/>}
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
             {canAct&&undoState&&!isOnlineMode&&<Btn label="↩ Undo" bg="#e67e22" onClick={doUndo}/>}
             {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,viewerPlayer)}/>}</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {sortC(hand).map(id=>(<Card key={id} id={id} onClick={canAct?()=>handlePlayCard(id):undefined}
-              glow={canAct?(fdMode?"#888":pClr):undefined} isNew={gs.newCards.includes(id)}/>))}</div></div>
-        {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls}/>}
+            {sortC(hand).map(id=>{
+              const tutorialActionKind=fdMode?"playFaceDownCard":"playCard";
+              const tutorialEnabled=tutorialAllows(tutorialActionKind,id);
+              return(<Card key={id} id={id} onClick={canAct&&tutorialEnabled?()=>handlePlayCard(id):undefined}
+                glow={canAct&&tutorialEnabled?(fdMode?"#888":"#58c6ff"):canAct?(fdMode?"#555":pClr):undefined} isNew={gs.newCards.includes(id)}/>);
+            })}</div></div>
+        {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{gs.mode==="solo"?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
           <Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div>}
-        <div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
+        {gs.mode!=="tutorial"&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
-        </div>
+        </div>}
       </div>
       {/* Log */}
       <div style={{width:260,borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
@@ -1575,19 +1704,19 @@ export default function KaizenPoker(){
     {modal?.type==="refreshOpts"&&<Modal title="Face-Down Options">
       <p style={{color:"#aaa",fontSize:12,marginBottom:10}}>Choose:</p>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
-        {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#3498db":o.key==="sift"?"#2ecc71":"#6c5ce7"} onClick={()=>modal.onChoice(o.key)}/>))}</div></Modal>}
+        {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#3498db":o.key==="sift"?"#2ecc71":"#6c5ce7"} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
     {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"}>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
-          return <PreviewCard key={id} id={id} dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
+          return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
     {modal?.type==="pickFromList"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}>
         <div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
-          return <PreviewCard key={id} id={id} dimmed={!v} onClick={v?()=>modal.onPick(id):undefined} glow={v?"#f1c40f":undefined}/>;})}</div>
-      {modal.canCancel&&<Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/>}</Modal>}
+          return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f1c40f":undefined}/>;})}</div>
+      {modal.canCancel&&<Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
     {modal?.type==="soloLookup"&&<Modal title="Challenger Lookup">
       <div style={{display:"grid",gap:6}}>
         <div style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"0 8px",fontSize:10,fontWeight:800,color:"#d8c08d",letterSpacing:1.2,textTransform:"uppercase"}}>
@@ -1640,14 +1769,14 @@ export default function KaizenPoker(){
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
-        {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:"#f1c40f",fontSize:18,fontWeight:900,cursor:"pointer",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</button>))}</div>
-      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/></div>}</Modal>}
+        {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} disabled={!tutorialAllows("modalRank",r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:tutorialAllows("modalRank",r)?"#f1c40f":"#6b7280",fontSize:18,fontWeight:900,cursor:tutorialAllows("modalRank",r)?"pointer":"default",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalRank",r)?1:0.45}}>{r}</button>))}</div>
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalRank"}/></div>}</Modal>}
     {modal?.type==="pickSuit"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-        {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:SC[s],fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{SUITS[s]}</button>))}</div>
-      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel}/></div>}</Modal>}
+        {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} disabled={!tutorialAllows("modalSuit",s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:tutorialAllows("modalSuit",s)?SC[s]:"#6b7280",fontSize:28,cursor:tutorialAllows("modalSuit",s)?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalSuit",s)?1:0.45}}>{SUITS[s]}</button>))}</div>
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalSuit"}/></div>}</Modal>}
     {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}${modal.queenSourceLabel?` (${modal.queenSourceLabel})`:""}`}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
@@ -1655,10 +1784,11 @@ export default function KaizenPoker(){
       <p style={{color:"#d8c08d",fontSize:11,textAlign:"center",marginBottom:6}}>Remember: {modal.queenSourceLabel||"Remember effects"}</p>
       <p style={{color:"#aaa",fontSize:11,textAlign:"center",marginBottom:10}}>Unmodified 2 — Queen effects available:</p>
       <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
-        {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg="#9b59b6" onClick={modal.onBoth}/>}
-        {modal.misc&&<Btn label="Rank Only" bg="#e67e22" onClick={modal.onRank}/>}
-        {modal.camo&&<Btn label="Suit Only" bg="#3498db" onClick={modal.onSuit}/>}
-        <Btn label="Skip" bg="#333" onClick={modal.onSkip}/></div></Modal>}
+        {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg="#9b59b6" onClick={modal.onBoth} disabled={!tutorialAllows("queenChoice","both")}/>}
+        {modal.misc&&<Btn label="Rank Only" bg="#e67e22" onClick={modal.onRank} disabled={!tutorialAllows("queenChoice","rank")}/>}
+        {modal.camo&&<Btn label="Suit Only" bg="#3498db" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
+        <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
+    {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} visible />}
   </div>);
 }
