@@ -16,8 +16,8 @@ export const TUTORIAL_INITIAL_DECKS = {
 
 export const TUTORIAL_ROUNDS = {
   1: {
-    aHand: ["3D","10H","4C","4D","KC","KH","9H"],
-    aDeck: fill("2C","4C","5S","7D","8D","JC","QS","AH"),
+    aHand: ["3D","10H","4C","4D","KC","9H","2S"],
+    aDeck: fill("KH","2C","5S","7D","8D","JC","QS","AH"),
     bHand: ["5C","8C","2D","4H","6S","8H","KD"],
     bDeck: fill("3C","4S","9H","QC","2H","6C"),
     scrap: [],
@@ -93,8 +93,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (modal?.type === "pickDiscard" && /^Loot/.test(modal.title || "")) return {
       title: "Draw Then Discard",
-      message: "Loot drew you one extra card, and now you must discard one. Discard the 2♣ you just drew. Enacts like Loot help you see more cards than you keep, which improves hand quality over time.",
-      expect: { kind: "modalCard", value: "2C" },
+      message: "Now Loot is showing its real value. You drew a King that you want to keep, so discard the weaker 2♠ instead. Enacts like Loot matter because they let you trade a weak card for a stronger one.",
+      expect: { kind: "modalCard", value: "2S" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1) return {
       title: "Second Action",
