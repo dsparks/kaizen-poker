@@ -252,6 +252,7 @@ function tutorialRoundState(roundNumber,baseState=null){
     _revealWinner:null,
     _soloReveal:null,
     _tutorialRound:roundNumber,
+    _tutorialAck:null,
     _tutorialComplete:false,
     _aInitialDeck:[...TUTORIAL_INITIAL_DECKS.A],
     _bInitialDeck:[...TUTORIAL_INITIAL_DECKS.B],
@@ -598,6 +599,11 @@ export default function KaizenPoker(){
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setTracked(buildTrackedGame(g));commitGameState(g);};
+  const acknowledgeTutorial=mark=>{
+    if(!gs||gs.mode!=="tutorial")return;
+    const g2={...gs,_tutorialAck:mark};
+    commitGameState(g2);
+  };
   const replaceSandboxState=nextGs=>{setModal(null);setFdMode(false);setUndoState(null);setTracked(buildTrackedGame(nextGs));commitGameState(nextGs);};
 
   const liveSeatKey=gameId=>`${LIVE_SEAT_PREFIX}${gameId}`;
@@ -684,11 +690,12 @@ export default function KaizenPoker(){
   },[gs,modal,liveSeat]);
 
   const tutorialPrompt=gs?.mode==="tutorial"?getTutorialPrompt(gs,modal,fdMode):null;
+  const tutorialAckReady=gs?.mode==="tutorial" && gs.phase==="action" && gs.currentPlayer==="B" && gs._tutorialAck==="opp-turn";
   const tutorialAllows=(kind,value=null)=>{
     if(gs?.mode!=="tutorial")return true;
     const expect=tutorialPrompt?.expect;
     if(!expect)return true;
-    if(expect.kind==="none")return false;
+    if(expect.kind==="none"||expect.kind==="ack")return false;
     if(expect.kind==="menu")return kind==="menu";
     if(expect.kind!==kind)return false;
     return expect.value==null||expect.value===value;
@@ -696,6 +703,7 @@ export default function KaizenPoker(){
 
   useEffect(()=>{
     if(!gs||gs.mode!=="tutorial"||gs.phase!=="action"||gs.currentPlayer!=="B"||modal||fdMode)return;
+    if(!tutorialAckReady)return;
     const setup=getTutorialRoundSetup(gs._tutorialRound||1);
     const actions=setup?.computerActions||[];
     const played=(gs.bPlay||[]).length;
@@ -1287,6 +1295,7 @@ export default function KaizenPoker(){
       }
       let g2=nextSetup;
       g2.log=[...g.log];
+      g2._tutorialAck=null;
       g2=L(g2,`=== ROUND ${g2.round} === Tutorial continues`);
       g2=L(g2,`A: ${g2.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
       g2=L(g2,`Tutorial Opponent: ${g2.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
@@ -1329,6 +1338,11 @@ export default function KaizenPoker(){
       const activeMods=getAppliedMods(g,e.pl);const effS=new Set(getH(g,e.pl).map(id=>{const m=activeMods.find(x=>x.target===id);return m?.suit||CM[id].suit;}));
       const disc=getD(g,e.pl);const valid=disc.filter(id=>effS.has(CM[id].suit));
       if(!valid.length){procPost(g,effs,i+1);return;}
+      if(g.mode==="tutorial"&&e.pl==="B"){
+        const id=valid[0];let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+        trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
+        trackEvent(g2,"card_scrapped",{cardId:id,reason:"vanish"},{phase:"post_score",playerSlot:e.pl});
+        g2=L(g2,`B: Vanish triggers automatically and scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Vanish — scrap matching suit`,cards:disc,filter:id=>effS.has(CM[id].suit),canCancel:true,
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
@@ -1337,6 +1351,11 @@ export default function KaizenPoker(){
         onCancel:()=>{setModal(null);procPost(g,effs,i+1);}});return;}
     if(e.t==="capitulate"){if(isFroz(g,e.pl)){procPost(g,effs,i+1);return;}
       const disc=getD(g,e.pl);if(!disc.length){procPost(g,effs,i+1);return;}
+      if(g.mode==="tutorial"&&e.pl==="B"){
+        const id=disc[0];let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+        trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
+        trackEvent(g2,"card_scrapped",{cardId:id,reason:"capitulate"},{phase:"post_score",playerSlot:e.pl});
+        g2=L(g2,`B: Capitulate triggers automatically after losing and scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Capitulate — you lost! Scrap a card?`,cards:disc,canCancel:true,
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
@@ -1789,6 +1808,6 @@ export default function KaizenPoker(){
         {modal.camo&&<Btn label="Suit Only" bg="#3498db" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
         <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
-    {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} visible />}
+    {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
   </div>);
 }

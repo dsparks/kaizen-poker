@@ -5,65 +5,65 @@ const fill = (...cards) => cards;
 
 export const TUTORIAL_INITIAL_DECKS = {
   A: [
-    "2H","2D","3D","4C","4D","5C","5H","6C","6S","7C","8C","9C","9D",
-    "9H","10H","10S","JC","QC","KC","KD","KH","AD","AH","AS","AC","QS"
+    "2C","2D","3C","3D","4C","4D","4S","5D","5H","6C","7C","8C","9C",
+    "9D","9H","10H","10S","QC","QD","QH","KC","KD","KH","AC","AD","AH"
   ],
   B: [
-    "2C","2S","3C","3H","3S","4H","4S","5D","5S","6D","6H","7D","7H",
-    "7S","8D","8H","8S","9S","10C","10D","JS","JD","JH","QD","QH","KS"
+    "2H","2S","3H","3S","4H","5C","5S","6D","6H","6S","7D","7H","7S",
+    "8D","8H","8S","9S","10C","10D","JC","JD","JH","JS","QS","KS","AS"
   ],
 };
 
 export const TUTORIAL_ROUNDS = {
   1: {
-    aHand: ["3D","10H","4C","4D","KC","9H","2S"],
-    aDeck: fill("KH","2C","5S","7D","8D","JC","QS","AH"),
-    bHand: ["5C","8C","2D","4H","6S","8H","KD"],
-    bDeck: fill("3C","4S","9H","QC","2H","6C"),
+    aHand: ["3D","10H","4C","4D","KC","9H","2C"],
+    aDeck: fill("KH","5H","6C","QC","8C","QD"),
+    bHand: ["5C","7D","2H","2S","7H","7S","KS"],
+    bDeck: fill("3H","4H","6D","QS","JS","AS"),
     scrap: [],
     aDiscard: [],
     bDiscard: [],
-    computerActions: ["5C","8C"],
+    computerActions: ["5C","7D"],
   },
   2: {
-    aHand: ["8C","4D","2H","5H","6C","9D","KH"],
-    aDeck: fill("QC","3S","7S","JD","AC","4C"),
-    bHand: ["7C","5C","2S","4S","6D","8H","KD"],
-    bDeck: fill("3H","9S","QS","2C","6H","10D"),
+    aHand: ["8C","4D","5H","6C","9D","KD","4S"],
+    aDeck: fill("QC","3C","10S","AC","2D","9C"),
+    bHand: ["5C","8S","3H","4H","6D","8H","KS"],
+    bDeck: fill("3S","6S","10C","QS","AS","JD"),
     scrap: ["QH"],
     aDiscard: [],
     bDiscard: [],
-    computerActions: ["7C","5C"],
+    computerActions: ["5C","8S"],
   },
   3: {
-    aHand: ["8C","7C","2D","5C","9C","KC","AC"],
-    aDeck: fill("6D","10C","AS","4D","JH","3S"),
-    bHand: ["5C","8C","3D","4S","6H","KD","AS"],
-    bDeck: fill("2C","7S","9D","QH","4H","JD"),
+    aHand: ["8C","7C","2D","4C","6C","KC","AC"],
+    aDeck: fill("5D","9D","AH","3D","QC","4D"),
+    bHand: ["5C","7D","3S","4H","6H","9S","AS"],
+    bDeck: fill("2S","10C","QS","JD","JH","8D"),
     scrap: ["QD"],
     aDiscard: [],
     bDiscard: [],
-    computerActions: ["5C","8C"],
+    computerActions: ["5C","7D"],
   },
   4: {
-    aHand: ["8C","7C","2H","4D","6S","9H","KD"],
-    aDeck: fill("3C","5D","JS","AH","QC","10D"),
-    bHand: ["5C","7C","KC","KD","KH","2S","4D"],
-    bDeck: fill("3H","6D","8H","AS","QD","9S"),
+    aHand: ["8C","7C","4D","5H","9H","KD","6C"],
+    aDeck: fill("2D","AH","QC","10H","4C","AD"),
+    bHand: ["5C","7D","KS","AS","2H","2S","8H"],
+    bDeck: fill("3H","6D","9S","JD","JS","4H"),
     scrap: [],
     aDiscard: ["3C"],
     bDiscard: [],
-    computerActions: ["5C","7C"],
+    computerActions: ["5C","7D"],
   },
   5: {
     aHand: ["7C","10S","9C","9D","KC","AD","KH"],
-    aDeck: fill("2H","4S","5D","JS","QC","8D"),
-    bHand: ["5C","2C","4D","6S","8H","KD","AS"],
-    bDeck: fill("3C","7S","9H","QH","4H","JD"),
+    aDeck: fill("2C","4S","5D","QC","AH","8C"),
+    bHand: ["5C","9S","2H","4H","6D","8H","KS"],
+    bDeck: fill("3H","7H","10C","QS","AS","JC"),
     scrap: [],
     aDiscard: [],
     bDiscard: [],
-    computerActions: ["5C","2C"],
+    computerActions: ["5C","9S"],
   },
 };
 
@@ -93,8 +93,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (modal?.type === "pickDiscard" && /^Loot/.test(modal.title || "")) return {
       title: "Draw Then Discard",
-      message: "Now Loot is showing its real value. You drew a King that you want to keep, so discard the weaker 2♠ instead. Enacts like Loot matter because they let you trade a weak card for a stronger one.",
-      expect: { kind: "modalCard", value: "2S" },
+      message: "Now Loot is showing its real value. You drew a King that you want to keep, so discard the weaker 2♣ instead. Enacts like Loot matter because they let you trade a weak card for a stronger one.",
+      expect: { kind: "modalCard", value: "2C" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1) return {
       title: "Second Action",
@@ -103,8 +103,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Opponent Turn",
-      message: "Your two Actions are finished for the round. Now the tutorial opponent takes its two Actions. You do not need to click anything here. I want you to notice the turn structure: one player finishes Actions, then the other player does the same.",
-      expect: { kind: "none" },
+      message: "Your turn is over for now. The tutorial opponent will take its two Actions next, and then both hands will be scored together. Click OK and watch the turn pass across the table.",
+      expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal && !(gs.aMods || []).length) return {
       title: "Score Phase",
@@ -156,8 +156,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Watch The Turn Pass",
-      message: "Good. The tutorial opponent will finish the Action phase now. Notice that face-down play still consumed an Action, but it gave you useful filtering instead of a normal card effect.",
-      expect: { kind: "none" },
+      message: "Nice. The tutorial opponent is about to take its turn. After that, the round will move to scoring. Click OK and keep an eye on the rhythm of the round: your two Actions, then the opponent’s two Actions, then scoring.",
+      expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal) return {
       title: "Score Again",
@@ -184,8 +184,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Then We Score",
-      message: "The tutorial opponent is finishing its Actions. After that, the Score phase will show you how a Remember card in scrap can create a brand-new scoring option.",
-      expect: { kind: "none" },
+      message: "The tutorial opponent is about to finish its Actions. Then the Score phase will show you how a Remember card in scrap can create a brand-new scoring option for your hand. Click OK to continue.",
+      expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal) return {
       title: "Remember Time",
@@ -222,8 +222,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Losing Can Still Teach",
-      message: "The tutorial opponent is going to win this round, and that is intentional. I want you to see what happens after the winner is decided when a React is waiting in play.",
-      expect: { kind: "none" },
+      message: "The tutorial opponent is going to win this round, and that is intentional. I want you to see what happens after the winner is decided when a React is waiting in play. Click OK to let the opponent act.",
+      expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal) return {
       title: "Watch The Aftermath",
@@ -255,8 +255,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Freeze In Action",
-      message: "Watch the tutorial opponent’s second action fizzle. Freeze says no one can scrap this round, so the rule of the round overrides that action.",
-      expect: { kind: "none" },
+      message: "Watch the tutorial opponent act one last time. Freeze is already changing the rules of the round, so one of those actions is going to fizzle. Click OK and watch it happen.",
+      expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal && !(gs.aMods || []).length) return {
       title: "Final Score Phase",

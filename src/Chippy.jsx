@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export default function Chippy({ title = "Chippy", message = "", visible = true }) {
+export default function Chippy({ title = "Chippy", message = "", visible = true, actionLabel = "", onAction = null }) {
   const rootRef = useRef(null);
   const dragRef = useRef(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -71,7 +71,7 @@ export default function Chippy({ title = "Chippy", message = "", visible = true 
         position: "fixed",
         left: pos.x,
         top: pos.y,
-        zIndex: 45,
+        zIndex: 1205,
         display: "flex",
         alignItems: "flex-end",
         gap: 12,
@@ -96,6 +96,30 @@ export default function Chippy({ title = "Chippy", message = "", visible = true 
           {title}
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.5 }}>{message}</div>
+        {actionLabel && onAction && (
+          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                onAction();
+              }}
+              style={{
+                pointerEvents: "auto",
+                padding: "6px 12px",
+                borderRadius: 999,
+                border: "1px solid #8fc5ff66",
+                background: "linear-gradient(180deg,#1f4d74,#173a59)",
+                color: "#eaf6ff",
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: "pointer",
+                boxShadow: "inset 0 1px 0 #ffffff18",
+              }}
+            >
+              {actionLabel}
+            </button>
+          </div>
+        )}
         <div
           style={{
             position: "absolute",
