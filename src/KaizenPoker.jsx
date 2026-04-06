@@ -36,7 +36,11 @@ const SO=["C","D","H","S"];
 export const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 export const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
 export const FACE=["J","Q","K"];
-export function lowerRanks(rank){return rank==="2"?["A"]:RO.filter(r=>RV[r]<RV[rank])}
+export function lowerRanks(rank){
+  if(rank==="A") return [];
+  if(rank==="2") return ["A"];
+  return ["A", ...RO.filter(r=>r!=="A"&&RV[r]<RV[rank])];
+}
 export function higherRanks(rank){return rank==="A"?RO.filter(r=>r!=="A"):RO.filter(r=>RV[r]>RV[rank])}
 export function adjacentRanks(rank){
   if(rank==="2")return ["A","3"];
@@ -843,6 +847,7 @@ export default function KaizenPoker(){
       const disc=getD(g,player).filter(id=>id!==discardedId);
       if(!disc.length){then(g);return;}
       setModal({type:"pickFromList",title:`${player}: Capitalize! You discarded 8♠ — scrap a card?`,cards:disc,canCancel:true,
+        statsPlayer:player,
         onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,player,"discard",[...getD(g2,player)].filter(x=>x!==id));
           g2.scrap=[...g2.scrap,id];g2=L(g2,`${player}: Capitalize scraps ${CM[id].name}`);commitGameState(g2);then(g2);},
         onCancel:()=>{setModal(null);then(g);}});return;}
@@ -875,6 +880,7 @@ export default function KaizenPoker(){
           onPick:id=>{setModal(null);discardFromHand(g2,p,id,done);}});return;}
       if(key==="declutter"){const disc=getD(g,p);if(!disc.length){done(g);return;}
         setModal({type:"pickFromList",title:"Declutter: Scrap from discard",cards:disc,canCancel:true,
+          statsPlayer:p,
           onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));
             g2.scrap=[...g2.scrap,id];g2=L(g2,`${p} scraps ${CM[id].name} (Declutter)`);done(g2);},
           onCancel:()=>{setModal(null);done(g);}});}}});};
@@ -915,7 +921,7 @@ export default function KaizenPoker(){
       g=L(g,`${p} plays ${card.name}`);const frozen=isFroz(g,p);
       const scrapF=(g2,pl,id,reason="effect")=>{g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];trackEvent(g2,"card_scrapped",{cardId:id,reason},{playerSlot:pl});return g2;};
       const done=g2=>{setUndoState(null);g2=advance(g2);commitGameState(g2);};// Clear undo after info revealed
-      const pick=(t,cards,filter,onP,onC)=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,
+      const pick=(t,cards,filter,onP,onC,extra={})=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,...extra,
         onPick:id=>{setModal(null);onP(id);},onCancel:onC?()=>{setModal(null);onC();}:undefined});};
       const tutorialStep=(g.mode==="tutorial"&&p==="B")?(getTutorialRoundSetup(g._tutorialRound||1)?.computerActions||[])[g._tutorialComputerStep||0]:null;
       const tutorialChoice=tutorialStep&&typeof tutorialStep==="object"?(tutorialStep.choice||{}):{};
@@ -930,7 +936,7 @@ export default function KaizenPoker(){
         }
         pick(`${card.name}: Scrap a ${card.scrapSuits.map(s=>SUITS[s]).join("/")}`,disc,id=>card.scrapSuits.includes(CM[id].suit),
           id=>{let g2=scrapF({...g},p,id);g2=L(g2,`${p} scraps ${CM[id].name}`);done(g2);},
-          ()=>{g=L(g,"...cancelled.");done(g);});return;}
+          ()=>{g=L(g,"...cancelled.");done(g);},{statsPlayer:p});return;}
     // 3C Defer
     if(effectId==="3C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       setModal({type:"twoChoice",title:"Defer",card:dk[0],opt1:"Leave on Top",opt2:"Put on Bottom",
@@ -1070,26 +1076,26 @@ export default function KaizenPoker(){
     // 9C Terminate
     if(effectId==="9C"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>!FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no non-face cards. Fizzles.");done(g);return;}
-      pick("Terminate: Scrap a non-face card",disc,id=>!FACE.includes(CM[id].rank),
-        id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
+        pick("Terminate: Scrap a non-face card",disc,id=>!FACE.includes(CM[id].rank),
+          id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // 9D Impeach
     if(effectId==="9D"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no face cards. Fizzles.");done(g);return;}
-      pick("Impeach: Scrap a face card",disc,id=>FACE.includes(CM[id].rank),
-        id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
+        pick("Impeach: Scrap a face card",disc,id=>FACE.includes(CM[id].rank),
+          id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // 9H Accumulate
     if(effectId==="9H"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const ss=new Set(g.scrap.map(id=>CM[id].suit)),sr=new Set(g.scrap.map(id=>CM[id].rank));
       const valid=disc.filter(id=>ss.has(CM[id].suit)||sr.has(CM[id].rank));
       if(!valid.length){g=L(g,"...no matching cards. Fizzles.");done(g);return;}
-      pick("Accumulate: Scrap matching scrapped card",disc,id=>ss.has(CM[id].suit)||sr.has(CM[id].rank),
-        id=>{done(L(scrapF({...g},p,id),`${p} accumulates ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
+        pick("Accumulate: Scrap matching scrapped card",disc,id=>ss.has(CM[id].suit)||sr.has(CM[id].rank),
+          id=>{done(L(scrapF({...g},p,id),`${p} accumulates ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // 9S Reap
     if(effectId==="9S"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter((id,idx)=>disc.some((other,j)=>j!==idx&&(CM[other].rank===CM[id].rank||CM[other].suit===CM[id].suit)));
       if(!valid.length){g=L(g,"...no matching discard cards. Fizzles.");done(g);return;}
-      pick("Reap: Scrap a card matching another discard card",disc,id=>valid.includes(id),
-        id=>{done(L(scrapF({...g},p,id),`${p} reaps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));});return;}
+        pick("Reap: Scrap a card matching another discard card",disc,id=>valid.includes(id),
+          id=>{done(L(scrapF({...g},p,id),`${p} reaps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // JD Duplicate — immediately copies another of your Actions in play
     if(effectId==="JD"){const myActions=getP(g,p).filter(a=>a.id!==cid&&!a.faceDown);
       if(!myActions.length){g=L(g,"...no other actions to copy. Fizzles.");done(g);return;}
@@ -1421,7 +1427,8 @@ export default function KaizenPoker(){
         trackEvent(g2,"card_scrapped",{cardId:id,reason:"vanish"},{phase:"post_score",playerSlot:e.pl});
         g2=L(g2,`B: Vanish triggers automatically and scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Vanish — scrap matching suit`,cards:disc,filter:id=>effS.has(CM[id].suit),canCancel:true,
-        onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+          statsPlayer:e.pl,
+          onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
           trackEvent(g2,"card_scrapped",{cardId:id,reason:"vanish"},{phase:"post_score",playerSlot:e.pl});
           g2=L(g2,`${e.pl}: Vanish scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);},
@@ -1434,7 +1441,8 @@ export default function KaizenPoker(){
         trackEvent(g2,"card_scrapped",{cardId:id,reason:"capitulate"},{phase:"post_score",playerSlot:e.pl});
         g2=L(g2,`B: Capitulate triggers automatically after losing and scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);return;}
       setModal({type:"pickFromList",title:`${e.pl}: Capitulate — you lost! Scrap a card?`,cards:disc,canCancel:true,
-        onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
+          statsPlayer:e.pl,
+          onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
           trackEvent(g2,"card_scrapped",{cardId:id,reason:"capitulate"},{phase:"post_score",playerSlot:e.pl});
           g2=L(g2,`${e.pl}: Capitulate scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);},
@@ -1809,7 +1817,7 @@ export default function KaizenPoker(){
         <div ref={logRef} style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
           {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
     </div>
-    {gs.phase==="reveal"&&renderShowdown(false)}
+    {gs.phase==="reveal"&&renderShowdown(isMatchOver(gs))}
     {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
     {/* MODALS */}
     {modal?.type==="refreshOpts"&&<Modal title="Face-Down Options">
@@ -1824,6 +1832,7 @@ export default function KaizenPoker(){
       {modal.showHand&&<div style={{marginBottom:8}}>
         <div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
+      {modal.statsPlayer&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={modal.statsPlayer}/></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f1c40f":undefined}/>;})}</div>
