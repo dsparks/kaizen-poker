@@ -2,6 +2,7 @@ export const APP_VERSION = "0.1.0";
 export const RULES_VERSION = "2026-04-stats-v1";
 export const ANALYTICS_SOURCE = "local_hotseat";
 export const SOLO_ANALYTICS_SOURCE = "solo_variant";
+export const SOLO_ART_ANALYTICS_SOURCE = "solo_art_test";
 export const ONLINE_ANALYTICS_SOURCE = "online_guest";
 export const TUTORIAL_ANALYTICS_SOURCE = "tutorial";
 const ACTIVE_GAME_KEY = "kaizenPoker.activeTrackedGame";
@@ -26,6 +27,8 @@ export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
 const analyticsSourceForMode = mode =>
   mode === "tutorial"
     ? TUTORIAL_ANALYTICS_SOURCE
+    : mode === "solo_art"
+    ? SOLO_ART_ANALYTICS_SOURCE
     : mode === "solo"
     ? SOLO_ANALYTICS_SOURCE
     : mode === "online"
@@ -36,8 +39,8 @@ export function buildTrackedGame(gs) {
   const startedAt = gs._createdAt || nowIso();
   const source = analyticsSourceForMode(gs.mode);
   const players = {
-    A: getOrCreateGuestProfile("A", gs.mode === "solo" ? "Solo Player" : gs.mode === "tutorial" ? "Learner" : "Guest A"),
-    B: gs.mode === "solo"
+    A: getOrCreateGuestProfile("A", (gs.mode === "solo" || gs.mode === "solo_art") ? "Solo Player" : gs.mode === "tutorial" ? "Learner" : "Guest A"),
+    B: (gs.mode === "solo" || gs.mode === "solo_art")
       ? getOrCreateGuestProfile("SOLO_CHALLENGER", "Challenger")
       : gs.mode === "tutorial"
       ? getOrCreateGuestProfile("TUTORIAL_GUIDE", "Tutorial Computer")
@@ -146,7 +149,7 @@ export function buildRoundSummary(gs) {
       bHand: [...(gs.bHand || [])],
       aMods: clone(gs.aMods || []),
       bMods: clone(gs.bMods || []),
-      challengerReveal: gs.mode === "solo" ? clone(gs._soloReveal || null) : null,
+        challengerReveal: (gs.mode === "solo" || gs.mode === "solo_art") ? clone(gs._soloReveal || null) : null,
       winner: gs._revealWinner || null,
       aChips: gs.aChips,
       bChips: gs.bChips,

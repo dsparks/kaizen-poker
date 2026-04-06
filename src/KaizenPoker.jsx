@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
+import { getCardImageSrc } from "./cardImageMap.js";
 import {
   archiveCompletedTrackedGame,
   appendTrackedEvent,
@@ -41,6 +42,7 @@ export function lowerRanks(rank){
   if(rank==="2") return ["A"];
   return ["A", ...RO.filter(r=>r!=="A"&&RV[r]<RV[rank])];
 }
+const isSoloMode=mode=>mode==="solo"||mode==="solo_art";
 export function higherRanks(rank){return rank==="A"?RO.filter(r=>r!=="A"):RO.filter(r=>RV[r]>RV[rank])}
 export function adjacentRanks(rank){
   if(rank==="2")return ["A","3"];
@@ -108,6 +110,7 @@ export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
 const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
 const SOLO_TARGET_CHIPS=13;
 const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
+const CardRenderContext=createContext("html");
 const CHALLENGER_LOOKUP={
   "2":{handRank:0,handName:"High Card",description:"Highest single card, no other hand achieved"},
   "3":{handRank:1,handName:"Pair",description:"Two cards of the same rank"},
@@ -194,14 +197,14 @@ function evalChallenger(cardId){
 }
 function isMatchOver(gs){
   if(gs.mode==="tutorial")return false;
-  return gs.mode==="solo" ? (gs.aChips+gs.bChips)>=(gs._soloTarget||SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
+  return isSoloMode(gs.mode) ? (gs.aChips+gs.bChips)>=(gs._soloTarget||SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
 }
 function getMatchWinner(gs){
   if(gs.mode==="tutorial")return gs.aChips>=gs.bChips?"A":"B";
-  return gs.mode==="solo" ? (gs.aChips>gs.bChips?"A":"B") : (gs.aChips>=7?"A":"B");
+  return isSoloMode(gs.mode) ? (gs.aChips>gs.bChips?"A":"B") : (gs.aChips>=7?"A":"B");
 }
 function getRoundRequirements(gs){
-  if(gs.mode==="solo"){
+  if(isSoloMode(gs.mode)){
     const aClose=gs.aChips===6,bClose=gs.bChips===6;
     let aActions=2,bActions=2,aDraw=7,bDraw=0;
     if(aClose&&!bClose){bActions=3;}
@@ -217,8 +220,8 @@ function getRoundRequirements(gs){
 function initGame(mode="hotseat"){const all=shuf(CARDS.map(c=>c.id));
   const startedAt=new Date().toISOString();
   const gameId=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():`kp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const aInitialDeck=all.slice(0,26),bInitialDeck=all.slice(26),aInitialHand=aInitialDeck.slice(0,7),bInitialHand=mode==="solo"?[]:bInitialDeck.slice(0,7);
-  return{mode,aDeck:all.slice(7,26),bDeck:mode==="solo"?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:mode==="solo"?[]:sortC(all.slice(26,33)),
+  const aInitialDeck=all.slice(0,26),bInitialDeck=all.slice(26),aInitialHand=aInitialDeck.slice(0,7),bInitialHand=isSoloMode(mode)?[]:bInitialDeck.slice(0,7);
+  return{mode,aDeck:all.slice(7,26),bDeck:isSoloMode(mode)?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:isSoloMode(mode)?[]:sortC(all.slice(26,33)),
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
     log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,_remotePrompt:null,
@@ -273,9 +276,12 @@ function tutorialRoundState(roundNumber,baseState=null){
 // SIMPLE UI COMPONENTS
 // ============================================================
 function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
-  const w=small?68:120,h=small?95:168,ti=TI[c.type];
+  const renderStyle=useContext(CardRenderContext);
+  const artMode=renderStyle==="image";
+  const w=artMode?(small?102:204):(small?68:120),h=artMode?(small?143:278):(small?95:168),ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
+  const artSrc=renderStyle==="image"?getCardImageSrc(c.name):null;
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
     title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
@@ -285,37 +291,44 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     cursor:onClick?"pointer":"default",display:"flex",flexDirection:"column",
     padding:small?"4px 5px":"7px 9px",overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
     transform:baseTransform}}>
-    {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#2ecc71",background:"#2ecc7122",borderRadius:3,padding:"0 4px"}}>NEW</div>}
+    {renderStyle==="image"&&artSrc
+      ?<img src={artSrc} alt={`${c.rank}${SUITS[c.suit]} ${c.name}`} draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:"inherit",userSelect:"none",pointerEvents:"none"}}/>
+      :<>
+        <div style={{position:"absolute",right:small?5:10,bottom:small?18:24,fontSize:small?28:54,opacity:small?0.08:0.09,color:SC[c.suit],fontFamily:"Georgia,serif",fontWeight:700,transform:"rotate(-8deg)",pointerEvents:"none"}}>
+          {SUITS[c.suit]}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:1}}>
+          <span style={{fontSize:small?20:32,fontWeight:900,color:SC[c.suit],lineHeight:1,fontFamily:"Georgia,serif"}}>{c.rank}</span>
+          <span style={{fontSize:small?14:20,color:SC[c.suit],marginTop:small?1:3}}>{SUITS[c.suit]}</span></div>
+        <div style={{fontSize:small?8:14,fontWeight:700,color:ti.ink,marginTop:1,fontFamily:"Georgia,serif",lineHeight:1.1,textShadow:"0 1px 0 rgba(255,255,255,.35)"}}>{c.name}</div>
+        <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginTop:2,alignSelf:"flex-start",background:ti.tagBg,padding:small?"1px 4px":"2px 6px",borderRadius:999,border:`1px solid ${ti.bd}33`}}>{ti.lb}</div>
+        {!small&&<div style={{fontSize:9,color:"#3e3a35",marginTop:"auto",lineHeight:1.3,paddingTop:5,fontFamily:"Georgia,serif"}}>{c.text}</div>}
+      </>}
+    {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#2ecc71",background:"#2ecc7122",borderRadius:3,padding:"0 4px",zIndex:3}}>NEW</div>}
     {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
       <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
         <circle cx="5" cy="5" r="3.2" fill="none" stroke="#3b3228" strokeWidth="1.4"/>
         <path d="M7.6 7.6L10.5 10.5" stroke="#3b3228" strokeWidth="1.4" strokeLinecap="round"/>
       </svg>
     </button>}
-    {copySticker&&<div style={{position:"absolute",top:small?18:22,right:small?1:4,transform:"rotate(8deg)",background:"linear-gradient(180deg,#fff4a8,#f6dd69)",color:"#5a4618",border:"1px solid #d4bb5a",borderRadius:small?3:4,padding:small?"4px 5px 5px":"6px 8px 7px",fontSize:small?7:8,fontWeight:900,letterSpacing:.3,boxShadow:"0 3px 8px #00000024, inset 0 1px 0 #fff9cc",zIndex:2,textTransform:"uppercase",lineHeight:1.05,minWidth:small?38:48,textAlign:"center"}}>
+    {copySticker&&<div style={{position:"absolute",top:small?18:22,right:small?1:4,transform:"rotate(8deg)",background:"linear-gradient(180deg,#fff4a8,#f6dd69)",color:"#5a4618",border:"1px solid #d4bb5a",borderRadius:small?3:4,padding:small?"4px 5px 5px":"6px 8px 7px",fontSize:small?7:8,fontWeight:900,letterSpacing:.3,boxShadow:"0 3px 8px #00000024, inset 0 1px 0 #fff9cc",zIndex:3,textTransform:"uppercase",lineHeight:1.05,minWidth:small?38:48,textAlign:"center"}}>
       <div style={{position:"absolute",top:0,left:"18%",right:"18%",height:small?3:4,borderRadius:"0 0 3px 3px",background:"#fff8d0aa"}}/>
       <div>COPY OF</div>
       <div style={{marginTop:2,fontSize:small?6:7,letterSpacing:.05,textTransform:"none",fontWeight:800,lineHeight:1.05}}>{copySticker}</div>
     </div>}
-    {rankSticker&&<div style={{position:"absolute",top:small?18:26,left:small?3:5,transform:"rotate(-7deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 4px":"2px 8px",fontSize:small?9:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:2,lineHeight:1}}>
+    {rankSticker&&<div style={{position:"absolute",top:small?18:26,left:small?3:5,transform:"rotate(-7deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 4px":"2px 8px",fontSize:small?9:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:3,lineHeight:1}}>
       {rankSticker}
     </div>}
-    {suitSticker&&<div style={{position:"absolute",top:small?18:26,left:small?18:30,transform:"rotate(9deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?13:20,height:small?13:20,fontSize:small?9:14,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:2}}>
+    {suitSticker&&<div style={{position:"absolute",top:small?18:26,left:small?18:30,transform:"rotate(9deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?13:20,height:small?13:20,fontSize:small?9:14,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:3}}>
       {SUITS[suitSticker]||suitSticker}
     </div>}
-    <div style={{position:"absolute",right:small?5:10,bottom:small?18:24,fontSize:small?28:54,opacity:small?0.08:0.09,color:SC[c.suit],fontFamily:"Georgia,serif",fontWeight:700,transform:"rotate(-8deg)",pointerEvents:"none"}}>
-      {SUITS[c.suit]}
-    </div>
-    <div style={{display:"flex",alignItems:"center",gap:1}}>
-      <span style={{fontSize:small?20:32,fontWeight:900,color:SC[c.suit],lineHeight:1,fontFamily:"Georgia,serif"}}>{c.rank}</span>
-      <span style={{fontSize:small?14:20,color:SC[c.suit],marginTop:small?1:3}}>{SUITS[c.suit]}</span></div>
-    <div style={{fontSize:small?8:14,fontWeight:700,color:ti.ink,marginTop:1,fontFamily:"Georgia,serif",lineHeight:1.1,textShadow:"0 1px 0 rgba(255,255,255,.35)"}}>{c.name}</div>
-    <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginTop:2,alignSelf:"flex-start",background:ti.tagBg,padding:small?"1px 4px":"2px 6px",borderRadius:999,border:`1px solid ${ti.bd}33`}}>{ti.lb}</div>
-    {!small&&<div style={{fontSize:9,color:"#3e3a35",marginTop:"auto",lineHeight:1.3,paddingTop:5,fontFamily:"Georgia,serif"}}>{c.text}</div>}
   </div>);}
 function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
-  const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-160,Math.max(16,pos.x+20));
-  const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-220,Math.max(16,pos.y-30));
+  const renderStyle=useContext(CardRenderContext);
+  const previewW=renderStyle==="image"?244:160;
+  const previewH=renderStyle==="image"?318:220;
+  const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(16,pos.x+20));
+  const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(16,pos.y-30));
   return(<>
     <Card {...props} small onInspect={()=>setPinned(true)}
       onMouseEnter={e=>{setHover(true);setPos({x:e.clientX,y:e.clientY});}}
@@ -392,7 +405,7 @@ function DeckStats({gs,player}){const[show,setShow]=useState(false);
   const disc=player==="A"?gs.aDiscard:gs.bDiscard;
   const myPlay=(player==="A"?gs.aPlay:gs.bPlay).map(a=>a.id);
   const oppPlay=(player==="A"?gs.bPlay:gs.aPlay).filter(a=>!a.faceDown).map(a=>a.id);
-  const soloSeen=player==="B"&&gs.mode==="solo"?(gs._soloRevealedCards||[]):[];
+  const soloSeen=player==="B"&&isSoloMode(gs.mode)?(gs._soloRevealedCards||[]):[];
   const seen=[...hand,...disc,...myPlay,...oppPlay,...gs.scrap,...soloSeen];
   const deckSize=(player==="A"?gs.aDeck:gs.bDeck).length;
   const rc={},sc={};seen.forEach(id=>{const c=CM[id];rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
@@ -602,9 +615,9 @@ export default function KaizenPoker(){
 
   const buildFreshGame=(mode="hotseat")=>{
     let g=mode==="tutorial"?tutorialRoundState(1):initGame(mode);
-    g=L(g,`=== ROUND 1 === ${mode==="solo"?"Solo Mode":mode==="tutorial"?"Tutorial begins":"Player A"} acts first`);
+    g=L(g,`=== ROUND 1 === ${isSoloMode(mode)?"Solo Mode":mode==="tutorial"?"Tutorial begins":"Player A"} acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
-    if(mode==="solo")g=L(g,`Challenger Deck: ${g.bDeck.length} cards ready`);
+    if(isSoloMode(mode))g=L(g,`Challenger Deck: ${g.bDeck.length} cards ready`);
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setTracked(buildTrackedGame(g));commitGameState(g);};
@@ -674,7 +687,7 @@ export default function KaizenPoker(){
     }
     if(flow.stage==="q2s"){
       resolveQ2s(gs,flow.player,g2=>{
-        if(g2.mode==="solo"){finalScore(g2);return;}
+        if(isSoloMode(g2.mode)){finalScore(g2);return;}
         const nextPlayer=opp(flow.player);
         if(flow.player!==g2.firstPlayer){finalScore(g2);return;}
         resolveMods(g2,nextPlayer,getModifyEntries(g2,nextPlayer),0);
@@ -827,7 +840,7 @@ export default function KaizenPoker(){
     if(n.bonusActions>0){n.bonusActions--;n=L(n,`${n.currentPlayer} has a bonus action!`);return n;}
     n.regularActionsPlayed++;if(n.regularActionsPlayed<n.actionsRequired)return n;
     setFdMode(false);setUndoState(null);
-    if(n.mode==="solo"){n.phase="score";n=L(n,`--- SCORING ---`);return n;}
+    if(isSoloMode(n.mode)){n.phase="score";n=L(n,`--- SCORING ---`);return n;}
     if(n.currentPlayer===n.firstPlayer){n.currentPlayer=opp(n.firstPlayer);n.regularActionsPlayed=0;
       n.actionsRequired=n.currentPlayer==="A"?n._aReq:n._bReq;n=L(n,`--- ${n.currentPlayer}'s turn ---`);
     }else{n.phase="score";n=L(n,`--- SCORING ---`);}return n;};
@@ -1180,7 +1193,7 @@ export default function KaizenPoker(){
     }
     if(onlineRef.current.active&&(liveSeat||onlineRef.current.seat)&&((liveSeat||onlineRef.current.seat)!==pl))return;
     if(i>=mods.length){resolveQ2s(g,pl,g2=>{
-      if(g2.mode==="solo"){finalScore(g2);return;}
+      if(isSoloMode(g2.mode)){finalScore(g2);return;}
       const nextPlayer=opp(pl);
       if(pl!==g2.firstPlayer){finalScore(g2);return;}
       const nextMods=getModifyEntries(g2,nextPlayer);resolveMods(g2,nextPlayer,nextMods,0);});return;}
@@ -1292,22 +1305,22 @@ export default function KaizenPoker(){
   // Finalize scoring — show reveal
   const finalScore=(g)=>{const aH=getH(g,"A"),bH=getH(g,"B"),aM=getAppliedMods(g,"A"),bM=getAppliedMods(g,"B");
     const aE=evalHand(aH,aM);
-    const soloCard=g.mode==="solo"?(g.bDeck[0]||null):null;
-    const bE=g.mode==="solo"?evalChallenger(soloCard):evalHand(bH,bM);
-    const winner=g.mode==="solo"?(aE.handRank>bE.handRank?"A":"B"):compareHands(aH,bH,aM,bM);
+    const soloCard=isSoloMode(g.mode)?(g.bDeck[0]||null):null;
+    const bE=isSoloMode(g.mode)?evalChallenger(soloCard):evalHand(bH,bM);
+    const winner=isSoloMode(g.mode)?(aE.handRank>bE.handRank?"A":"B"):compareHands(aH,bH,aM,bM);
     trackEvent(g,"round_scored",{
       winner,
       aHand:[...aH],
-      bHand:g.mode==="solo"?[]:[...bH],
+      bHand:isSoloMode(g.mode)?[]:[...bH],
       aHandRank:aE.handName,
       bHandRank:bE.handName,
       aMods:[...aM],
       bMods:[...bM],
       challengerCardId:soloCard,
-      challengerDescription:g.mode==="solo"?bE.description:undefined,
+      challengerDescription:isSoloMode(g.mode)?bE.description:undefined,
     },{phase:"score",playerSlot:null});
     g=L(g,`A: ${aE.handName}`);
-    if(g.mode==="solo"){
+    if(isSoloMode(g.mode)){
       if(soloCard){
         g.bDeck=g.bDeck.slice(1);
         g._soloReveal={cardId:soloCard,handName:bE.handName,description:bE.description,handRank:bE.handRank};
@@ -1319,8 +1332,8 @@ export default function KaizenPoker(){
         g=L(g,"Challenger has no card to reveal.");
       }
     }else g=L(g,`B: ${bE.handName}`);
-    if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,g.mode==="solo"?`You win the chip! (${g.aChips}-${g.bChips})`:`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
-    else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,g.mode==="solo"?`The Challenger wins the chip! (${g.aChips}-${g.bChips})`:`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
+    if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,isSoloMode(g.mode)?`You win the chip! (${g.aChips}-${g.bChips})`:`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
+    else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,isSoloMode(g.mode)?`The Challenger wins the chip! (${g.aChips}-${g.bChips})`:`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
     else g=L(g,"Tie - no chip awarded.");
     g.phase="reveal";g.currentPlayer=g.firstPlayer;g._scoreFlow=null;g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
 
@@ -1384,27 +1397,27 @@ export default function KaizenPoker(){
       g2=L(g2,`Tutorial Opponent: ${g2.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
       trackRoundStart(g2);commitGameState(g2);return;
     }
-    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
+    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g._remotePrompt=null;
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
-    g.round++;g.firstPlayer=g.mode==="solo"?"A":g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
-    g=L(g,`=== ROUND ${g.round} === ${g.mode==="solo"?"Solo Mode":`Player ${g.firstPlayer} acts first`}`);
+    g.round++;g.firstPlayer=isSoloMode(g.mode)?"A":g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
+    g=L(g,`=== ROUND ${g.round} === ${isSoloMode(g.mode)?"Solo Mode":`Player ${g.firstPlayer} acts first`}`);
     const {aActions:aR,bActions:bR,aDraw:aD,bDraw:bD,suddenDeath}=getRoundRequirements(g);
     if(suddenDeath)g=L(g,"⚡ SUDDEN DEATH!");
     g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
     g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");trackGameFinished(g,"B");commitGameState(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
-    if(g.mode!=="solo"){
+    if(!isSoloMode(g.mode)){
       g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");trackGameFinished(g,"A");commitGameState(g);return;}trackDraws(g,"B",g.drawn||[],"round_start");g.bHand=sortC(g.bHand);
     }else g.bHand=[];
     g.phase="action";g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
-    if(g.mode==="solo")g=L(g,`Challenger Deck: ${g.bDeck.length} cards remain`);
+    if(isSoloMode(g.mode))g=L(g,`Challenger Deck: ${g.bDeck.length} cards remain`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
     trackRoundStart(g);commitGameState(g);
   };
 
   const procPost=(g,effs,i)=>{if(i>=effs.length){
     trackRoundSummary(g);
-    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${g.mode==="solo"?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
+    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`🏆 ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     const aH=getH(g,"A"),bH=getH(g,"B");
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
     startNextRound(g);return;}
@@ -1460,13 +1473,14 @@ export default function KaizenPoker(){
     <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
-      <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-        <Btn label="Hotseat Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>startGame("hotseat")}/>
-        <Btn label="Tutorial" bg="linear-gradient(135deg,#7dd3fc,#38bdf8)" onClick={()=>startGame("tutorial")}/>
-        <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
-        <Btn label="Create Online Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={startOnlineGame}/>
-      </div>
+        <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, try your rendered card art in Solo Art Test, or create an online guest game and send the link to a friend.</p>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
+          <Btn label="Hotseat Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>startGame("hotseat")}/>
+          <Btn label="Tutorial" bg="linear-gradient(135deg,#7dd3fc,#38bdf8)" onClick={()=>startGame("tutorial")}/>
+          <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
+          <Btn label="Solo Art Test" bg="linear-gradient(135deg,#93c5fd,#3b82f6)" onClick={()=>startGame("solo_art")}/>
+          <Btn label="Create Online Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={startOnlineGame}/>
+        </div>
       <div style={{width:"100%",display:"grid",gap:8}}>
         <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Online Game</div>
         <input
@@ -1486,6 +1500,7 @@ export default function KaizenPoker(){
   const actingPlayer=gs.currentPlayer;
   const seatPlayer=isOnlineMode?(liveSeat||onlineRef.current.seat||null):null;
   const viewerPlayer=gs.mode==="tutorial"?"A":isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
+  const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
@@ -1531,7 +1546,7 @@ export default function KaizenPoker(){
     const aH=getH(gs,"A"),bH=getH(gs,"B");
     const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
     const winnerPlayer=w==="A"?"A":w==="B"?"B":null;
-    const wText=gs.mode==="solo"
+    const wText=isSoloMode(gs.mode)
       ?(isFinal
         ?(w==="A"?"You win the solo run!":w==="B"?"The Challenger wins the solo run!":"The solo run ends in a tie!")
         :(w==="A"?"You win the chip!":w==="B"?"The Challenger wins the chip!":"Tie - the Challenger keeps the chip"))
@@ -1539,7 +1554,7 @@ export default function KaizenPoker(){
         ?(w==="A"?"Player A wins the game!":w==="B"?"Player B wins the game!":"Game ends in a tie!")
         :(w==="A"?"Player A wins the chip!":w==="B"?"Player B wins the chip!":"Tie - no chip awarded"));
     const postQueue=revealPostQueue(gs);
-    const soloRow=gs.mode==="solo"&&gs._soloReveal?.cardId?CHALLENGER_LOOKUP[CM[gs._soloReveal.cardId].rank]:null;
+    const soloRow=isSoloMode(gs.mode)&&gs._soloReveal?.cardId?CHALLENGER_LOOKUP[CM[gs._soloReveal.cardId].rank]:null;
     const shell=(
       <div style={{padding:isFinal?24:16,background:`linear-gradient(180deg,${w==="A"?"#241311f2":w==="B"?"#101a27f2":"#101722ee"},#0a0f16f4)`,borderRadius:isFinal?28:22,border:`2px solid ${wClr}55`,boxShadow:isFinal?`0 40px 100px ${wClr}33,inset 0 1px 0 #ffffff18,0 0 0 1px #ffffff08`:`0 24px 60px ${wClr}22,inset 0 1px 0 #ffffff12`,animation:"revealRise 0.35s ease-out",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%"}}>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
@@ -1557,14 +1572,14 @@ export default function KaizenPoker(){
           <div style={{fontSize:isFinal?18:13,color:isFinal?"#dce7f2":"#90a4b8",fontWeight:isFinal?700:400}}>{gs.aChips} - {gs.bChips}</div>
           {isFinal&&winnerPlayer&&<div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:999,background:"#0b1219dd",border:`1px solid ${wClr}55`,boxShadow:`0 12px 28px ${wClr}22`}}>
             <span style={{fontSize:10,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#f3d7a4"}}>Champion</span>
-            <span style={{fontSize:13,color:"#e8f1f9"}}>{gs.mode==="solo"?(winnerPlayer==="A"?"You beat the Challenger":"The Challenger shuts the door"):`Player ${winnerPlayer} closes it out`}</span>
+            <span style={{fontSize:13,color:"#e8f1f9"}}>{isSoloMode(gs.mode)?(winnerPlayer==="A"?"You beat the Challenger":"The Challenger shuts the door"):`Player ${winnerPlayer} closes it out`}</span>
           </div>}
           {!isFinal&&postQueue.length>0&&<div style={{marginTop:10,display:"inline-flex",gap:8,flexWrap:"wrap",justifyContent:"center",padding:"7px 12px",borderRadius:999,background:"#0b1219cc",border:"1px solid #425160",boxShadow:"0 10px 24px #00000024"}}>
             <span style={{fontSize:9,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#d8c08d"}}>Up Next</span>
             <span style={{fontSize:11,color:"#dbe5ee"}}>{postQueue.join(" / ")}</span>
           </div>}
         </div>
-        {gs.mode==="solo"
+        {isSoloMode(gs.mode)
           ?<div style={{display:"grid",gap:isFinal?18:14}}>
             <div style={{display:"flex",gap:isFinal?20:16,justifyContent:"center",flexWrap:"wrap",alignItems:"stretch"}}>
               <div style={{minWidth:300,maxWidth:420,opacity:w==="B"?0.55:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:w==="A"?"#e74c3c14":"transparent",border:w==="A"?"1px solid #e74c3c44":"1px solid transparent",boxShadow:w==="A"&&isFinal?"0 18px 42px #e74c3c22":"none"}}>
@@ -1633,7 +1648,7 @@ export default function KaizenPoker(){
     return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}>{shell}</div>;
   };
 
-  return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+  return(<CardRenderContext.Provider value={cardRenderStyle}><div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}@media (max-width:900px){.kp-table-frame{display:none}.kp-main-column{padding-left:20px!important;padding-right:12px!important}}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
       <div className="kp-table-frame" style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
@@ -1646,7 +1661,7 @@ export default function KaizenPoker(){
       <span style={{color:"#445"}}>Round {gs.round}</span>
       <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
         {gs.phase==="action"
-          ?(gs.mode==="solo"?"Action - Solo Player":gs.mode==="tutorial"?(actingPlayer==="A"?"Action - Learner":"Action - Tutorial Opponent"):`Action - Player ${actingPlayer}`)
+          ?(isSoloMode(gs.mode)?"Action - Solo Player":gs.mode==="tutorial"?(actingPlayer==="A"?"Action - Learner":"Action - Tutorial Opponent"):`Action - Player ${actingPlayer}`)
           :gs.phase==="score"
           ?"Scoring"
           :gs.phase==="reveal"
@@ -1659,11 +1674,11 @@ export default function KaizenPoker(){
       <button onClick={()=>setModal({type:"mainMenu"})} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
       <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
         <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
-          <span style={{color:"#e74c3c",fontWeight:800}}>{gs.mode==="solo"?"YOU":"A"} {gs.aChips}</span>
+          <span style={{color:"#e74c3c",fontWeight:800}}>{isSoloMode(gs.mode)?"YOU":"A"} {gs.aChips}</span>
           <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#e74c3c")}</span>
         </div>
         <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
-          <span style={{color:"#3498db",fontWeight:800}}>{gs.mode==="solo"?"CHALLENGER":"B"} {gs.bChips}</span>
+          <span style={{color:"#3498db",fontWeight:800}}>{isSoloMode(gs.mode)?"CHALLENGER":"B"} {gs.bChips}</span>
           <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#3498db")}</span>
         </div>
       </div></div>
@@ -1709,7 +1724,7 @@ export default function KaizenPoker(){
             <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
             {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" — "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
         {/* Play areas */}
-        {gs.mode==="solo"
+        {isSoloMode(gs.mode)
           ?<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>
             <div style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#11293ad8,#0b1c28dc)",border:"1px solid #658dbb55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
@@ -1805,7 +1820,7 @@ export default function KaizenPoker(){
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
-          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{gs.mode==="solo"?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
+          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
           <Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div>}
         {gs.mode!=="tutorial"&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
@@ -1910,5 +1925,5 @@ export default function KaizenPoker(){
         <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
     {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
-  </div>);
+  </div></CardRenderContext.Provider>);
 }
