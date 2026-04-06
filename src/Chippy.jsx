@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export default function Chippy({ title = "Chippy", message = "", visible = true, actionLabel = "", onAction = null }) {
+export default function Chippy({ title = "Chippy", message = "", visible = true, actionLabel = "", onAction = null, tag = null }) {
   const rootRef = useRef(null);
   const dragRef = useRef(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -17,8 +17,8 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
   useEffect(() => {
     if (!visible || placed || typeof window === "undefined") return;
     setPos({
-      x: Math.max(16, window.innerWidth - 500),
-      y: Math.max(16, window.innerHeight - 170),
+      x: Math.max(24, window.innerWidth - 760),
+      y: Math.max(24, window.innerHeight - 360),
     });
     setPlaced(true);
   }, [visible, placed]);
@@ -49,7 +49,7 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
       const dx = mouse.x - cx;
       const dy = mouse.y - cy;
       const mag = Math.max(1, Math.hypot(dx, dy));
-      const max = 5;
+      const max = 7;
       return { x: (dx / mag) * max, y: (dy / mag) * max };
     };
     return {
@@ -95,6 +95,26 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#8fd0ff", marginBottom: 6 }}>
           {title}
         </div>
+        {tag && (
+          <div style={{ marginBottom: 8 }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "3px 8px",
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 700,
+                border: `1px solid ${tag.color}`,
+                background: tag.background,
+                color: tag.color,
+                boxShadow: `0 0 0 1px ${tag.outline || "transparent"}, 0 0 16px ${tag.glow || "transparent"}`,
+              }}
+            >
+              {tag.label}
+            </span>
+          </div>
+        )}
         <div style={{ fontSize: 13, lineHeight: 1.5 }}>{message}</div>
         {actionLabel && onAction && (
           <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
@@ -165,6 +185,9 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
 }
 
 function Eye({ x, y, pupil }) {
+  const pupilSize = 8;
+  const eyeSize = 22;
+  const pupilBase = (eyeSize - pupilSize) / 2;
   return (
     <div
       style={{
@@ -182,10 +205,10 @@ function Eye({ x, y, pupil }) {
       <div
         style={{
           position: "absolute",
-          left: 8 + pupil.x,
-          top: 8 + pupil.y,
-          width: 8,
-          height: 8,
+          left: pupilBase + pupil.x,
+          top: pupilBase + pupil.y,
+          width: pupilSize,
+          height: pupilSize,
           borderRadius: "50%",
           background: "#12263a",
         }}
