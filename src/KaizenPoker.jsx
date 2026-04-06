@@ -197,7 +197,13 @@ function getMatchWinner(gs){
   return gs.mode==="solo" ? (gs.aChips>gs.bChips?"A":"B") : (gs.aChips>=7?"A":"B");
 }
 function getRoundRequirements(gs){
-  if(gs.mode==="solo")return {aActions:2,bActions:2,aDraw:7,bDraw:0,suddenDeath:false};
+  if(gs.mode==="solo"){
+    const aClose=gs.aChips===6,bClose=gs.bChips===6;
+    let aActions=2,bActions=2,aDraw=7,bDraw=0;
+    if(aClose&&!bClose){bActions=3;}
+    if(bClose&&!aClose){aDraw=8;aActions=3;}
+    return {aActions,bActions,aDraw,bDraw,suddenDeath:aClose||bClose};
+  }
   const aClose=gs.aChips===6,bClose=gs.bChips===6;
   let aActions=2,bActions=2,aDraw=7,bDraw=7;
   if(aClose&&!bClose){bDraw=8;bActions=3;}
@@ -687,6 +693,10 @@ export default function KaizenPoker(){
       });
     }
   },[gs,modal,liveSeat]);
+
+  useEffect(()=>{
+    if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight;
+  },[gs?.log?.length]);
 
   const tutorialPrompt=gs?.mode==="tutorial"?getTutorialPrompt(gs,modal,fdMode):null;
   const tutorialAckReady=gs?.mode==="tutorial" && gs.phase==="action" && gs.currentPlayer==="B" && gs._tutorialAck==="opp-turn";
@@ -1475,11 +1485,26 @@ export default function KaizenPoker(){
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
   const canAct=gs.phase==="action"&&actionsLeft>0&&canControlSeat&&onlineReady;
 
-  const isSuddenDeath=gs.mode!=="solo"&&(gs.aChips===6||gs.bChips===6);
+  const isSuddenDeath=gs.aChips===6||gs.bChips===6;
 
   const pClr=viewerPlayer==="A"?"#e74c3c":"#3498db";
   const chipGoal=7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
+  const visibleLog=gs.log.map(msg=>{
+    if(!isOnlineMode) return msg;
+    const hiddenPlayers=seatPlayer?["A","B"].filter(pl=>pl!==seatPlayer):["A","B"];
+    let next=msg;
+    hiddenPlayers.forEach(pl=>{
+      if(next.startsWith(`${pl}: `)) next=`${pl}: hidden hand`;
+      else if(next.startsWith(`${pl} draws:`)) next=`${pl} draws cards`;
+      else if(next.startsWith(`${pl} draws `) && next!==`${pl} draws`) next=`${pl} draws`;
+      else if(next.startsWith(`${pl} keeps `)) next=`${pl} looks at the top card`;
+      else if(next.startsWith(`${pl} puts `) && next.includes("on bottom")) next=`${pl} adjusts the top of the deck`;
+      else if(next.startsWith(`${pl} takes `)) next=`${pl} takes a card, then discards a random card`;
+      else if(next.startsWith(`${pl} has no face cards.`)) next=`${pl} reveals no face cards.`;
+    });
+    return next;
+  });
   const revealPostQueue=(g)=>{
     const items=[];
     for(const pl of["A","B"]){
@@ -1635,7 +1660,7 @@ export default function KaizenPoker(){
         </div>
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
-      <div className="kp-main-column" style={{flex:1,minWidth:0,padding:16,display:"flex",flexDirection:"column",gap:12,overflowY:"auto",overflowX:"hidden"}}>
+      <div className="kp-main-column" style={{flex:1,minWidth:0,minHeight:0,padding:16,display:"flex",flexDirection:"column",gap:12,overflowY:"auto",overflowX:"hidden"}}>
         {toast&&<div key={toast.key} style={{position:"sticky",top:6,zIndex:5,display:"flex",justifyContent:"center",pointerEvents:"none",marginBottom:-2}}>
           <div style={{
             padding:"8px 14px",
@@ -1779,10 +1804,10 @@ export default function KaizenPoker(){
         </div>}
       </div>
       {/* Log */}
-      <div style={{width:260,borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
-        <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px"}}>BATTLE LOG</div>
-        <div ref={el=>{if(el)el.scrollTop=el.scrollHeight;}} style={{flex:1,overflow:"auto",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
-          {gs.log.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
+      <div style={{width:260,minHeight:0,height:"100%",overflow:"hidden",borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
+        <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px"}}>GAME LOG</div>
+        <div ref={logRef} style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
+          {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
     </div>
     {gs.phase==="reveal"&&renderShowdown(false)}
     {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
