@@ -520,6 +520,7 @@ export default function KaizenPoker(){
   const[onlineStatus,setOnlineStatus]=useState("offline");
   const[liveSeat,setLiveSeat]=useState(null);
   const[liveGameId,setLiveGameId]=useState(null);
+  const[soloIntroVisible,setSoloIntroVisible]=useState(false);
   const gameTransport=createGameTransport({setGs});
   const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()});
   const pollRef=useRef(null);
@@ -579,6 +580,7 @@ export default function KaizenPoker(){
     setOnlineStatus("offline");
     setLiveSeat(null);
     setLiveGameId(null);
+    setSoloIntroVisible(false);
     trackedRef.current=null;
     gameTransport.clear();
   };
@@ -691,7 +693,7 @@ export default function KaizenPoker(){
     if(isSoloMode(mode))g=L(g,`Challenger Deck: ${g.bDeck.length} cards ready`);
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
-  const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setTracked(buildTrackedGame(g));commitGameState(g);};
+  const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);};
   const acknowledgeTutorial=mark=>{
     if(!gs||gs.mode!=="tutorial")return;
     const g2={...gs,_tutorialAck:mark};
@@ -1575,6 +1577,7 @@ export default function KaizenPoker(){
   const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
+  const soloIntroMessage="Solo Mode is you versus the Challenger deck. You still take your Actions and score your best five-card poker hand, but the Challenger does not play a normal hand. At showdown, flip the top Challenger card and use the lookup table to turn its rank into a poker hand. If your hand is better, you win the chip; ties go to the Challenger. First to 7 chips wins the run.";
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
   const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
@@ -1999,6 +2002,7 @@ export default function KaizenPoker(){
         {modal.camo&&<Btn label="Suit Only" bg="#3498db" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
         <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
+    {soloIntroVisible&&isSoloMode(gs.mode)&&<Chippy title="Solo Mode" message={soloIntroMessage} visible actionLabel="OK" onAction={()=>setSoloIntroVisible(false)} />}
     {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
   </div></CardRenderContext.Provider>);
 }
