@@ -1,16 +1,16 @@
-const cardImageModules = import.meta.glob("../rendered_kaizen_cards/*.png", {
+const cardIllustrationModules = import.meta.glob("../kaizen_illustrations/*.{png,jpg,jpeg,webp}", {
   eager: true,
   import: "default",
 });
 
-export const CARD_IMAGE_MAP = Object.fromEntries(
-  Object.entries(cardImageModules).map(([path, src]) => {
+export const CARD_ILLUSTRATION_MAP = Object.fromEntries(
+  Object.entries(cardIllustrationModules).map(([path, src]) => {
     const fileName = path.split("/").pop() || "";
-    const name = fileName.replace(/\.png$/i, "");
+    const name = fileName.replace(/\.(png|jpe?g|webp)$/i, "");
     return [name, src];
   })
 );
 
-export function getCardImageSrc(cardName) {
-  return CARD_IMAGE_MAP[cardName] || null;
+export function getCardIllustrationSrc(cardName) {
+  return CARD_ILLUSTRATION_MAP[cardName] || null;
 }

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
-import { getCardImageSrc } from "./cardImageMap.js";
+import { getCardIllustrationSrc } from "./cardImageMap.js";
 import {
   archiveCompletedTrackedGame,
   appendTrackedEvent,
@@ -79,7 +79,7 @@ export const CARDS=[
 {id:"7S",rank:"7",suit:"S",name:"Nullify",type:"Enact",text:"Put target Modify from play into its owner's discard."},
 {id:"8C",rank:"8",suit:"C",name:"Capitulate",type:"React",text:"If you lose this round, you may scrap a card."},
 {id:"8D",rank:"8",suit:"D",name:"Vanish",type:"Modify",text:"At end of score phase, scrap a card sharing suit with your scoring hand."},
-{id:"8H",rank:"8",suit:"H",name:"Reject",type:"Enact",text:"Look at top of deck. You may scrap it."},
+{id:"8H",rank:"8",suit:"H",name:"Reject",type:"Enact",text:"Look at the top card of your deck. You may scrap it."},
 {id:"8S",rank:"8",suit:"S",name:"Capitalize",type:"React",text:"When you discard this from hand, you may scrap a card."},
 {id:"9C",rank:"9",suit:"C",name:"Terminate",type:"Enact",text:"Scrap a non-face card."},
 {id:"9D",rank:"9",suit:"D",name:"Impeach",type:"Enact",text:"Scrap a face card."},
@@ -278,10 +278,35 @@ function tutorialRoundState(roundNumber,baseState=null){
 function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
   const renderStyle=useContext(CardRenderContext);
   const artMode=renderStyle==="image";
-  const w=artMode?(small?102:204):(small?68:120),h=artMode?(small?143:278):(small?95:168),ti=TI[c.type];
+  const w=artMode&&!small?180:(small?68:120),h=artMode&&!small?252:(small?95:168),ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
-  const artSrc=renderStyle==="image"?getCardImageSrc(c.name):null;
+  const artSrc=artMode?getCardIllustrationSrc(c.name):null;
+  const artCornerColor=c.suit==="S"||c.suit==="C"?"#05070a":"#ffffff";
+  const artCornerStroke=c.suit==="S"||c.suit==="C"?"#ffffff":"#05070a";
+  const artCornerShadow=c.suit==="S"||c.suit==="C"
+    ?[
+      `.75px 0 0 ${artCornerStroke}`,
+      `-.75px 0 0 ${artCornerStroke}`,
+      `0 .75px 0 ${artCornerStroke}`,
+      `0 -.75px 0 ${artCornerStroke}`,
+      ".5px .5px 0 #ffffffd8",
+      "-.5px .5px 0 #ffffffd8",
+      ".5px -.5px 0 #ffffffd8",
+      "-.5px -.5px 0 #ffffffd8",
+      "0 2px 4px rgba(0,0,0,.35)"
+    ].join(",")
+    :[
+      `1px 0 0 ${artCornerStroke}`,
+      `-1px 0 0 ${artCornerStroke}`,
+      `0 1px 0 ${artCornerStroke}`,
+      `0 -1px 0 ${artCornerStroke}`,
+      `1px 1px 0 ${artCornerStroke}`,
+      `-1px 1px 0 ${artCornerStroke}`,
+      `1px -1px 0 ${artCornerStroke}`,
+      `-1px -1px 0 ${artCornerStroke}`,
+      "0 2px 4px rgba(0,0,0,.5)"
+    ].join(",");
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
     title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
@@ -289,10 +314,30 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     background:paperBg,
     boxShadow:selected?"0 0 12px #f1c40f44, 0 8px 18px #00000026":isNew?"0 0 14px #2ecc7155, 0 8px 18px #00000026":glow?`0 0 12px ${glow}44, 0 8px 18px #00000026`:"0 4px 12px #00000026",
     cursor:onClick?"pointer":"default",display:"flex",flexDirection:"column",
-    padding:small?"4px 5px":"7px 9px",overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
+    padding:artMode?0:(small?"4px 5px":"7px 9px"),overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
     transform:baseTransform}}>
-    {renderStyle==="image"&&artSrc
-      ?<img src={artSrc} alt={`${c.rank}${SUITS[c.suit]} ${c.name}`} draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:"inherit",userSelect:"none",pointerEvents:"none"}}/>
+    {artMode&&artSrc
+      ?<>
+        <img src={artSrc} alt="" draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"50% 42%",borderRadius:"inherit",userSelect:"none",pointerEvents:"none",filter:"saturate(1.04) contrast(.98)"}}/>
+        <div style={{position:"absolute",inset:0,borderRadius:"inherit",background:"linear-gradient(90deg,rgba(0,0,0,.56) 0%,rgba(0,0,0,.26) 20%,rgba(0,0,0,0) 45%)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",top:small?5:8,left:small?5:7,zIndex:1,display:"flex",alignItems:"center",gap:small?1:2,textShadow:"0 1px 3px #000,0 0 2px #000"}}>
+          <span style={{fontSize:small?18:42,fontWeight:900,color:artCornerColor,lineHeight:1,fontFamily:"Georgia,serif",textShadow:artCornerShadow}}>{c.rank}</span>
+          <span style={{fontSize:small?12:26,color:artCornerColor,lineHeight:1,textShadow:artCornerShadow}}>{SUITS[c.suit]}</span>
+        </div>
+        <div style={{position:"absolute",left:small?3:7,top:small?32:70,bottom:small?8:12,zIndex:1,writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:small?9.5:20,fontWeight:900,color:artCornerColor,fontFamily:"Georgia,serif",letterSpacing:.2,lineHeight:1,textShadow:artCornerShadow,display:"flex",alignItems:"center",justifyContent:"flex-end",whiteSpace:"nowrap",overflow:"hidden"}}>
+          {c.name}
+        </div>
+        <div style={{position:"absolute",right:small?4:9,bottom:small?5:9,zIndex:1,fontSize:small?26:52,opacity:.18,color:SC[c.suit],fontFamily:"Georgia,serif",fontWeight:900,lineHeight:1,textShadow:"0 1px 0 #fff"}}>
+          {SUITS[c.suit]}
+        </div>
+        {!small&&<div style={{position:"absolute",left:36,right:9,bottom:9,zIndex:1,minHeight:62,borderRadius:8,background:"rgba(255,248,234,.9)",border:"1px solid rgba(84,60,33,.3)",boxShadow:"0 4px 13px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.72)",padding:"6px 7px",fontSize:10,color:"#2d251f",lineHeight:1.18,fontFamily:"Georgia,serif",textShadow:"0 1px 0 rgba(255,255,255,.45)"}}>
+          <span style={{fontWeight:900,color:ti.bd,textTransform:"uppercase",letterSpacing:.7}}>{ti.lb}</span>
+          <span>{" "}{c.text}</span>
+        </div>}
+        {small&&<div style={{position:"absolute",left:17,right:4,bottom:5,zIndex:1,borderRadius:5,background:"rgba(255,247,228,.86)",border:"1px solid rgba(84,60,33,.18)",padding:"2px 3px",fontSize:6,color:ti.bd,fontWeight:900,textTransform:"uppercase",letterSpacing:.7,textAlign:"center",lineHeight:1}}>
+          {ti.lb}
+        </div>}
+      </>
       :<>
         <div style={{position:"absolute",right:small?5:10,bottom:small?18:24,fontSize:small?28:54,opacity:small?0.08:0.09,color:SC[c.suit],fontFamily:"Georgia,serif",fontWeight:700,transform:"rotate(-8deg)",pointerEvents:"none"}}>
           {SUITS[c.suit]}
@@ -325,8 +370,8 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
   </div>);}
 function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
   const renderStyle=useContext(CardRenderContext);
-  const previewW=renderStyle==="image"?244:160;
-  const previewH=renderStyle==="image"?318:220;
+  const previewW=renderStyle==="image"?220:160;
+  const previewH=renderStyle==="image"?292:220;
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(16,pos.x+20));
   const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(16,pos.y-30));
   return(<>
