@@ -108,7 +108,7 @@ export const CARDS=[
 ];
 export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
 const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
-const SOLO_TARGET_CHIPS=13;
+const SOLO_TARGET_CHIPS=7;
 const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
 const CardRenderContext=createContext("html");
 const CHALLENGER_LOOKUP={
@@ -197,11 +197,11 @@ function evalChallenger(cardId){
 }
 function isMatchOver(gs){
   if(gs.mode==="tutorial")return false;
-  return isSoloMode(gs.mode) ? (gs.aChips+gs.bChips)>=(gs._soloTarget||SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
+  return isSoloMode(gs.mode) ? (gs.aChips>=SOLO_TARGET_CHIPS||gs.bChips>=SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
 }
 function getMatchWinner(gs){
   if(gs.mode==="tutorial")return gs.aChips>=gs.bChips?"A":"B";
-  return isSoloMode(gs.mode) ? (gs.aChips>gs.bChips?"A":"B") : (gs.aChips>=7?"A":"B");
+  return isSoloMode(gs.mode) ? (gs.aChips>=SOLO_TARGET_CHIPS?"A":"B") : (gs.aChips>=7?"A":"B");
 }
 function getRoundRequirements(gs){
   if(isSoloMode(gs.mode)){
@@ -443,24 +443,24 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
     <Btn label={`Discard ${pk.length} ➠ Draw ${pk.length}`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
 
 // Deck knowledge tracker — shows cards player has seen (not in their deck)
-function DeckStats({gs,player}){const[show,setShow]=useState(false);
-  // "Seen" = hand + discard + play + scrap (all face-up public info + own hand)
-  // Only count cards from THIS player's zones + shared scrap
-  const hand=player==="A"?gs.aHand:gs.bHand;
-  const disc=player==="A"?gs.aDiscard:gs.bDiscard;
-  const myPlay=(player==="A"?gs.aPlay:gs.bPlay).map(a=>a.id);
-  const oppPlay=(player==="A"?gs.bPlay:gs.aPlay).filter(a=>!a.faceDown).map(a=>a.id);
-  const soloSeen=player==="B"&&isSoloMode(gs.mode)?(gs._soloRevealedCards||[]):[];
-  const seen=[...hand,...disc,...myPlay,...oppPlay,...gs.scrap,...soloSeen];
-  const deckSize=(player==="A"?gs.aDeck:gs.bDeck).length;
-  const rc={},sc={};seen.forEach(id=>{const c=CM[id];rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
+function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
+  const canView=player===viewerPlayer||(isSoloMode(gs.mode)&&player==="B");
+  if(!canView)return null;
+  const initialDeck=(player==="A"?gs._aInitialDeck:gs._bInitialDeck)||[];
+  const currentDeck=player==="A"?gs.aDeck:gs.bDeck;
+  const currentSet=new Set(currentDeck);
+  const outOfDeck=initialDeck.filter(id=>!currentSet.has(id));
+  const seen=outOfDeck,deckSize=currentDeck.length;
+  const deckStatsSummary=`Current deck: ${deckSize} card${deckSize===1?"":"s"} · Out of deck: ${seen.length}`;
+  const rc={},sc={};outOfDeck.forEach(id=>{const c=CM[id];if(!c)return;rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
   const clr=player==="A"?"#e74c3c":"#3498db";
   if(!show)return(<button onClick={()=>setShow(true)} style={{padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:700,
     border:`1px solid ${clr}44`,background:"transparent",color:`${clr}99`,cursor:"pointer"}}>{player} Stats</button>);
   return(<div style={{background:"#0a0d11cc",border:`1px solid ${clr}33`,borderRadius:6,padding:6,fontSize:9}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-      <span style={{color:clr,fontWeight:700}}>{player} — {seen.length} seen, {deckSize} unseen in deck</span>
+      <span style={{color:clr,fontWeight:700}}>{player} Stats</span>
       <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#556",cursor:"pointer",fontSize:12}}>×</button></div>
+    <div style={{color:"#8ea0b4",fontSize:9,marginBottom:4}}>{deckStatsSummary}</div>
     <div style={{display:"flex",gap:12}}>
       <div><div style={{color:"#556",marginBottom:2}}>Rank</div>
         {RO.map(r=>{if(!rc[r])return null;return(<div key={r} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:18}}>{r}</span><span>{rc[r]}/4</span></div>);})}</div>
@@ -1845,7 +1845,7 @@ export default function KaizenPoker(){
                 :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                   <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 </div>)}</div></div>))}</div>}
-        <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A"/><DeckStats gs={gs} player="B"/></>} onToggleZone={handleTutorialZoneToggle} canToggleZone={tutorialCanToggleZone} spotlightZone={tutorialZoneTarget}/>
+        <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A" viewerPlayer={viewerPlayer}/><DeckStats gs={gs} player="B" viewerPlayer={viewerPlayer}/></>} onToggleZone={handleTutorialZoneToggle} canToggleZone={tutorialCanToggleZone} spotlightZone={tutorialZoneTarget}/>
         {/* Hand */}
         <div style={{padding:"14px 16px",borderRadius:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${viewerPlayer==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
           <div style={{fontSize:11,color:viewerPlayer==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
@@ -1892,7 +1892,7 @@ export default function KaizenPoker(){
       {modal.showHand&&<div style={{marginBottom:8}}>
         <div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
-      {modal.statsPlayer&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={modal.statsPlayer}/></div>}
+      {modal.statsPlayer&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={modal.statsPlayer} viewerPlayer={viewerPlayer}/></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f1c40f":undefined}/>;})}</div>
