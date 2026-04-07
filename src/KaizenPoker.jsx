@@ -390,6 +390,32 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
       </div>
     </Modal>}
   </>);}
+function VictoryCascade({winner,cards=[]}){if(!winner||winner==="TIE")return null;
+  const ids=(cards.length?cards:CARDS.slice(0,7).map(c=>c.id)).filter(Boolean);
+  if(!ids.length)return null;
+  const color=winner==="A"?"#e74c3c":"#3498db";
+  const items=Array.from({length:26},(_,i)=>({
+    id:ids[i%ids.length],
+    left:(i*37+11)%96,
+    delay:-(i%11)*0.42,
+    duration:4.4+(i%7)*0.32,
+    drift:((i%5)-2)*34,
+    bounce:((i%5)-2)*-6,
+    settle:((i%5)-2)*4,
+    exit:((i%5)-2)*10,
+    rotate:(i%2?1:-1)*(18+(i%6)*9),
+    rotateBounce:(i%2?-1:1)*(8+(i%4)*3),
+    rotateSettle:(i%2?1:-1)*(5+(i%3)*2),
+    rotateExit:(i%2?1:-1)*(12+(i%5)*4),
+  }));
+  return(<div aria-hidden="true" style={{position:"fixed",inset:0,zIndex:31,pointerEvents:"none",overflow:"hidden"}}>
+    {items.map((it,i)=><div key={`${it.id}-${i}`} style={{position:"absolute",top:-132,left:`${it.left}%`,transform:"translateX(-50%)",animation:`kpVictoryCascade ${it.duration}s cubic-bezier(.16,.72,.28,1) ${it.delay}s infinite`,["--kp-drift"]:`${it.drift}px`,["--kp-bounce"]:`${it.bounce}px`,["--kp-settle"]:`${it.settle}px`,["--kp-exit"]:`${it.exit}px`,["--kp-rot"]:`${it.rotate}deg`,["--kp-rot-bounce"]:`${it.rotateBounce}deg`,["--kp-rot-settle"]:`${it.rotateSettle}deg`,["--kp-rot-exit"]:`${it.rotateExit}deg`}}>
+      <div style={{position:"absolute",left:10,top:-62,width:16,height:150,borderRadius:999,background:`linear-gradient(180deg,transparent,${color}55,transparent)`,filter:"blur(6px)",animation:`kpVictoryTrail ${it.duration}s ease-out ${it.delay}s infinite`}}/>
+      <div style={{transform:`rotate(${it.rotate/3}deg)`,filter:`drop-shadow(0 12px 18px #0008) drop-shadow(0 0 10px ${color}66)`}}>
+        <Card id={it.id} small glow={color}/>
+      </div>
+    </div>)}
+  </div>);}
 function HandBadge({ids,mods}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span style={{padding:"3px 10px",borderRadius:5,background:`${c}18`,border:`1px solid ${c}44`,color:c,fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{r.handName}</span>;}
 function Btn({label,bg="#333",onClick,disabled}){return(<button onClick={onClick} disabled={disabled} style={{padding:"8px 16px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#94a3b8":"#081018",border:"1px solid "+(bg==="#333"?"#334155":"#ffffff22"),borderRadius:10,fontWeight:800,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1,boxShadow:disabled?"none":"0 8px 18px #00000033, inset 0 1px 0 #ffffff22",transform:"translateY(0)",transition:"transform 0.15s, box-shadow 0.15s, opacity 0.15s"}}>{label}</button>);}
@@ -1011,6 +1037,7 @@ export default function KaizenPoker(){
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>{
           g2=drawCards(g2,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"rummage");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
       on2:()=>{setModal(null);const oh=getH(g,opp(p));
+        if(isSoloMode(g.mode)){g=L(g,"...the Challenger has no hand to Refresh. Fizzles.");done(g);return;}
         if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
           queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"rummage_opp",player:opp(p),title:`${opp(p)} must discard (then draws)`});
           return;
@@ -1591,6 +1618,7 @@ export default function KaizenPoker(){
     const aH=getH(gs,"A"),bH=getH(gs,"B");
     const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
     const winnerPlayer=w==="A"?"A":w==="B"?"B":null;
+    const cascadeCards=isSoloMode(gs.mode)&&w==="B"?(gs._soloReveal?.cardId?[gs._soloReveal.cardId]:bH):(w==="A"?aH:bH);
     const wText=isSoloMode(gs.mode)
       ?(isFinal
         ?(w==="A"?"You win the solo run!":w==="B"?"The Challenger wins the solo run!":"The solo run ends in a tie!")
@@ -1690,11 +1718,12 @@ export default function KaizenPoker(){
       </div>
     );
     if(!isFinal)return <div style={{position:"fixed",inset:0,zIndex:25,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(13,21,29,.18) 0%,rgba(10,15,22,.78) 38%,rgba(5,8,12,.9) 100%)",backdropFilter:"blur(6px)"}}>{shell}</div>;
-    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}>{shell}</div>;
+    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictoryCascade winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
   };
 
   return(<CardRenderContext.Provider value={cardRenderStyle}><div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}@media (max-width:900px){.kp-table-frame{display:none}.kp-main-column{padding-left:20px!important;padding-right:12px!important}}`}</style>
+    <style>{`@keyframes kpVictoryCascade{0%{opacity:0;transform:translate3d(0,-145px,0) rotate(-8deg)}6%{opacity:1}52%{transform:translate3d(var(--kp-drift),58vh,0) rotate(var(--kp-rot))}72%{transform:translate3d(var(--kp-bounce),76vh,0) rotate(var(--kp-rot-bounce))}86%{opacity:1;transform:translate3d(var(--kp-settle),86vh,0) rotate(var(--kp-rot-settle))}100%{opacity:0;transform:translate3d(var(--kp-exit),108vh,0) rotate(var(--kp-rot-exit))}}@keyframes kpVictoryTrail{0%,9%{opacity:0;transform:scaleY(.35)}16%,74%{opacity:.82;transform:scaleY(1)}100%{opacity:0;transform:scaleY(.18)}}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
       <div className="kp-table-frame" style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
@@ -1864,9 +1893,10 @@ export default function KaizenPoker(){
             })}</div></div>
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
-        {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20}}>
-          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
-          <Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div>}
+        {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20,position:"relative"}}>
+          <VictoryCascade winner={getMatchWinner(gs)} cards={getMatchWinner(gs)==="A"?getH(gs,"A"):(isSoloMode(gs.mode)&&gs._soloReveal?.cardId?[gs._soloReveal.cardId]:getH(gs,"B"))}/>
+          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif",position:"relative",zIndex:32}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
+          <div style={{position:"relative",zIndex:32}}><Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div></div>}
         {gs.mode!=="tutorial"&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
         </div>}
