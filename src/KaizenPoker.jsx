@@ -3,11 +3,13 @@ import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
 import { getRenderedCardSrc } from "./renderedCardImageMap.js";
+import rulesPdfUrl from "../Kaizen Poker rules.pdf";
 import {
   archiveCompletedTrackedGame,
   appendTrackedEvent,
   buildRoundSummary,
   buildTrackedGame,
+  getOrCreateGuestProfile,
   finalizeTrackedGame,
   saveActiveTrackedGame,
   upsertTrackedRound,
@@ -39,7 +41,7 @@ export const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 export const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
 export const FACE=["J","Q","K"];
 export function lowerRanks(rank){
-  if(rank==="A") return [];
+  if(rank==="A") return RO.filter(r=>r!=="A");
   if(rank==="2") return ["A"];
   return ["A", ...RO.filter(r=>r!=="A"&&RV[r]<RV[rank])];
 }
@@ -128,6 +130,17 @@ const CHALLENGER_LOOKUP={
   "A":{handRank:13,handName:"Flush Five",description:"Top-tier Challenger result: Flush House / Flush Five"},
 };
 const CHALLENGER_ROWS=["2","3","4","5","6","7","8","9","10","J","Q","K","A"].map(rank=>({rank,...CHALLENGER_LOOKUP[rank]}));
+const ART_SOURCE_WIDTH=896;
+const ART_SOURCE_HEIGHT=1280;
+const ART_CROP_X=36;
+const ART_CROP_Y=36;
+const ART_CROP_WIDTH=ART_SOURCE_WIDTH-(ART_CROP_X*2);
+const ART_CROP_HEIGHT=ART_SOURCE_HEIGHT-(ART_CROP_Y*2);
+const ART_IMAGE_WIDTH_SCALE=ART_SOURCE_WIDTH/ART_CROP_WIDTH;
+const ART_IMAGE_HEIGHT_SCALE=ART_SOURCE_HEIGHT/ART_CROP_HEIGHT;
+const ART_IMAGE_OFFSET_X=`-${(ART_CROP_X/ART_CROP_WIDTH)*100}%`;
+const ART_IMAGE_OFFSET_Y=`-${(ART_CROP_Y/ART_CROP_HEIGHT)*100}%`;
+const RULES_PDF_PATH=rulesPdfUrl;
 
 // ============================================================
 // ENGINE
@@ -319,7 +332,7 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     transform:baseTransform}}>
     {artMode&&artSrc
       ?<>
-        <img src={artSrc} alt="" draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"50% 42%",borderRadius:"inherit",userSelect:"none",pointerEvents:"none",filter:"saturate(1.04) contrast(.98)"}}/>
+        <img src={artSrc} alt="" draggable={false} style={{position:"absolute",left:ART_IMAGE_OFFSET_X,top:ART_IMAGE_OFFSET_Y,width:`${ART_IMAGE_WIDTH_SCALE*100}%`,height:`${ART_IMAGE_HEIGHT_SCALE*100}%`,objectFit:"cover",objectPosition:"50% 42%",borderRadius:"inherit",userSelect:"none",pointerEvents:"none",filter:"saturate(1.04) contrast(.98)"}}/>
         <div style={{position:"absolute",inset:0,borderRadius:"inherit",background:"linear-gradient(90deg,rgba(0,0,0,.56) 0%,rgba(0,0,0,.26) 20%,rgba(0,0,0,0) 45%)",pointerEvents:"none"}}/>
         <div style={{position:"absolute",top:small?5:8,left:small?5:7,zIndex:1,display:"flex",alignItems:"center",gap:small?1:2,textShadow:"0 1px 3px #000,0 0 2px #000"}}>
           <span style={{fontSize:small?18:42,fontWeight:900,color:artCornerColor,lineHeight:1,fontFamily:"Georgia,serif",textShadow:artCornerShadow}}>{c.rank}</span>
@@ -455,8 +468,9 @@ function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=
       {children}</div></div>);}
 
 // Multi-select modal (as proper component, not IIFE)
-function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm"}){const[pk,setPk]=useState([]);
+function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm",statsPlayer,gs,viewerPlayer}){const[pk,setPk]=useState([]);
   return(<Modal title={title}><div style={{fontSize:11,color:"#667",marginBottom:6}}>Select up to {maxPick}</div>
+    {statsPlayer&&gs&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={statsPlayer} viewerPlayer={viewerPlayer}/></div>}
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<maxPick?[...p,id]:p)}/>))}</div>
@@ -711,6 +725,7 @@ export default function KaizenPoker(){
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);};
   const startGallery=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"gallery"});};
+  const startRules=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"rules"});};
   const acknowledgeTutorial=mark=>{
     if(!gs||gs.mode!=="tutorial")return;
     const g2={...gs,_tutorialAck:mark};
@@ -1264,7 +1279,7 @@ export default function KaizenPoker(){
     // KS Bury
     if(effectId==="KS"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       if(!disc.length){g=L(g,"...nothing to scrap.");done(g);return;}
-      setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury: Scrap up to 3",onPick:ids=>{setModal(null);let g2={...g};
+      setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury: Scrap up to 3",statsPlayer:p,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>!ids.includes(x)));g2.scrap=[...g2.scrap,...ids];
         g2=L(g2,`${p} buries: ${ids.map(id=>CM[id].name).join(", ")}`);done(g2);}});return;}
     g=L(g,`(${card.name} not implemented)`);done(g);};
@@ -1301,7 +1316,7 @@ export default function KaizenPoker(){
     if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);commitGameState(g2);next(g2);return;}
     // Buff
     if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff — choose which scoring card to modify`,cards:hand,filter:id=>higherRanks(CM[id].rank).length>0,canCancel:true,
-      hint:"Pick the scoring card Buff will raise.",
+      hint:"Pick the scoring card Buff will raise. Aces can count as high or low here.",
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
@@ -1310,7 +1325,7 @@ export default function KaizenPoker(){
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
     if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf — choose which scoring card to modify`,cards:hand,filter:id=>lowerRanks(CM[id].rank).length>0,canCancel:true,
-      hint:"Pick the scoring card Nerf will lower. Aces are low, so they cannot be lowered further.",
+      hint:"Pick the scoring card Nerf will lower. Aces can count as high or low here.",
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
@@ -1560,25 +1575,42 @@ export default function KaizenPoker(){
   // ============================================================
   // RENDER
   // ============================================================
-  if(!gs)return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
+  if(!gs)return(<>
+    <div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
     <div style={{position:"absolute",inset:20,borderRadius:34,border:"2px solid #b8965b33",boxShadow:"inset 0 0 0 1px #f8e7b11a"}}/>
     <div style={{position:"absolute",width:520,height:520,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,#f1c40f08 35%,transparent 70%)",top:-220,left:"50%",transform:"translateX(-50%)"}}/>
     <div style={{position:"absolute",width:420,height:420,borderRadius:"50%",background:"radial-gradient(circle,#c49a5a14 0%,transparent 68%)",bottom:-180,left:-120}}/>
     <div style={{position:"absolute",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#2ecc7114 0%,transparent 72%)",top:120,right:-80}}/>
-    <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,maxWidth:520}}>
+    <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,maxWidth:560,width:"min(560px,calc(100vw - 48px))"}}>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
         <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, try your rendered card art in Solo Art Test, or create an online guest game and send the link to a friend.</p>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-          <Btn label="Hotseat Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>startGame("hotseat")}/>
-          <Btn label="Tutorial" bg="linear-gradient(135deg,#7dd3fc,#38bdf8)" onClick={()=>startGame("tutorial")}/>
-          <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
-          <Btn label="Solo Art Test" bg="linear-gradient(135deg,#93c5fd,#3b82f6)" onClick={()=>startGame("solo_art")}/>
-          <Btn label="Card Image Gallery" bg="linear-gradient(135deg,#f9a8d4,#ec4899)" onClick={startGallery}/>
-          <Btn label="Create Online Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={startOnlineGame}/>
+        <div style={{width:"100%",display:"grid",gap:14}}>
+          <div style={{display:"grid",gap:8}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#cbb58a",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Learn</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
+              <Btn label="Tutorial" bg="linear-gradient(135deg,#f8d77a,#f2a93b)" onClick={()=>startGame("tutorial")}/>
+              <Btn label="Rules" bg="linear-gradient(135deg,#ffe3a3,#ffc857)" onClick={startRules}/>
+              <Btn label="Card Image Gallery" bg="linear-gradient(135deg,#f8b4d9,#ec5da8)" onClick={startGallery}/>
+            </div>
+          </div>
+          <div style={{display:"grid",gap:8}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#8fd0c8",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Play Locally</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
+              <Btn label="Hotseat Game" bg="linear-gradient(135deg,#63d488,#2db56b)" onClick={()=>startGame("hotseat")}/>
+              <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
+              <Btn label="Solo Art Test" bg="linear-gradient(135deg,#8ad3ff,#4598ff)" onClick={()=>startGame("solo_art")}/>
+            </div>
+          </div>
+          <div style={{display:"grid",gap:8}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#9fbdf2",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Play Remotely</div>
+            <div style={{display:"flex",justifyContent:"center"}}>
+              <Btn label="Create Online Game" bg="linear-gradient(135deg,#67a8ff,#2563eb)" onClick={startOnlineGame}/>
+            </div>
+          </div>
         </div>
-      <div style={{width:"100%",display:"grid",gap:8}}>
-        <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Online Game</div>
+      <div style={{width:"100%",display:"grid",gap:8,paddingTop:2}}>
+        <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Play Remote Game</div>
         <input
           value={joinCode}
           onChange={e=>setJoinCode(e.target.value)}
@@ -1589,8 +1621,45 @@ export default function KaizenPoker(){
           <Btn label="Join Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={()=>joinOnlineGame(joinCode)}/>
         </div>
       </div>
-      {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
-      </div></div>);
+        {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
+        </div></div>
+  </>);
+
+  if(gs.mode==="rules"){
+    return(<div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+        <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
+        <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)"}}/>
+        <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)"}}/>
+        <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)"}}/>
+      </div>
+      <div style={{padding:"10px 16px",borderBottom:"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
+        <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
+        <span style={{color:"#445"}}>Rules</span>
+        <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Rules</span>
+        <button onClick={clearGameState} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
+        <a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",textDecoration:"none",boxShadow:"inset 0 1px 0 #ffffff10"}}>Open PDF</a>
+      </div>
+      <div style={{padding:18,position:"relative",zIndex:1,height:"calc(100vh - 59px)",overflow:"hidden"}}>
+        <div style={{height:"100%",minWidth:0,padding:"12px 14px 14px",borderRadius:28,background:"linear-gradient(180deg,#133328d8,#0c241ddd)",border:"1px solid #8c6a3a44",boxShadow:"0 30px 80px #00000033,inset 0 1px 0 #f6e3b51a",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:11,color:"#8ea0b4",lineHeight:1.45}}>The current rules PDF is framed right here in the app. Use <span style={{color:"#d8c08d"}}>Open PDF</span> if you want it in a separate tab.</div>
+          <div style={{flex:"1 1 auto",height:0,minHeight:0,padding:8,borderRadius:24,background:"linear-gradient(180deg,#0d1620f5,#091119f8)",border:"1px solid #38506a66",boxShadow:"inset 0 1px 0 #ffffff0d,0 18px 48px #0000002a"}}>
+            <div style={{height:"100%",borderRadius:18,overflow:"hidden",border:"1px solid #8c6a3a55",background:"#0b1016",boxShadow:"inset 0 0 0 1px #ffffff07"}}>
+              <object data={RULES_PDF_PATH} type="application/pdf" width="100%" height="100%">
+                <div style={{height:"100%",display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#cbd5e1"}}>
+                  <div style={{display:"grid",gap:12,maxWidth:520}}>
+                    <div style={{fontSize:20,fontWeight:900,color:"#f3d7a4",fontFamily:"Georgia,serif"}}>Rules PDF Not Found</div>
+                    <div style={{fontSize:13,lineHeight:1.6,color:"#9fb0c2"}}>This viewer is looking for <span style={{color:"#f8de7e"}}>`{RULES_PDF_PATH}`</span>. If the embedded viewer stays blank, try opening the PDF in a separate tab.</div>
+                    <div><a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" style={{display:"inline-block",padding:"8px 14px",borderRadius:999,border:"1px solid #334155",color:"#dbe5ee",textDecoration:"none",background:"#101923",fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:1}}>Open PDF</a></div>
+                  </div>
+                </div>
+              </object>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>);
+  }
 
   if(gs.mode==="gallery"){
     const suitRows=[{suit:"C",label:"Clubs",color:"#dfe6eb"},{suit:"D",label:"Diamonds",color:"#ffd1d1"},{suit:"H",label:"Hearts",color:"#ffe0e0"},{suit:"S",label:"Spades",color:"#dde7f7"}];
@@ -1628,7 +1697,7 @@ export default function KaizenPoker(){
         <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
         <span style={{color:"#445"}}>Card Image Gallery</span>
         <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Card Image Gallery</span>
-        <button onClick={clearGameState} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>Menu</button>
+        <button onClick={clearGameState} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
       </div>
       <div style={{padding:18,position:"relative",zIndex:1,flex:1,minHeight:0,overflow:"auto"}}>
         <div style={{minWidth:0,padding:"16px 18px 18px",borderRadius:28,background:"linear-gradient(180deg,#133328d8,#0c241ddd)",border:"1px solid #8c6a3a44",boxShadow:"0 30px 80px #00000033,inset 0 1px 0 #f6e3b51a"}}>
@@ -2062,7 +2131,7 @@ export default function KaizenPoker(){
         </div>
       </div>
     </Modal>}
-    {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick}/>}
+    {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick} statsPlayer={modal.statsPlayer} gs={gs} viewerPlayer={viewerPlayer}/>}
     {modal?.type==="twoChoice"&&<Modal title={modal.title}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Card id={modal.card}/></div>
       <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#3498db" onClick={modal.on1}/><Btn label={modal.opt2} bg="#e67e22" onClick={modal.on2}/></div></Modal>}

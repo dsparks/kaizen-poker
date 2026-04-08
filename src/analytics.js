@@ -15,13 +15,29 @@ const nowIso = () => new Date().toISOString();
 const clone = value => JSON.parse(JSON.stringify(value));
 
 export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
-  if (!hasStorage()) return { id: mkId(), authUserId: null, isGuest: true, displayName };
+  if (!hasStorage()) return { id: mkId(), isGuest: true, displayName };
   const key = `${GUEST_PROFILE_PREFIX}${slot}`;
   const raw = window.localStorage.getItem(key);
   if (raw) return JSON.parse(raw);
-  const profile = { id: mkId(), authUserId: null, isGuest: true, displayName };
+  const profile = { id: mkId(), isGuest: true, displayName };
   window.localStorage.setItem(key, JSON.stringify(profile));
   return profile;
+}
+
+function resolveTrackedPlayerProfile(slot, mode) {
+  if ((mode === "solo" || mode === "solo_art") && slot === "B") {
+    return getOrCreateGuestProfile("SOLO_CHALLENGER", "Challenger");
+  }
+  if (mode === "tutorial" && slot === "B") {
+    return getOrCreateGuestProfile("TUTORIAL_GUIDE", "Tutorial Computer");
+  }
+  const fallbackName =
+    (mode === "solo" || mode === "solo_art") && slot === "A"
+      ? "Solo Player"
+      : mode === "tutorial" && slot === "A"
+      ? "Learner"
+      : `Guest ${slot}`;
+  return getOrCreateGuestProfile(slot, fallbackName);
 }
 
 const analyticsSourceForMode = mode =>
@@ -39,12 +55,8 @@ export function buildTrackedGame(gs) {
   const startedAt = gs._createdAt || nowIso();
   const source = analyticsSourceForMode(gs.mode);
   const players = {
-    A: getOrCreateGuestProfile("A", (gs.mode === "solo" || gs.mode === "solo_art") ? "Solo Player" : gs.mode === "tutorial" ? "Learner" : "Guest A"),
-    B: (gs.mode === "solo" || gs.mode === "solo_art")
-      ? getOrCreateGuestProfile("SOLO_CHALLENGER", "Challenger")
-      : gs.mode === "tutorial"
-      ? getOrCreateGuestProfile("TUTORIAL_GUIDE", "Tutorial Computer")
-      : getOrCreateGuestProfile("B", "Guest B"),
+    A: resolveTrackedPlayerProfile("A", gs.mode),
+    B: resolveTrackedPlayerProfile("B", gs.mode),
   };
   const tracked = {
     gameId: gs._gameId || mkId(),
@@ -53,8 +65,8 @@ export function buildTrackedGame(gs) {
     rulesVersion: RULES_VERSION,
     startedAt,
     players: {
-      A: { profileId: players.A.id, isGuest: true, displayName: players.A.displayName },
-      B: { profileId: players.B.id, isGuest: true, displayName: players.B.displayName },
+      A: { profileId: players.A.id, isGuest: players.A.isGuest !== false, displayName: players.A.displayName },
+      B: { profileId: players.B.id, isGuest: players.B.isGuest !== false, displayName: players.B.displayName },
     },
     initialState: {
       aInitialDeck: [...(gs._aInitialDeck || gs.aDeck || [])],

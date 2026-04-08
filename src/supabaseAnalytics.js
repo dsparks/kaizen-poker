@@ -4,21 +4,23 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SYNC_ENABLED = import.meta.env.VITE_ENABLE_ANALYTICS_SYNC === "true";
 
-const headers = {
-  apikey: SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-  "Content-Type": "application/json",
-  Prefer: "return=minimal,resolution=merge-duplicates",
-};
-
 const isConfigured = () => Boolean(SYNC_ENABLED && SUPABASE_URL && SUPABASE_ANON_KEY);
+
+function getHeaders() {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal,resolution=merge-duplicates",
+  };
+}
 
 async function restUpsert(table, rows, onConflict) {
   if (!rows || (Array.isArray(rows) && !rows.length) || !isConfigured()) return;
   const qs = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}${qs}`, {
     method: "POST",
-    headers,
+    headers: getHeaders(),
     body: JSON.stringify(rows),
   });
   if (!response.ok) throw new Error(`Supabase upsert failed for ${table}: ${response.status}`);
@@ -93,7 +95,6 @@ function roundRows(tracked) {
 function profileRows(tracked) {
   return ["A", "B"].map(slot => ({
     id: tracked.players[slot].profileId,
-    auth_user_id: null,
     is_guest: tracked.players[slot].isGuest,
     display_name: tracked.players[slot].displayName || `Guest ${slot}`,
     created_at: tracked.startedAt,

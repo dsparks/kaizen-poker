@@ -58,6 +58,7 @@ Apply:
 
 - [supabase/migrations/0001_analytics_schema.sql](supabase/migrations/0001_analytics_schema.sql)
 - [supabase/migrations/0002_live_games.sql](supabase/migrations/0002_live_games.sql)
+- [supabase/migrations/0003_security_advisor_fixes.sql](supabase/migrations/0003_security_advisor_fixes.sql)
 
 That migration creates:
 
@@ -77,6 +78,7 @@ It also creates analytics views:
 - `v_card_usage_summary`
 
 The second migration creates the `live_games` table used by guest online multiplayer.
+The later migration tightens RLS and fixes the Security Advisor findings.
 
 ### 4. Guest Online Multiplayer
 
