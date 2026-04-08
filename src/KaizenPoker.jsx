@@ -1283,7 +1283,8 @@ export default function KaizenPoker(){
     // Vanish: defer
     if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} — after scoring`);commitGameState(g2);next(g2);return;}
     // Buff
-    if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff — pick scoring card to increase rank`,cards:hand,showHand:hand,canCancel:true,
+    if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff — choose which scoring card to modify`,cards:hand,filter:id=>higherRanks(CM[id].rank).length>0,canCancel:true,
+      hint:"Pick the scoring card Buff will raise.",
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
@@ -1291,7 +1292,8 @@ export default function KaizenPoker(){
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
-    if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf — pick scoring card to decrease rank`,cards:hand,showHand:hand,canCancel:true,
+    if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf — choose which scoring card to modify`,cards:hand,filter:id=>lowerRanks(CM[id].rank).length>0,canCancel:true,
+      hint:"Pick the scoring card Nerf will lower. Aces are low, so they cannot be lowered further.",
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
@@ -1299,7 +1301,8 @@ export default function KaizenPoker(){
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
-    if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge — pick scoring card (±1 rank)`,cards:hand,showHand:hand,canCancel:true,
+    if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge — choose which scoring card to modify`,cards:hand,filter:id=>adjacentRanks(CM[id].rank).length>0,canCancel:true,
+      hint:"Pick the scoring card Nudge will move by one rank.",
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
         setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
@@ -1307,7 +1310,8 @@ export default function KaizenPoker(){
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
-    if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — pick scoring card to change suit`,cards:hand,showHand:hand,canCancel:true,
+    if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — choose which scoring card to modify`,cards:hand,canCancel:true,
+      hint:"Pick the scoring card Disguise will change to another suit.",
       onPick:tid=>{setModal(null);
         setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
           onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,suit:s},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);commitGameState(g2);next(g2);},
@@ -1922,6 +1926,7 @@ export default function KaizenPoker(){
         {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
     {modal?.type==="pickFromList"&&<Modal title={modal.title}>
+      {modal.hint&&<div style={{fontSize:11,color:"#9fb0c2",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
       {modal.showHand&&<div style={{marginBottom:8}}>
         <div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
