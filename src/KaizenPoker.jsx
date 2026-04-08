@@ -417,15 +417,22 @@ function VictoryCascade({winner,cards=[]}){if(!winner||winner==="TIE")return nul
       </div>
     </div>)}
   </div>);}
-function GalleryWallCard({id,hovered,onHover,onLeave}){const c=CM[id];const src=getRenderedCardSrc(c.name);
+function GalleryWallCard({id,hovered,onHover,onLeave,influence=0,direction=0}){const c=CM[id];const src=getRenderedCardSrc(c.name);
+  const[tilt,setTilt]=useState({x:0,y:0});
+  const pushX=!hovered&&direction?direction*influence*26:0;
+  const pushY=!hovered&&influence?-(influence*14):0;
+  const spreadRotate=!hovered&&direction?direction*influence*3.5:0;
+  const hoverTransform=`translateY(-10px) rotate(${(-1.4+tilt.x*0.16).toFixed(2)}deg) translateX(${(tilt.x*0.35).toFixed(1)}px)`;
+  const idleTransform=`translate(${pushX.toFixed(1)}px,${pushY.toFixed(1)}px) rotate(${spreadRotate.toFixed(2)}deg)`;
   return <div
-    onMouseEnter={onHover}
-    onMouseLeave={onLeave}
+    onMouseEnter={e=>{onHover?.();const rect=e.currentTarget.getBoundingClientRect();setTilt({x:e.clientX-(rect.left+rect.width/2),y:e.clientY-(rect.top+rect.height/2)});}}
+    onMouseLeave={()=>{setTilt({x:0,y:0});onLeave?.();}}
+    onMouseMove={e=>{if(!hovered)return;const rect=e.currentTarget.getBoundingClientRect();setTilt({x:e.clientX-(rect.left+rect.width/2),y:e.clientY-(rect.top+rect.height/2)});}}
     style={{
       width:hovered?408:56,
       height:hovered?555:78,
-      transition:"width .26s cubic-bezier(.2,.9,.22,1),height .26s cubic-bezier(.2,.9,.22,1),transform .22s ease,filter .22s ease,box-shadow .22s ease",
-      transform:hovered?"translateY(-10px) rotate(-1.4deg)":"translateY(0) rotate(0deg)",
+      transition:"width .28s cubic-bezier(.16,.9,.22,1),height .28s cubic-bezier(.16,.9,.22,1),transform .32s cubic-bezier(.16,.9,.22,1),filter .28s ease,box-shadow .28s ease",
+      transform:hovered?hoverTransform:idleTransform,
       filter:hovered?"drop-shadow(0 28px 52px rgba(0,0,0,.55))":"drop-shadow(0 10px 18px rgba(0,0,0,.22))",
       boxShadow:hovered?"0 0 0 1px #ffffff10":"none",
       position:"relative",
@@ -435,7 +442,7 @@ function GalleryWallCard({id,hovered,onHover,onLeave}){const c=CM[id];const src=
       overflow:"hidden"
     }}>
     <div style={{position:"absolute",inset:0,opacity:hovered?0:1,transition:"opacity .16s ease",pointerEvents:"none"}}>
-      <div style={{transform:"scale(.82)",transformOrigin:"top left",width:56,height:78}}>
+      <div style={{transform:`scale(${(0.82-(influence*.035)).toFixed(3)})`,transformOrigin:"top left",width:56,height:78}}>
         <Card id={id} small/>
       </div>
     </div>
@@ -1630,20 +1637,22 @@ export default function KaizenPoker(){
             <div style={{fontSize:11,color:"#8ea0b4",maxWidth:400,lineHeight:1.45,textAlign:"right"}}>Hover a mini card and it swells into the full rendered card right where it sits. The rest of the wall shifts aside to make room.</div>
           </div>
           <div style={{display:"grid",gap:16}}>
-            {suitRows.map(row=><div key={row.suit} style={{display:"grid",gridTemplateColumns:"96px minmax(0,1fr)",gap:10,alignItems:"start"}}>
+            {suitRows.map(row=>{const rowCards=RO.map(rank=>CARDS.find(c=>c.rank===rank&&c.suit===row.suit));const hoveredIndex=rowCards.findIndex(card=>card?.id===galleryHoverId);return <div key={row.suit} style={{display:"grid",gridTemplateColumns:"96px minmax(0,1fr)",gap:10,alignItems:"start"}}>
               <div style={{alignSelf:"start",position:"sticky",top:0,padding:"10px 10px",borderRadius:14,background:"#0d1820cc",border:`1px solid ${SC[row.suit]}55`,boxShadow:`0 8px 20px ${SC[row.suit]}22`,color:SC[row.suit],fontWeight:800,fontSize:11,letterSpacing:1,textTransform:"uppercase",textAlign:"center"}}>{row.label}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"flex-start",minHeight:78}}>
-                {RO.map(rank=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===row.suit);return(
+                {rowCards.map((card,index)=>{const distance=hoveredIndex===-1?99:Math.abs(index-hoveredIndex);const influence=hoveredIndex===-1||distance===0?0:Math.max(0,1.25-distance*0.28);const direction=hoveredIndex===-1||distance===0?0:(index<hoveredIndex?-1:1);return(
                   <GalleryWallCard
-                    key={`${row.suit}-${rank}`}
+                    key={card.id}
                     id={card.id}
                     hovered={galleryHoverId===card.id}
+                    influence={influence}
+                    direction={direction}
                     onHover={()=>setGalleryHoverId(card.id)}
                     onLeave={()=>setGalleryHoverId(curr=>curr===card.id?null:curr)}
                   />
                 );})}
               </div>
-            </div>)}
+            </div>})}
           </div>
         </div>
       </div>
