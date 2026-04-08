@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
+import { getRenderedCardSrc } from "./renderedCardImageMap.js";
 import {
   archiveCompletedTrackedGame,
   appendTrackedEvent,
@@ -416,6 +417,32 @@ function VictoryCascade({winner,cards=[]}){if(!winner||winner==="TIE")return nul
       </div>
     </div>)}
   </div>);}
+function GalleryWallCard({id,hovered,onHover,onLeave}){const c=CM[id];const src=getRenderedCardSrc(c.name);
+  return <div
+    onMouseEnter={onHover}
+    onMouseLeave={onLeave}
+    style={{
+      width:hovered?408:56,
+      height:hovered?555:78,
+      transition:"width .26s cubic-bezier(.2,.9,.22,1),height .26s cubic-bezier(.2,.9,.22,1),transform .22s ease,filter .22s ease,box-shadow .22s ease",
+      transform:hovered?"translateY(-10px) rotate(-1.4deg)":"translateY(0) rotate(0deg)",
+      filter:hovered?"drop-shadow(0 28px 52px rgba(0,0,0,.55))":"drop-shadow(0 10px 18px rgba(0,0,0,.22))",
+      boxShadow:hovered?"0 0 0 1px #ffffff10":"none",
+      position:"relative",
+      zIndex:hovered?8:1,
+      flex:"0 0 auto",
+      borderRadius:hovered?18:10,
+      overflow:"hidden"
+    }}>
+    <div style={{position:"absolute",inset:0,opacity:hovered?0:1,transition:"opacity .16s ease",pointerEvents:"none"}}>
+      <div style={{transform:"scale(.82)",transformOrigin:"top left",width:56,height:78}}>
+        <Card id={id} small/>
+      </div>
+    </div>
+    <div style={{position:"absolute",inset:0,opacity:hovered?1:0,transition:"opacity .18s ease",pointerEvents:"none"}}>
+      {src&&<img src={src} alt={c.name} draggable={false} style={{width:"100%",height:"100%",borderRadius:18,border:"1px solid #88a8c844",boxShadow:"0 0 0 1px #ffffff0c",objectFit:"cover",background:"#091018"}}/>}
+    </div>
+  </div>;}
 function HandBadge({ids,mods}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span style={{padding:"3px 10px",borderRadius:5,background:`${c}18`,border:`1px solid ${c}44`,color:c,fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{r.handName}</span>;}
 function Btn({label,bg="#333",onClick,disabled}){return(<button onClick={onClick} disabled={disabled} style={{padding:"8px 16px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#94a3b8":"#081018",border:"1px solid "+(bg==="#333"?"#334155":"#ffffff22"),borderRadius:10,fontWeight:800,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1,boxShadow:disabled?"none":"0 8px 18px #00000033, inset 0 1px 0 #ffffff22",transform:"translateY(0)",transition:"transform 0.15s, box-shadow 0.15s, opacity 0.15s"}}>{label}</button>);}
@@ -521,6 +548,7 @@ export default function KaizenPoker(){
   const[liveSeat,setLiveSeat]=useState(null);
   const[liveGameId,setLiveGameId]=useState(null);
   const[soloIntroVisible,setSoloIntroVisible]=useState(false);
+  const[galleryHoverId,setGalleryHoverId]=useState(null);
   const gameTransport=createGameTransport({setGs});
   const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()});
   const pollRef=useRef(null);
@@ -581,6 +609,7 @@ export default function KaizenPoker(){
     setLiveSeat(null);
     setLiveGameId(null);
     setSoloIntroVisible(false);
+    setGalleryHoverId(null);
     trackedRef.current=null;
     gameTransport.clear();
   };
@@ -694,6 +723,7 @@ export default function KaizenPoker(){
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);};
+  const startGallery=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"gallery"});};
   const acknowledgeTutorial=mark=>{
     if(!gs||gs.mode!=="tutorial")return;
     const g2={...gs,_tutorialAck:mark};
@@ -1557,6 +1587,7 @@ export default function KaizenPoker(){
           <Btn label="Tutorial" bg="linear-gradient(135deg,#7dd3fc,#38bdf8)" onClick={()=>startGame("tutorial")}/>
           <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
           <Btn label="Solo Art Test" bg="linear-gradient(135deg,#93c5fd,#3b82f6)" onClick={()=>startGame("solo_art")}/>
+          <Btn label="Card Image Gallery" bg="linear-gradient(135deg,#f9a8d4,#ec4899)" onClick={startGallery}/>
           <Btn label="Create Online Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={startOnlineGame}/>
         </div>
       <div style={{width:"100%",display:"grid",gap:8}}>
@@ -1572,7 +1603,52 @@ export default function KaizenPoker(){
         </div>
       </div>
       {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
-    </div></div>);
+      </div></div>);
+
+  if(gs.mode==="gallery"){
+    const suitRows=[{suit:"C",label:"Clubs",color:"#dfe6eb"},{suit:"D",label:"Diamonds",color:"#ffd1d1"},{suit:"H",label:"Hearts",color:"#ffe0e0"},{suit:"S",label:"Spades",color:"#dde7f7"}];
+    return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+        <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
+        <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)"}}/>
+        <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)"}}/>
+        <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)"}}/>
+      </div>
+      <div style={{padding:"10px 16px",borderBottom:"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
+        <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
+        <span style={{color:"#445"}}>Card Image Gallery</span>
+        <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Museum Wall</span>
+        <button onClick={clearGameState} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>Menu</button>
+      </div>
+      <div style={{padding:18,position:"relative",zIndex:1,flex:1,minHeight:0,overflow:"auto"}}>
+        <div style={{minWidth:0,padding:"16px 18px 18px",borderRadius:28,background:"linear-gradient(180deg,#133328d8,#0c241ddd)",border:"1px solid #8c6a3a44",boxShadow:"0 30px 80px #00000033,inset 0 1px 0 #f6e3b51a"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:12,marginBottom:18,flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#7fa0b5",fontWeight:800,marginBottom:4}}>Poker Table Gallery</div>
+              <div style={{fontSize:26,fontFamily:"Georgia,serif",fontWeight:900,color:"#f3d7a4"}}>All 52 Cards, alive on the felt</div>
+            </div>
+            <div style={{fontSize:11,color:"#8ea0b4",maxWidth:400,lineHeight:1.45,textAlign:"right"}}>Hover a mini card and it swells into the full rendered card right where it sits. The rest of the wall shifts aside to make room.</div>
+          </div>
+          <div style={{display:"grid",gap:16}}>
+            {suitRows.map(row=><div key={row.suit} style={{display:"grid",gridTemplateColumns:"96px minmax(0,1fr)",gap:10,alignItems:"start"}}>
+              <div style={{alignSelf:"start",position:"sticky",top:0,padding:"10px 10px",borderRadius:14,background:"#0d1820cc",border:`1px solid ${SC[row.suit]}55`,boxShadow:`0 8px 20px ${SC[row.suit]}22`,color:SC[row.suit],fontWeight:800,fontSize:11,letterSpacing:1,textTransform:"uppercase",textAlign:"center"}}>{row.label}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"flex-start",minHeight:78}}>
+                {RO.map(rank=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===row.suit);return(
+                  <GalleryWallCard
+                    key={`${row.suit}-${rank}`}
+                    id={card.id}
+                    hovered={galleryHoverId===card.id}
+                    onHover={()=>setGalleryHoverId(card.id)}
+                    onLeave={()=>setGalleryHoverId(curr=>curr===card.id?null:curr)}
+                  />
+                );})}
+              </div>
+            </div>)}
+          </div>
+        </div>
+      </div>
+    </div>);
+  }
 
   const isOnlineMode=gs.mode==="online";
   const actingPlayer=gs.currentPlayer;
