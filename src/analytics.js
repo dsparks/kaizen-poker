@@ -13,6 +13,7 @@ const hasStorage = () => typeof window !== "undefined" && !!window.localStorage;
 const mkId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `kp-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 const nowIso = () => new Date().toISOString();
 const clone = value => JSON.parse(JSON.stringify(value));
+const isSoloTrackedMode = mode => mode === "solo" || mode === "solo_art" || mode === SOLO_ANALYTICS_SOURCE || mode === SOLO_ART_ANALYTICS_SOURCE;
 
 export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
   if (!hasStorage()) return { id: mkId(), isGuest: true, displayName };
@@ -25,14 +26,14 @@ export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
 }
 
 function resolveTrackedPlayerProfile(slot, mode) {
-  if ((mode === "solo" || mode === "solo_art") && slot === "B") {
+  if (isSoloTrackedMode(mode) && slot === "B") {
     return getOrCreateGuestProfile("SOLO_CHALLENGER", "Challenger");
   }
   if (mode === "tutorial" && slot === "B") {
     return getOrCreateGuestProfile("TUTORIAL_GUIDE", "Tutorial Computer");
   }
   const fallbackName =
-    (mode === "solo" || mode === "solo_art") && slot === "A"
+    isSoloTrackedMode(mode) && slot === "A"
       ? "Solo Player"
       : mode === "tutorial" && slot === "A"
       ? "Learner"
@@ -43,9 +44,9 @@ function resolveTrackedPlayerProfile(slot, mode) {
 const analyticsSourceForMode = mode =>
   mode === "tutorial"
     ? TUTORIAL_ANALYTICS_SOURCE
-    : mode === "solo_art"
+    : mode === "solo_art" || mode === SOLO_ART_ANALYTICS_SOURCE
     ? SOLO_ART_ANALYTICS_SOURCE
-    : mode === "solo"
+    : mode === "solo" || mode === SOLO_ANALYTICS_SOURCE
     ? SOLO_ANALYTICS_SOURCE
     : mode === "online"
     ? ONLINE_ANALYTICS_SOURCE
@@ -161,7 +162,7 @@ export function buildRoundSummary(gs) {
       bHand: [...(gs.bHand || [])],
       aMods: clone(gs.aMods || []),
       bMods: clone(gs.bMods || []),
-        challengerReveal: (gs.mode === "solo" || gs.mode === "solo_art") ? clone(gs._soloReveal || null) : null,
+      challengerReveal: isSoloTrackedMode(gs.mode) ? clone(gs._soloReveal || null) : null,
       winner: gs._revealWinner || null,
       aChips: gs.aChips,
       bChips: gs.bChips,

@@ -59,6 +59,7 @@ Apply:
 - [supabase/migrations/0001_analytics_schema.sql](supabase/migrations/0001_analytics_schema.sql)
 - [supabase/migrations/0002_live_games.sql](supabase/migrations/0002_live_games.sql)
 - [supabase/migrations/0003_security_advisor_fixes.sql](supabase/migrations/0003_security_advisor_fixes.sql)
+- [supabase/migrations/0004_solo_analytics_views.sql](supabase/migrations/0004_solo_analytics_views.sql)
 
 That migration creates:
 
@@ -76,6 +77,9 @@ It also creates analytics views:
 - `v_card_deck_win_rates`
 - `v_card_opening_hand_win_rates`
 - `v_card_usage_summary`
+- `v_completed_solo_runs`
+- `v_completed_solo_run_card_outcomes`
+- `v_solo_card_run_win_rates`
 
 The second migration creates the `live_games` table used by guest online multiplayer.
 The later migration tightens RLS and fixes the Security Advisor findings.
@@ -147,6 +151,25 @@ This schema supports the minimum balance-analysis questions directly:
 - per-card draw / play / scoring-hand / scrap counts
 
 The most immediately useful view is `v_card_deck_win_rates`, which lets you estimate card strength from very large samples based only on deck membership.
+
+For completed solo-run balance questions, `v_completed_solo_run_card_outcomes` is the most flexible starting point. Example:
+
+```sql
+select
+  card_id,
+  count(*) filter (where player_won_run is true) as wins,
+  count(*) filter (where player_won_run is false) as losses,
+  count(*) as total_runs,
+  round(
+    100.0 * count(*) filter (where player_won_run is true) / nullif(count(*), 0),
+    1
+  ) as win_rate_pct
+from public.v_completed_solo_run_card_outcomes
+where in_deck is true
+  and total_rounds > 6
+group by card_id
+order by win_rate_pct desc nulls last, total_runs desc, card_id;
+```
 
 ## Deploy to GitHub Pages
 

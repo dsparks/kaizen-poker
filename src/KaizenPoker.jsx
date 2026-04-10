@@ -1001,7 +1001,7 @@ export default function KaizenPoker(){
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
 
   const advance=(g)=>{let n={...g};
-    if(n.bonusActions>0){n.bonusActions--;n=L(n,`${n.currentPlayer} has a bonus action!`);return n;}
+    if(n.bonusActions>0){n.bonusActions--;n=L(n,`${n.currentPlayer} may play an additional Action this round.`);return n;}
     n.regularActionsPlayed++;if(n.regularActionsPlayed<n.actionsRequired)return n;
     setFdMode(false);setUndoState(null);
     if(isSoloMode(n.mode)){n.phase="score";n=L(n,`--- SCORING ---`);return n;}
@@ -1156,7 +1156,7 @@ export default function KaizenPoker(){
         g2=L(g2,`${p} entombs ${CM[id].name}`);done(g2);});return;}
     // 4D Gamble
     if(effectId==="4D"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
-      pick("Gamble: Take from deck (random discard)",sortC(dk),null,id=>{let g2={...g};
+      pick("Gamble: Search deck and take a card",sortC(dk),null,id=>{let g2={...g};
         g2=setZ(g2,p,"deck",shuf([...getDk(g2,p)].filter(x=>x!==id)));let h=[...getH(g2,p),id];g2.newCards=[id];
         const ri=Math.floor(Math.random()*h.length);const disc=h[ri];h=h.filter((_,i)=>i!==ri);
         g2=setZ(g2,p,"hand",h);g2=setZ(g2,p,"discard",[...getD(g2,p),disc]);
@@ -1803,7 +1803,7 @@ export default function KaizenPoker(){
   const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
-  const soloIntroMessage="Solo Mode is a duel against the Challenger deck. You still take your Actions and score your best five-card poker hand, but the Challenger does not build a normal hand. At showdown, flip the top Challenger card and use the lookup table to turn its rank into a poker result. If your hand is better, you win the chip. Ties go to the Challenger. First to 7 chips wins the run.";
+  const soloIntroMessage="Solo Mode is a race to seven chips against the Challenger. You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.";
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
   const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
