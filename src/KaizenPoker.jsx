@@ -533,7 +533,7 @@ function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm",statsPlay
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<maxPick?[...p,id]:p)}/>))}</div>
-    <Btn label={`${btnLabel} (${pk.length})`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
+    <Btn label={`${btnLabel} (${pk.length})`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
 
 // Brainstorm: pick 3 in order
 function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
@@ -553,7 +553,7 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
-    <Btn label={`Discard ${pk.length} ➠ Draw ${pk.length}`} bg={pk.length?"#f1c40f":"#333"} disabled={!pk.length} onClick={()=>pk.length&&onPick(pk)}/></Modal>);}
+    <Btn label={`Discard ${pk.length} ➠ Draw ${pk.length}`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
 
 // Deck knowledge tracker — shows cards player has seen (not in their deck)
 function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
@@ -561,11 +561,21 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
   if(!canView)return null;
   const initialDeck=(player==="A"?gs._aInitialDeck:gs._bInitialDeck)||[];
   const currentDeck=player==="A"?gs.aDeck:gs.bDeck;
+  const currentHand=player==="A"?gs.aHand:gs.bHand;
+  const currentPlay=player==="A"?gs.aPlay:gs.bPlay;
+  const currentDiscard=player==="A"?gs.aDiscard:gs.bDiscard;
   const currentSet=new Set(currentDeck);
   const outOfDeck=initialDeck.filter(id=>!currentSet.has(id));
   const seen=outOfDeck,deckSize=currentDeck.length;
   const deckStatsSummary=`Current deck: ${deckSize} card${deckSize===1?"":"s"} · Out of deck: ${seen.length}`;
   const rc={},sc={};outOfDeck.forEach(id=>{const c=CM[id];if(!c)return;rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
+  const zoneCounts=[
+    {label:"Deck",count:currentDeck.length},
+    {label:"Hand",count:currentHand.length},
+    {label:"Play",count:currentPlay.length},
+    {label:"Discard",count:currentDiscard.length},
+    {label:"Scrap",count:gs.scrap.length},
+  ];
   const clr=player==="A"?"#e74c3c":"#3498db";
   if(!show)return(<button onClick={()=>setShow(true)} style={{padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:700,
     border:`1px solid ${clr}44`,background:"transparent",color:`${clr}99`,cursor:"pointer"}}>{player} Stats</button>);
@@ -573,8 +583,9 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
       <span style={{color:clr,fontWeight:700}}>{player} Stats</span>
       <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#556",cursor:"pointer",fontSize:12}}>×</button></div>
-    <div style={{color:"#8ea0b4",fontSize:9,marginBottom:4}}>{deckStatsSummary}</div>
     <div style={{display:"flex",gap:12}}>
+      <div><div style={{color:"#556",marginBottom:2}}>Zone</div>
+        {zoneCounts.map(z=>(<div key={z.label} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:36}}>{z.label}</span><span>{z.count}</span></div>))}</div>
       <div><div style={{color:"#556",marginBottom:2}}>Rank</div>
         {RO.map(r=>{if(!rc[r])return null;return(<div key={r} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:18}}>{r}</span><span>{rc[r]}/4</span></div>);})}</div>
       <div><div style={{color:"#556",marginBottom:2}}>Suit</div>
