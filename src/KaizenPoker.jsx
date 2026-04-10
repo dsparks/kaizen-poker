@@ -55,7 +55,7 @@ export function adjacentRanks(rank){
 const TI={Enact:{bg:"#f5efe1",bd:"#8d6e63",ink:"#2f241d",tagBg:"#ece1cd",lb:"Enact"},Modify:{bg:"#f7f0dc",bd:"#c89b3c",ink:"#302515",tagBg:"#efe0b7",lb:"Modify"},
   React:{bg:"#e9f2ea",bd:"#4d8b6f",ink:"#1f3229",tagBg:"#d5e6d7",lb:"React"},Amend:{bg:"#f6e4df",bd:"#a85045",ink:"#351f1b",tagBg:"#ecd1ca",lb:"Amend"},
   Remember:{bg:"#ece8f8",bd:"#6d5b9c",ink:"#251f39",tagBg:"#ddd5f0",lb:"Remember"}};
-export const CARDS=[
+const CARDS_BASE=[
 {id:"2C",rank:"2",suit:"C",name:"Prune",type:"Enact",text:"Scrap a Diamond or Heart.",scrapSuits:["D","H"]},
 {id:"2D",rank:"2",suit:"D",name:"Sculpt",type:"Enact",text:"Scrap a Heart or Spade.",scrapSuits:["H","S"]},
 {id:"2H",rank:"2",suit:"H",name:"Extract",type:"Enact",text:"Scrap a Spade or Club.",scrapSuits:["S","C"]},
@@ -109,6 +109,65 @@ export const CARDS=[
 {id:"AH",rank:"A",suit:"H",name:"Retrieve",type:"Enact",text:"Return your Action from play to hand. If you do, bonus action."},
 {id:"AS",rank:"A",suit:"S",name:"Reanimate",type:"Enact",text:"Return a card from discard to hand. If you do, bonus action."},
 ];
+const VERBATIM_CARD_TEXT_BY_ID={
+  "2C":"Scrap a Diamond or Heart. (Move it from your discard to the scrap pile.)",
+  "2D":"Scrap a Heart or Spade. (Move it from your discard to the scrap pile.)",
+  "2H":"Scrap a Spade or Club. (Move it from your discard to the scrap pile.)",
+  "2S":"Scrap a Club or Diamond. (Move it from your discard to the scrap pile.)",
+  "3C":"Look at the top card of your deck. You may put it on the bottom.",
+  "3D":"Draw a card, then discard a card.",
+  "3H":"Target player Refreshes. (Discards a card, then draws a card.)",
+  "3S":"Look at the top card of your deck. You may discard it.",
+  "4C":"Search your deck for a card, put it into your discard, then shuffle.",
+  "4D":"Search your deck for a card and put it into your hand. If you do, discard a card at random, then shuffle.",
+  "4H":"Search your deck for a card, then shuffle and put that card on top.",
+  "4S":"Return target card from your discard to your hand. If you do, discard a card.",
+  "5C":"Put the top three cards of your deck into your discard.",
+  "5D":"At the end of the score phase, put a card from your scoring hand on top of your deck.",
+  "5H":"Return another target Action card you control from play to your hand, then discard a card.",
+  "5S":"Put target card from your discard on top of your deck.",
+  "6C":"Move target card from the scrap pile into target opponent's discard.",
+  "6D":"Move target Action card from play into your discard, then scrap this card.",
+  "6H":"Exchange target card in an opponent's discard with target card in your discard.",
+  "6S":"Move target card from an opponent's discard to the scrap pile.",
+  "7C":"Target opponent can't scrap cards this round.",
+  "7D":"Target opponent can't play Modify Actions this round.",
+  "7H":"Target opponent reveals a hand with no face cards or discards a face card, then draws a card.",
+  "7S":"Put target Modify card from play into its owner's discard.",
+  "8C":"If you have the worst hand this round, you may scrap a card.",
+  "8D":"At the end of the score phase, scrap a card that shares a suit with a card from your scoring hand.",
+  "8H":"Look at the top card of your deck. You may put it in the scrap pile.",
+  "8S":"When you discard this card from your hand, you may scrap a card.",
+  "9C":"Scrap a non-face card. (Move it from your discard to the scrap pile.)",
+  "9D":"Scrap a face card. (Move it from your discard to the scrap pile.)",
+  "9H":"Scrap a card that shares a suit or rank with a scrapped card.",
+  "9S":"Scrap a card that shares a suit or rank with another card in your discard.",
+  "10C":"Change the rank of a card in your scoring hand by one.",
+  "10D":"Change the suit of a card in your scoring hand to any suit.",
+  "10H":"Change the rank of a card in your scoring hand to any higher rank.",
+  "10S":"Change the rank of a card in your scoring hand to any lower rank.",
+  "JC":"One card in your scoring hand is a copy of another target card in your scoring hand.",
+  "JD":"This card enters play as a copy of another target Action you control in play.",
+  "JH":"This card enters play as a copy of target Action an opponent controls in play.",
+  "JS":"One card in your scoring hand is a copy of target card in your discard.",
+  "QC":"As long as this card is scrapped, players may change the rank of unmodified 2s in their scoring hand to any rank.",
+  "QD":"As long as this card is scrapped, players may change the suit of unmodified 2s in their scoring hand to any suit.",
+  "QH":"As long as this card is scrapped, whenever a player would Refresh, they may instead draw a card, then discard a card.",
+  "QS":"As long as this card is scrapped, whenever a player would Refresh, they may instead scrap a card.",
+  "KC":"Draw three cards, then put three cards from your hand on top of your deck in any order.",
+  "KD":"Put the top three cards of your deck into your discard. Return target card from your discard to your hand, then discard a card.",
+  "KH":"Discard up to three cards, then draw that many cards.",
+  "KS":"Scrap up to three cards. (Move them from your discard to the scrap pile.)",
+  "AC":"Put target card from the scrap pile into your hand. If you do, play an additional Action this round.",
+  "AD":"Draw a card. If you do, play an additional Action this round.",
+  "AH":"Return another target Action card you control from play to your hand. If you do, play an additional Action this round.",
+  "AS":"Return target card from your discard to your hand. If you do, play an additional Action this round.",
+};
+export const CARDS=CARDS_BASE.map(card=>({
+  ...card,
+  shortText:card.text,
+  text:VERBATIM_CARD_TEXT_BY_ID[card.id]||card.text,
+}));
 export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
 const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
 const SOLO_TARGET_CHIPS=7;
@@ -650,7 +709,7 @@ export default function KaizenPoker(){
   },{phase:"action",playerSlot:gLike.firstPlayer});
   const trackRoundSummary=gLike=>setTracked(curr=>upsertTrackedRound(curr,buildRoundSummary(gLike)));
   const trackGameFinished=(gLike,winner)=>{
-    setTracked(curr=>finalizeTrackedGame(curr,gLike,winner));
+    setTracked(curr=>curr?.outcome?curr:finalizeTrackedGame(curr,gLike,winner));
     if(analyticsAuthorityRef.current&&trackedRef.current){archiveCompletedTrackedGame(trackedRef.current);void syncTrackedGame(trackedRef.current).catch(err=>console.error("Analytics final sync failed",err));}
   };
 
@@ -1445,6 +1504,9 @@ export default function KaizenPoker(){
     if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,isSoloMode(g.mode)?`You win the chip! (${g.aChips}-${g.bChips})`:`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
     else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,isSoloMode(g.mode)?`The Challenger wins the chip! (${g.aChips}-${g.bChips})`:`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
     else g=L(g,"Tie - no chip awarded.");
+    if(isMatchOver(g)){
+      trackGameFinished(g,getMatchWinner(g));
+    }
     g.phase="reveal";g.currentPlayer=g.firstPlayer;g._scoreFlow=null;g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
 
   // After reveal, process post-score effects and advance
@@ -1610,7 +1672,7 @@ export default function KaizenPoker(){
           </div>
         </div>
       <div style={{width:"100%",display:"grid",gap:8,paddingTop:2}}>
-        <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Play Remote Game</div>
+        <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Remote Game</div>
         <input
           value={joinCode}
           onChange={e=>setJoinCode(e.target.value)}
@@ -1741,7 +1803,7 @@ export default function KaizenPoker(){
   const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
-  const soloIntroMessage="Solo Mode is you versus the Challenger deck. You still take your Actions and score your best five-card poker hand, but the Challenger does not play a normal hand. At showdown, flip the top Challenger card and use the lookup table to turn its rank into a poker hand. If your hand is better, you win the chip; ties go to the Challenger. First to 7 chips wins the run.";
+  const soloIntroMessage="Solo Mode is a duel against the Challenger deck. You still take your Actions and score your best five-card poker hand, but the Challenger does not build a normal hand. At showdown, flip the top Challenger card and use the lookup table to turn its rank into a poker result. If your hand is better, you win the chip. Ties go to the Challenger. First to 7 chips wins the run.";
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
   const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
