@@ -9,7 +9,6 @@ import {
   appendTrackedEvent,
   buildRoundSummary,
   buildTrackedGame,
-  getOrCreateGuestProfile,
   finalizeTrackedGame,
   saveActiveTrackedGame,
   upsertTrackedRound,
@@ -566,8 +565,6 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
   const currentDiscard=player==="A"?gs.aDiscard:gs.bDiscard;
   const currentSet=new Set(currentDeck);
   const outOfDeck=initialDeck.filter(id=>!currentSet.has(id));
-  const seen=outOfDeck,deckSize=currentDeck.length;
-  const deckStatsSummary=`Current deck: ${deckSize} card${deckSize===1?"":"s"} · Out of deck: ${seen.length}`;
   const rc={},sc={};outOfDeck.forEach(id=>{const c=CM[id];if(!c)return;rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
   const zoneCounts=[
     {label:"Deck",count:currentDeck.length},

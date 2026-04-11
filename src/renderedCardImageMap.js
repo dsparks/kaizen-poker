@@ -3,7 +3,7 @@ const renderedCardModules = import.meta.glob("../rendered_kaizen_cards/*.{png,jp
   import: "default",
 });
 
-export const RENDERED_CARD_IMAGE_MAP = Object.fromEntries(
+const RENDERED_CARD_IMAGE_MAP = Object.fromEntries(
   Object.entries(renderedCardModules).map(([path, src]) => {
     const fileName = path.split("/").pop() || "";
     const name = fileName.replace(/\.(png|jpe?g|webp)$/i, "");

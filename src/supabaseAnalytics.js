@@ -114,7 +114,3 @@ export async function syncTrackedGame(tracked) {
   await restUpsert("game_player_card_usage", derived.cardUsage, "game_id,player_slot,card_id");
   return { skipped: false };
 }
-
-export function analyticsSyncEnabled() {
-  return isConfigured();
-}

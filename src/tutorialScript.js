@@ -1,6 +1,4 @@
 export const TUTORIAL_TOTAL_ROUNDS = 3;
-export const TUTORIAL_ANALYTICS_SOURCE = "tutorial";
-
 export const TUTORIAL_INITIAL_DECKS = {
   A: [
     "3D", "10H", "KC", "KD", "9H", "9C", "2C", "10S",

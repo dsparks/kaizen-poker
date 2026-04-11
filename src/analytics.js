@@ -4,7 +4,7 @@ export const ANALYTICS_SOURCE = "local_hotseat";
 export const SOLO_ANALYTICS_SOURCE = "solo_variant";
 export const SOLO_ART_ANALYTICS_SOURCE = "solo_art_test";
 export const ONLINE_ANALYTICS_SOURCE = "online_guest";
-export const TUTORIAL_ANALYTICS_SOURCE = "tutorial";
+const TUTORIAL_ANALYTICS_SOURCE = "tutorial";
 const ACTIVE_GAME_KEY = "kaizenPoker.activeTrackedGame";
 const COMPLETED_GAMES_KEY = "kaizenPoker.completedTrackedGames";
 const GUEST_PROFILE_PREFIX = "kaizenPoker.guestProfile.";
@@ -15,7 +15,7 @@ const nowIso = () => new Date().toISOString();
 const clone = value => JSON.parse(JSON.stringify(value));
 const isSoloTrackedMode = mode => mode === "solo" || mode === "solo_art" || mode === SOLO_ANALYTICS_SOURCE || mode === SOLO_ART_ANALYTICS_SOURCE;
 
-export function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
+function getOrCreateGuestProfile(slot, displayName = `Guest ${slot}`) {
   if (!hasStorage()) return { id: mkId(), isGuest: true, displayName };
   const key = `${GUEST_PROFILE_PREFIX}${slot}`;
   const raw = window.localStorage.getItem(key);
@@ -202,7 +202,7 @@ export function archiveCompletedTrackedGame(tracked) {
   window.localStorage.removeItem(ACTIVE_GAME_KEY);
 }
 
-export function loadCompletedTrackedGames() {
+function loadCompletedTrackedGames() {
   if (!hasStorage()) return [];
   const raw = window.localStorage.getItem(COMPLETED_GAMES_KEY);
   if (!raw) return [];
