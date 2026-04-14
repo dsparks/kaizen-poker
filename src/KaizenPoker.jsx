@@ -188,6 +188,73 @@ const CHALLENGER_LOOKUP={
   "A":{handRank:13,handName:"Flush Five",description:"Top-tier Challenger result: Flush House / Flush Five"},
 };
 const CHALLENGER_ROWS=["2","3","4","5","6","7","8","9","10","J","Q","K","A"].map(rank=>({rank,...CHALLENGER_LOOKUP[rank]}));
+const THEME_DEMO_HAND=["3S","4D","8H","10H","JC","KH","AS"];
+const THEME_DEMO_SCORING=["10H","JC","KH","4D","AS"];
+const THEME_DEMO_LOG=[
+  "Round 4 - Sudden pressure",
+  "You play Consider and keep the top card.",
+  "The Challenger reveals a 9 for Full House pressure.",
+  "Chippy: One sharp hand wins the chip.",
+];
+const THEME_DEMOS={
+  vintage_casino:{
+    title:"Vintage Casino",
+    eyebrow:"Smoky felt / brass rail / supper-club energy",
+    description:"A classic card room look: green baize, brass trim, cream labels, and old-house scoreboard details.",
+    shell:"radial-gradient(circle at 50% -10%,#3f2513 0%,#1f3c2f 28%,#10251d 58%,#050908 100%)",
+    panel:"linear-gradient(180deg,#1f4737ee,#10251dee)",
+    panelBorder:"#b8945a66",
+    accent:"#f3c56c",
+    accentSoft:"#dcb77a",
+    ink:"#f7edd6",
+    subInk:"#cab892",
+    buttonA:"linear-gradient(135deg,#f3d48d,#d39d41)",
+    buttonB:"linear-gradient(135deg,#7bd7b0,#2e8a6d)",
+    chip:"#d8483e",
+    titleFont:"Georgia, 'Times New Roman', serif",
+    bodyFont:"'Courier New', monospace",
+    ornament:"linear-gradient(90deg,transparent,#f3c56c55,transparent)",
+    badgeBg:"#2c160e",
+  },
+  storybook_cardroom:{
+    title:"Storybook Card Room",
+    eyebrow:"Illustrated tavern / parchment / magical table",
+    description:"A warmer, more whimsical room with parchment panels, lantern light, and a slightly fairy-tale table presence.",
+    shell:"radial-gradient(circle at 50% -10%,#7a5232 0%,#35513f 26%,#1b3027 60%,#0a1310 100%)",
+    panel:"linear-gradient(180deg,#f2e4c8f2,#d7c1a1ee)",
+    panelBorder:"#8b5e3c88",
+    accent:"#8d4f2b",
+    accentSoft:"#ae7b4d",
+    ink:"#2d1f16",
+    subInk:"#614734",
+    buttonA:"linear-gradient(135deg,#f4c987,#d79256)",
+    buttonB:"linear-gradient(135deg,#b3d7a6,#6da172)",
+    chip:"#d26454",
+    titleFont:"Palatino, 'Book Antiqua', Georgia, serif",
+    bodyFont:"Georgia, serif",
+    ornament:"linear-gradient(90deg,transparent,#8d4f2b55,transparent)",
+    badgeBg:"#fff8ee",
+  },
+  faithful_balatro:{
+    title:"Faithful Balatro",
+    eyebrow:"High-contrast neon / punchy stakes / maximal arcade-casino",
+    description:"A loud, flashy take with bold contrast, oversized headers, glowing counters, and a punchier stage presence.",
+    shell:"radial-gradient(circle at 50% -10%,#62221c 0%,#251435 26%,#13111f 58%,#06070c 100%)",
+    panel:"linear-gradient(180deg,#23192df2,#111722f4)",
+    panelBorder:"#ffdf6a66",
+    accent:"#ffe36e",
+    accentSoft:"#ff8a66",
+    ink:"#fff7dc",
+    subInk:"#f8cf77",
+    buttonA:"linear-gradient(135deg,#ffe36e,#ff9f43)",
+    buttonB:"linear-gradient(135deg,#6cf0ff,#3f8cff)",
+    chip:"#ff5b4d",
+    titleFont:"Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif",
+    bodyFont:"Trebuchet MS, Verdana, sans-serif",
+    ornament:"linear-gradient(90deg,transparent,#ffe36e77,transparent)",
+    badgeBg:"#160f1c",
+  },
+};
 const ART_SOURCE_WIDTH=896;
 const ART_SOURCE_HEIGHT=1280;
 const ART_CROP_X=36;
@@ -512,6 +579,139 @@ function Chip({filled,color,label,active}){return <div style={{width:22,height:2
   <span style={{fontSize:9,fontWeight:900,color:filled?"#fff7e8":"#8ea0b4",fontFamily:"Georgia,serif",textShadow:"0 1px 2px #0008"}}>{label}</span>
 </div>;}
 
+function ThemeDemoScreen({themeKey,onBack,onStartGame}){
+  const theme=THEME_DEMOS[themeKey]||THEME_DEMOS.vintage_casino;
+  const sampleScoringMods=themeKey==="faithful_balatro"?[{target:"JC",rank:"A",suit:"S"}]:themeKey==="storybook_cardroom"?[{target:"10H",rank:"K",suit:null}]:[];
+  const demoBadgeTheme=themeKey==="storybook_cardroom"
+    ?{background:"#fff9ef",border:`1px solid ${theme.panelBorder}`,color:theme.accent}
+    :{background:theme.badgeBg,border:`1px solid ${theme.panelBorder}`,color:theme.accent};
+  return(
+    <div style={{minHeight:"100vh",background:theme.shell,color:theme.ink,fontFamily:theme.bodyFont,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+      <style>{`@keyframes kpThemeFloat{0%{transform:translateY(0px)}50%{transform:translateY(-10px)}100%{transform:translateY(0px)}}@keyframes kpThemeShimmer{0%{transform:translateX(-16%)}100%{transform:translateX(16%)}}`}</style>
+      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+        <div style={{position:"absolute",inset:18,borderRadius:34,border:`1px solid ${theme.panelBorder}`,boxShadow:`inset 0 0 0 1px ${theme.accent}14`}}/>
+        <div style={{position:"absolute",top:-140,left:"50%",transform:"translateX(-50%)",width:640,height:640,borderRadius:"50%",background:`radial-gradient(circle,${theme.accent}22 0%,transparent 64%)`,animation:"kpThemeFloat 11s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",left:-100,top:220,width:320,height:320,borderRadius:"50%",background:`radial-gradient(circle,${theme.accentSoft}18 0%,transparent 70%)`,animation:"kpThemeFloat 13s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",right:-90,bottom:110,width:280,height:280,borderRadius:"50%",background:`radial-gradient(circle,${theme.accent}16 0%,transparent 72%)`,animation:"kpThemeFloat 9.5s ease-in-out infinite"}}/>
+        {themeKey==="faithful_balatro"&&<div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(180deg,transparent 0 12px,rgba(255,255,255,.025) 12px 13px)",mixBlendMode:"screen",opacity:.45}}/>}
+      </div>
+
+      <div style={{padding:"12px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${theme.panelBorder}`,background:`linear-gradient(180deg,rgba(10,12,18,.18),rgba(10,12,18,.04))`,backdropFilter:"blur(8px)",position:"relative",zIndex:1,flexWrap:"wrap"}}>
+        <span style={{fontFamily:theme.titleFont,fontSize:26,fontWeight:900,letterSpacing:themeKey==="faithful_balatro"?2:3,color:theme.accent}}>KAIZEN POKER</span>
+        <span style={{padding:"5px 11px",borderRadius:999,...demoBadgeTheme,fontSize:10,fontWeight:900,letterSpacing:1.4,textTransform:"uppercase"}}>Theme Demo</span>
+        <span style={{color:theme.subInk,fontSize:11}}>{theme.title}</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
+          <Btn label="Tutorial" bg={theme.buttonA} onClick={()=>onStartGame("tutorial")}/>
+          <Btn label="Solo Mode" bg={theme.buttonB} onClick={()=>onStartGame("solo")}/>
+          <Btn label="Menu" bg="#333" onClick={onBack}/>
+        </div>
+      </div>
+
+      <div style={{padding:20,display:"grid",gridTemplateColumns:"minmax(280px,420px) minmax(0,1fr)",gap:18,flex:1,minHeight:0}}>
+        <div style={{display:"grid",gap:16,alignContent:"start"}}>
+          <div style={{padding:"22px 22px 20px",borderRadius:28,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 26px 60px #00000045,inset 0 1px 0 #ffffff18",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",left:"-18%",top:0,bottom:0,width:"45%",background:theme.ornament,filter:"blur(10px)",opacity:.7,animation:"kpThemeShimmer 7s linear infinite"}}/>
+            <div style={{position:"relative"}}>
+              <div style={{fontSize:11,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:theme.subInk,marginBottom:8}}>{theme.eyebrow}</div>
+              <div style={{fontFamily:theme.titleFont,fontSize:themeKey==="faithful_balatro"?52:42,fontWeight:900,letterSpacing:themeKey==="faithful_balatro"?1.5:3,lineHeight:1,color:theme.accent,marginBottom:12}}>{theme.title}</div>
+              <div style={{fontSize:15,lineHeight:1.7,color:themeKey==="storybook_cardroom"?theme.subInk:theme.ink,marginBottom:16}}>{theme.description}</div>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                <Btn label="Launch Tutorial" bg={theme.buttonA} onClick={()=>onStartGame("tutorial")}/>
+                <Btn label="Launch Solo" bg={theme.buttonB} onClick={()=>onStartGame("solo")}/>
+              </div>
+            </div>
+          </div>
+
+          <div style={{padding:"16px 18px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000035"}}>
+            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk,marginBottom:10}}>What This Demo Is Testing</div>
+            <div style={{display:"grid",gap:8,fontSize:13,lineHeight:1.55,color:themeKey==="storybook_cardroom"?theme.subInk:theme.ink}}>
+              <div>Typography, framing, and button voice for a full-app reskin.</div>
+              <div>How card faces sit against the table, panels, and accent lighting.</div>
+              <div>Whether the mood feels worth carrying into the real gameplay screens.</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{minHeight:0,display:"grid",gridTemplateRows:"auto auto 1fr auto",gap:14}}>
+          <div style={{padding:"14px 16px",borderRadius:26,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 20px 50px #00000030"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap"}}>
+                <span style={{fontFamily:theme.titleFont,fontWeight:900,fontSize:themeKey==="faithful_balatro"?24:20,color:theme.accent}}>SHOWDOWN PRESSURE</span>
+                <span style={{fontSize:11,color:theme.subInk,letterSpacing:1.2,textTransform:"uppercase"}}>Round 4</span>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:999,background:"#0d1320aa",border:`1px solid ${theme.panelBorder}`}}>
+                  <span style={{fontSize:11,fontWeight:900,color:theme.accent}}>A 5</span>
+                  <span style={{display:"flex",gap:4}}><Chip filled color={theme.chip} label="A" active/><Chip filled color={theme.chip} label="A"/><Chip filled color={theme.chip} label="A"/><Chip filled color={theme.chip} label="A"/><Chip filled color={theme.chip} label="A"/></span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:999,background:"#0d1320aa",border:`1px solid ${theme.panelBorder}`}}>
+                  <span style={{fontSize:11,fontWeight:900,color:"#7ec8ff"}}>{themeKey==="faithful_balatro"?"BLIND":"B"} 4</span>
+                  <span style={{display:"flex",gap:4}}><Chip filled color="#3498db" label="B" active/><Chip filled color="#3498db" label="B"/><Chip filled color="#3498db" label="B"/><Chip filled color="#3498db" label="B"/></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{padding:"14px 16px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000030"}}>
+            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk,marginBottom:10}}>Sample Hand Presentation</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
+              {THEME_DEMO_HAND.map(id=><div key={id} style={{animation:"kpThemeFloat 8s ease-in-out infinite",animationDelay:`${RO.indexOf(CM[id].rank)*0.12}s`}}><Card id={id} glow={theme.accent}/></div>)}
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"minmax(280px,1fr) 280px",gap:14,minHeight:0}}>
+            <div style={{padding:"16px 16px 18px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000030",display:"flex",flexDirection:"column",minHeight:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:12,flexWrap:"wrap"}}>
+                <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk}}>Scoring Snapshot</div>
+                <HandBadge ids={THEME_DEMO_SCORING} mods={sampleScoringMods}/>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                {THEME_DEMO_SCORING.map(id=>{
+                  const mod=sampleScoringMods.find(m=>m.target===id);
+                  return <PreviewCard key={id} id={id} rankSticker={mod?.rank} suitSticker={mod?.suit} />;
+                })}
+              </div>
+              <div style={{padding:"14px 16px",borderRadius:18,background:"#091018c9",border:`1px solid ${theme.panelBorder}`,color:themeKey==="storybook_cardroom"?"#f8efdf":theme.ink,lineHeight:1.6,fontSize:14}}>
+                {themeKey==="vintage_casino"&&"The brass-and-felt version leans classic: old casino rail, subdued glow, and stately typography around the cards."}
+                {themeKey==="storybook_cardroom"&&"The storybook version softens the table into something more illustrated and welcoming, without losing the sense that the cards still matter."}
+                {themeKey==="faithful_balatro"&&"The Balatro-leaning version turns the table into a loud performance stage: high contrast, chunky headers, and a more feverish sense of momentum."}
+              </div>
+            </div>
+
+            <div style={{padding:"16px 16px 18px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000030",display:"grid",gridTemplateRows:"auto auto 1fr",gap:12,minHeight:0}}>
+              <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk}}>Game Log Voice</div>
+              <div style={{display:"grid",gap:8,fontSize:12,color:themeKey==="storybook_cardroom"?theme.subInk:theme.ink}}>
+                {THEME_DEMO_LOG.map((line,idx)=><div key={idx} style={{padding:"8px 10px",borderRadius:12,background:"#091018af",border:`1px solid ${theme.panelBorder}`}}>{line}</div>)}
+              </div>
+              <div style={{alignSelf:"end",display:"flex",justifyContent:"flex-end"}}>
+                <Chippy
+                  title={themeKey==="faithful_balatro"?"Table Talk":"Chippy Preview"}
+                  message={themeKey==="vintage_casino"
+                    ?"The table feels older, steadier, and a little more ceremonial."
+                    :themeKey==="storybook_cardroom"
+                    ?"This one feels friendlier, softer, and a little enchanted."
+                    :"This one is all swagger. If we choose it, we should really commit to the spectacle."}
+                  visible
+                  actionLabel=""
+                  onAction={null}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"6px 4px 0"}}>
+            <div style={{fontSize:12,color:theme.subInk}}>Preview only. Gameplay is unchanged if we later apply one of these themes.</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              <Btn label="Back to Menu" bg="#333" onClick={onBack}/>
+              <Btn label="Play Tutorial in Current Theme Direction" bg={theme.buttonA} onClick={()=>onStartGame("tutorial")}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Draggable Modal
 function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});
   const onD=e=>{dr.current=true;off.current={x:e.clientX-pos.x,y:e.clientY-pos.y};
@@ -543,7 +743,7 @@ function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
         <PreviewCard id={id} selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
         {idx>=0&&<div style={{position:"absolute",top:2,left:2,background:"#f1c40f",color:"#000",borderRadius:10,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{idx+1}</div>}
       </div>);})}</div>
-    {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top ➠ Bottom: {pk.map(id=>CM[id].name).join(" ➠ ")}</div>}
+    {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top to bottom: {pk.map(id=>CM[id].name).join(", ")}</div>}
     <Btn label={`Put ${pk.length}/3 on top`} bg={pk.length===3?"#f1c40f":"#333"} disabled={pk.length!==3} onClick={()=>pk.length===3&&onPick(pk)}/></Modal>);}
 
 // Rejuvenate: pick up to 3 to discard
@@ -553,7 +753,7 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
-    <Btn label={`Discard ${pk.length} ➠ Draw ${pk.length}`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
+    <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
 
 // Deck knowledge tracker — shows cards player has seen (not in their deck)
 function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
@@ -580,7 +780,7 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
   return(<div style={{background:"#0a0d11cc",border:`1px solid ${clr}33`,borderRadius:6,padding:6,fontSize:9}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
       <span style={{color:clr,fontWeight:700}}>{player} Stats</span>
-      <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#556",cursor:"pointer",fontSize:12}}>×</button></div>
+      <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#556",cursor:"pointer",fontSize:12}}>x</button></div>
     <div style={{display:"flex",gap:12}}>
       <div><div style={{color:"#556",marginBottom:2}}>Zone</div>
         {zoneCounts.map(z=>(<div key={z.label} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:36}}>{z.label}</span><span>{z.count}</span></div>))}</div>
@@ -794,6 +994,7 @@ export default function KaizenPoker(){
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);};
   const startGallery=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"gallery"});};
   const startRules=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"rules"});};
+  const startThemeDemo=theme=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"theme_demo",theme});};
   const acknowledgeTutorial=mark=>{
     if(!gs||gs.mode!=="tutorial")return;
     const g2={...gs,_tutorialAck:mark};
@@ -1032,7 +1233,7 @@ export default function KaizenPoker(){
       if(frozen){g=L(g,`${player}: Capitalize triggers but Frozen!`);commitGameState(g);then(g);return;}
       const disc=getD(g,player).filter(id=>id!==discardedId);
       if(!disc.length){then(g);return;}
-      setModal({type:"pickFromList",title:`${player}: Capitalize! You discarded 8♠ — scrap a card?`,cards:disc,canCancel:true,
+      setModal({type:"pickFromList",title:`${player}: Capitalize! You discarded 8♠. Scrap a card?`,cards:disc,canCancel:true,
         statsPlayer:player,
         onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,player,"discard",[...getD(g2,player)].filter(x=>x!==id));
           g2.scrap=[...g2.scrap,id];g2=L(g2,`${player}: Capitalize scraps ${CM[id].name}`);commitGameState(g2);then(g2);},
@@ -1049,8 +1250,8 @@ export default function KaizenPoker(){
     checkCap(g2,player,cardId,then);};
 
   const offerRefresh=(g,done)=>{const p=g.currentPlayer;if(!getH(g,p).length){done(g);return;}
-    const opts=[{label:"Refresh (discard ➠ draw)",key:"refresh"}];
-    if(g.scrap.includes("QH"))opts.push({label:"Sift (draw ➠ discard)",key:"sift"});
+    const opts=[{label:"Refresh (discard, then draw)",key:"refresh"}];
+    if(g.scrap.includes("QH"))opts.push({label:"Sift (draw, then discard)",key:"sift"});
     if(g.scrap.includes("QS"))opts.push({label:"Declutter (scrap from discard)",key:"declutter"});
     opts.push({label:"Skip",key:"skip"});
     setModal({type:"refreshOpts",opts,onChoice:key=>{setModal(null);
@@ -1160,24 +1361,24 @@ export default function KaizenPoker(){
             g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);}});return;}
     // 4C Entomb
     if(effectId==="4C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
-      pick("Entomb: Pick from deck ➠ discard",sortC(dk),null,id=>{let g2={...g};
+      pick("Entomb: Search your deck and discard 1 card",sortC(dk),null,id=>{let g2={...g};
         g2=setZ(g2,p,"deck",shuf([...getDk(g2,p)].filter(x=>x!==id)));g2=setZ(g2,p,"discard",[...getD(g2,p),id]);
         g2=L(g2,`${p} entombs ${CM[id].name}`);done(g2);});return;}
     // 4D Gamble
     if(effectId==="4D"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
-      pick("Gamble: Search deck and take a card",sortC(dk),null,id=>{let g2={...g};
+      pick("Gamble: Search your deck, take 1 card, then discard 1 at random",sortC(dk),null,id=>{let g2={...g};
         g2=setZ(g2,p,"deck",shuf([...getDk(g2,p)].filter(x=>x!==id)));let h=[...getH(g2,p),id];g2.newCards=[id];
         const ri=Math.floor(Math.random()*h.length);const disc=h[ri];h=h.filter((_,i)=>i!==ri);
         g2=setZ(g2,p,"hand",h);g2=setZ(g2,p,"discard",[...getD(g2,p),disc]);
         g2=L(g2,`${p} takes ${CM[id].name}, randomly discards ${CM[disc].name}`);done(g2);});return;}
     // 4H Cultivate
     if(effectId==="4H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
-      pick("Cultivate: Put on top of deck",sortC(dk),null,id=>{let g2={...g};
+      pick("Cultivate: Search your deck and put 1 card on top",sortC(dk),null,id=>{let g2={...g};
         let d=shuf([...getDk(g2,p)].filter(x=>x!==id));d.unshift(id);g2=setZ(g2,p,"deck",d);
         g2=L(g2,`${p} cultivates ${CM[id].name}`);done(g2);});return;}
     // 4S Unearth
     if(effectId==="4S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
-      pick("Unearth: Return from discard",disc,null,id=>{let g2=cloneGs(g);
+      pick("Unearth: Return a card from your discard to hand",disc,null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=L(g2,`${p} unearths ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
         setModal({type:"pickDiscard",hand:h,title:"Unearth: Discard a card",newCards:[id],
@@ -1189,7 +1390,7 @@ export default function KaizenPoker(){
     // 5H Recall
     if(effectId==="5H"){const play=getP(g,p).filter(a=>!a.faceDown&&a.id!==cid);
       if(!play.length){g=L(g,"...no other actions.");done(g);return;}
-      pick("Recall: Return action to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
+      pick("Recall: Return one of your actions to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=L(g2,`${p} recalls ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
         setModal({type:"pickDiscard",hand:h,title:"Recall: Discard",newCards:[id],
@@ -1204,21 +1405,21 @@ export default function KaizenPoker(){
         g2=L(g2,`${p} reclaims ${CM[id].name}`);done(g2);});return;}
     // 6C Curse
     if(effectId==="6C"){if(!g.scrap.length){g=L(g,"...scrap empty. Fizzles.");done(g);return;}
-      pick("Curse: Move from scrap ➠ opponent's discard",g.scrap,null,id=>{let g2={...g};
+      pick("Curse: Move a scrapped card into your opponent's discard",g.scrap,null,id=>{let g2={...g};
         g2.scrap=g2.scrap.filter(x=>x!==id);g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);
         g2=L(g2,`${p} curses ${opp(p)} with ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6D Abduct
     if(effectId==="6D"){const oa=getP(g,opp(p)).filter(a=>!a.faceDown);
       if(!oa.length){g=L(g,"...no opponent actions. Fizzles.");done(g);return;}
-      pick("Abduct: Steal opponent's action",oa.map(a=>a.id),null,id=>{let g2={...g};
+      pick("Abduct: Steal an opponent action into your discard",oa.map(a=>a.id),null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"play",[...getP(g2,opp(p))].filter(a=>a.id!==id));
         g2=setZ(g2,p,"discard",[...getD(g2,p),id]);g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==cid));
         g2.scrap=[...g2.scrap,cid];g2=L(g2,`${p} abducts ${CM[id].name}!`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6H Exchange
     if(effectId==="6H"){const od=getD(g,opp(p)),md=getD(g,p);
       if(!od.length||!md.length){g=L(g,"...need cards in both discards. Fizzles.");done(g);return;}
-      pick("Exchange: Pick from opponent's discard",od,null,oid=>{
-        pick("Exchange: Pick from YOUR discard to swap",getD(g,p),null,mid=>{let g2={...g};
+      pick("Exchange: Choose a card from your opponent's discard",od,null,oid=>{
+        pick("Exchange: Choose one of your discard cards to trade",getD(g,p),null,mid=>{let g2={...g};
           let o2=[...getD(g2,opp(p))].filter(x=>x!==oid);o2.push(mid);
           let m2=[...getD(g2,p)].filter(x=>x!==mid);m2.push(oid);
           g2=setZ(g2,opp(p),"discard",o2);g2=setZ(g2,p,"discard",m2);
@@ -1226,7 +1427,7 @@ export default function KaizenPoker(){
       },()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6S Banish
     if(effectId==="6S"){const od=getD(g,opp(p));if(!od.length){g=L(g,"...opponent discard empty. Fizzles.");done(g);return;}
-      pick("Banish: Move to scrap",od,null,id=>{let g2={...g};
+      pick("Banish: Scrap a card from your opponent's discard",od,null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p))].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
         g2=L(g2,`${p} banishes ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 7H Abdicate
@@ -1324,7 +1525,7 @@ export default function KaizenPoker(){
     if(effectId==="KC"){g=drawCards(g,p,3);const dr=g.drawn||[];trackDraws(g,p,dr,"brainstorm");g=L(g,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g.newCards=dr;commitGameState(g);
       setModal({type:"brainstorm",hand:getH(g,p),newCards:dr,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"deck",[...ids,...getDk(g2,p)]);
-        g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(" ➠ ")}`);g2.newCards=[];done(g2);}});return;}
+        g2=L(g2,`${p} puts back: ${ids.map(id=>CM[id].name).join(", ")}`);g2.newCards=[];done(g2);}});return;}
     // KD Improvise
     if(effectId==="KD"){let dk=[...getDk(g,p)],dc=[...getD(g,p)],m=[];
       for(let i=0;i<3&&dk.length;i++){const c=dk.shift();dc.push(c);m.push(c);}
@@ -1421,7 +1622,7 @@ export default function KaizenPoker(){
     if(mid==="JC"){
       setModal({type:"pickFromList",title:`${pl}: Clone — pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
-          setModal({type:"pickFromList",title:`Clone: Pick scoring card to COPY onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
+          setModal({type:"pickFromList",title:`Clone: Choose the scoring card to copy onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
@@ -1429,7 +1630,7 @@ export default function KaizenPoker(){
     if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce — discard empty`);commitGameState(g2);next(g2);return;}
       setModal({type:"pickFromList",title:`${pl}: Reminisce — pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);
-          setModal({type:"pickFromList",title:`Reminisce: Pick from DISCARD to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
+          setModal({type:"pickFromList",title:`Reminisce: Choose a discard card to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ copy of ${CM[sid].name}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
@@ -1674,6 +1875,14 @@ export default function KaizenPoker(){
             </div>
           </div>
           <div style={{display:"grid",gap:8}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#f2b6ce",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Theme Demos</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
+              <Btn label="Vintage Casino" bg="linear-gradient(135deg,#f4d48f,#b9873f)" onClick={()=>startThemeDemo("vintage_casino")}/>
+              <Btn label="Storybook Card Room" bg="linear-gradient(135deg,#f7d7af,#c9895f)" onClick={()=>startThemeDemo("storybook_cardroom")}/>
+              <Btn label="Faithful Balatro" bg="linear-gradient(135deg,#ffe36e,#ff6b57)" onClick={()=>startThemeDemo("faithful_balatro")}/>
+            </div>
+          </div>
+          <div style={{display:"grid",gap:8}}>
             <div style={{fontSize:10,fontWeight:800,color:"#9fbdf2",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Play Remotely</div>
             <div style={{display:"flex",justifyContent:"center"}}>
               <Btn label="Create Online Game" bg="linear-gradient(135deg,#67a8ff,#2563eb)" onClick={startOnlineGame}/>
@@ -1730,6 +1939,10 @@ export default function KaizenPoker(){
         </div>
       </div>
     </div>);
+  }
+
+  if(gs.mode==="theme_demo"){
+    return <ThemeDemoScreen themeKey={gs.theme} onBack={clearGameState} onStartGame={startGame}/>;
   }
 
   if(gs.mode==="gallery"){
@@ -2203,7 +2416,7 @@ export default function KaizenPoker(){
         </div>
       </div>
     </Modal>}
-    {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick} statsPlayer={modal.statsPlayer} gs={gs} viewerPlayer={viewerPlayer}/>}
+    {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick} statsPlayer={modal.statsPlayer} gs={gs} viewerPlayer={viewerPlayer} hint={modal.hint}/>}
     {modal?.type==="twoChoice"&&<Modal title={modal.title}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Card id={modal.card}/></div>
       <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#3498db" onClick={modal.on1}/><Btn label={modal.opt2} bg="#e67e22" onClick={modal.on2}/></div></Modal>}
@@ -2243,3 +2456,4 @@ export default function KaizenPoker(){
     {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
   </div></CardRenderContext.Provider>);
 }
+
