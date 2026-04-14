@@ -526,8 +526,8 @@ function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=
       {children}</div></div>);}
 
 // Multi-select modal (as proper component, not IIFE)
-function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm",statsPlayer,gs,viewerPlayer}){const[pk,setPk]=useState([]);
-  return(<Modal title={title}><div style={{fontSize:11,color:"#667",marginBottom:6}}>Select up to {maxPick}</div>
+function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm",statsPlayer,gs,viewerPlayer,hint}){const[pk,setPk]=useState([]);
+  return(<Modal title={title}><div style={{fontSize:11,color:"#667",marginBottom:6}}>{hint||`Select up to ${maxPick}`}</div>
     {statsPlayer&&gs&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={statsPlayer} viewerPlayer={viewerPlayer}/></div>}
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
@@ -549,6 +549,7 @@ function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
 // Rejuvenate: pick up to 3 to discard
 function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
   return(<Modal title="Rejuvenate: Discard up to 3, draw that many">
+    <div style={{fontSize:11,color:"#667",marginBottom:6}}>Choose any number from 0 to 3.</div>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
@@ -1106,7 +1107,7 @@ export default function KaizenPoker(){
       g=L(g,`${p} plays ${card.name}`);const frozen=isFroz(g,p);
       const scrapF=(g2,pl,id,reason="effect")=>{g2=setZ(g2,pl,"discard",[...getD(g2,pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];trackEvent(g2,"card_scrapped",{cardId:id,reason},{playerSlot:pl});return g2;};
       const done=g2=>{setUndoState(null);g2=advance(g2);commitGameState(g2);};// Clear undo after info revealed
-      const pick=(t,cards,filter,onP,onC,extra={})=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,...extra,
+      const pick=(t,cards,filter,onP,onC,extra={})=>{setModal({type:"pickFromList",title:t,cards,filter,canCancel:!!onC,cancelLabel:onC?"Cancel":undefined,...extra,
         onPick:id=>{setModal(null);onP(id);},onCancel:onC?()=>{setModal(null);onC();}:undefined});};
       const tutorialStep=(g.mode==="tutorial"&&p==="B")?(getTutorialRoundSetup(g._tutorialRound||1)?.computerActions||[])[g._tutorialComputerStep||0]:null;
       const tutorialChoice=tutorialStep&&typeof tutorialStep==="object"?(tutorialStep.choice||{}):{};
@@ -1124,7 +1125,7 @@ export default function KaizenPoker(){
           ()=>{g=L(g,"...cancelled.");done(g);},{statsPlayer:p});return;}
     // 3C Defer
     if(effectId==="3C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
-      setModal({type:"twoChoice",title:"Defer",card:dk[0],opt1:"Leave on Top",opt2:"Put on Bottom",
+      setModal({type:"twoChoice",title:"Defer: Look at the top card of your deck",card:dk[0],opt1:"Leave on Top",opt2:"Put on Bottom",
         on1:()=>{setModal(null);g=L(g,`${p} leaves ${CM[dk[0]].name} on top`);done(g);},
         on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];d.push(d.shift());g2=setZ(g2,p,"deck",d);
           g2=L(g2,`${p} puts ${CM[dk[0]].name} on bottom`);done(g2);}});return;}
@@ -1133,7 +1134,7 @@ export default function KaizenPoker(){
       setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",newCards:g.drawn||[],
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>done(g2));}});return;}
     // 3H Rummage
-    if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"Yourself",opt2:"Opponent",
+    if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"You Refresh",opt2:"Opponent Refreshes",
       on1:()=>{setModal(null);setModal({type:"pickDiscard",hand:getH(g,p),title:"Rummage: Discard (then draw)",
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>{
           g2=drawCards(g2,p,1);if(g2.drawn){trackDraws(g2,p,g2.drawn,"rummage");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
@@ -1143,7 +1144,7 @@ export default function KaizenPoker(){
           queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"rummage_opp",player:opp(p),title:`${opp(p)} must discard (then draws)`});
           return;
         }
-        setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard (then draws)`,
+        setModal({type:"pickDiscard",hand:oh,title:`Rummage: ${opp(p)} discards, then draws`,
           onPick:id=>{setModal(null);discardFromHand(g,opp(p),id,g2=>{
             g2=drawCards(g2,opp(p),1);if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"rummage");g2=L(g2,`${opp(p)} draws`);}done(g2);});}});}});return;}
     // 3S Consider
@@ -1153,7 +1154,7 @@ export default function KaizenPoker(){
         if(tutorialChoice.decision==="discard"){let g2={...g};let d=[...getDk(g2,p)];const c=d.shift();
           g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);return;}
       }
-        setModal({type:"twoChoice",title:"Consider",card:dk[0],opt1:"Keep on Top",opt2:"Discard It",
+        setModal({type:"twoChoice",title:"Consider: Look at the top card of your deck",card:dk[0],opt1:"Keep on Top",opt2:"Discard It",
           on1:()=>{setModal(null);g=L(g,`${p} keeps ${CM[dk[0]].name}`);done(g);},
           on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];const c=d.shift();
             g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);}});return;}
@@ -1254,7 +1255,7 @@ export default function KaizenPoker(){
           let g2={...g};let d=[...getDk(g2,p)];d.shift();g2=setZ(g2,p,"deck",d);g2.scrap=[...g2.scrap,dk[0]];
           g2=L(g2,`${p} rejects ${CM[dk[0]].name}`);done(g2);return;}
       }
-        setModal({type:"twoChoice",title:"Reject",card:dk[0],opt1:"Leave It",opt2:"Scrap It",
+        setModal({type:"twoChoice",title:"Reject: Look at the top card of your deck",card:dk[0],opt1:"Leave It",opt2:"Scrap It",
           on1:()=>{setModal(null);g=L(g,`${p} keeps ${CM[dk[0]].name}`);done(g);},
           on2:()=>{setModal(null);if(frozen){g=L(g,"...Frozen!");done(g);return;}
           let g2={...g};let d=[...getDk(g2,p)];d.shift();g2=setZ(g2,p,"deck",d);g2.scrap=[...g2.scrap,dk[0]];
@@ -1336,19 +1337,19 @@ export default function KaizenPoker(){
     // KH Rejuvenate
     if(effectId==="KH"){setModal({type:"rejuvenate",hand:getH(g,p),onPick:ids=>{setModal(null);let g2=cloneGs(g);
       g2=setZ(g2,p,"hand",[...getH(g2,p)].filter(x=>!ids.includes(x)));g2=setZ(g2,p,"discard",[...getD(g2,p),...ids]);
-      g2=L(g2,`${p} discards: ${ids.map(id=>CM[id].name).join(", ")}`);
+      g2=L(g2,ids.length?`${p} discards: ${ids.map(id=>CM[id].name).join(", ")}`:`${p} discards nothing.`);
       // Check Capitalize for each discarded card (only 8S matters)
       const capCheck=(g3,ci)=>{if(ci>=ids.length){
         g3=drawCards(g3,p,ids.length);const dr=g3.drawn||[];trackDraws(g3,p,dr,"rejuvenate");
-        g3=L(g3,`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`);g3.newCards=dr;done(g3);return;}
+        g3=L(g3,dr.length?`${p} draws: ${dr.map(id=>CM[id].name).join(", ")}`:`${p} draws nothing.`);g3.newCards=dr;done(g3);return;}
         checkCap(g3,p,ids[ci],g4=>capCheck(g4,ci+1));};
       capCheck(g2,0);}});return;}
     // KS Bury
     if(effectId==="KS"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       if(!disc.length){g=L(g,"...nothing to scrap.");done(g);return;}
-      setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury: Scrap up to 3",statsPlayer:p,onPick:ids=>{setModal(null);let g2={...g};
+      setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury: Scrap up to 3 cards",hint:"Choose any number from 0 to 3.",statsPlayer:p,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>!ids.includes(x)));g2.scrap=[...g2.scrap,...ids];
-        g2=L(g2,`${p} buries: ${ids.map(id=>CM[id].name).join(", ")}`);done(g2);}});return;}
+        g2=L(g2,ids.length?`${p} buries: ${ids.map(id=>CM[id].name).join(", ")}`:`${p} buries nothing.`);done(g2);}});return;}
     g=L(g,`(${card.name} not implemented)`);done(g);};
 
   // ============================================================
@@ -1376,7 +1377,7 @@ export default function KaizenPoker(){
     const skip=()=>{let g2=L(g,`${pl}: ${modLabel} — skipped`);commitGameState(g2);next(g2);};
     // Forecast: choose target now, resolve after reveal
     if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
-      setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,
+      setModal({type:"pickFromList",title:`${pl}: Forecast — pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,cancelLabel:"Skip Modify",
         onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,kind:"forecast"},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);commitGameState(g2);next(g2);},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Vanish: defer
@@ -1386,7 +1387,7 @@ export default function KaizenPoker(){
       hint:"Pick the scoring card Buff will raise. Aces can count as high or low here.",
       onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,
+        setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
@@ -1395,7 +1396,7 @@ export default function KaizenPoker(){
       hint:"Pick the scoring card Nerf will lower. Aces can count as high or low here.",
       onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,
+        setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
@@ -1404,7 +1405,7 @@ export default function KaizenPoker(){
       hint:"Pick the scoring card Nudge will move by one rank.",
       onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,
+        setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
@@ -1412,7 +1413,7 @@ export default function KaizenPoker(){
     if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise — choose which scoring card to modify`,cards:hand,canCancel:true,
       hint:"Pick the scoring card Disguise will change to another suit.",
       onPick:tid=>{setModal(null);
-        setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,
+        setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,cancelLabel:"Skip Modify",
           onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,suit:s},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} ➠ ${SUITS[s]}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
@@ -2152,6 +2153,7 @@ export default function KaizenPoker(){
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
         {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#3498db":o.key==="sift"?"#2ecc71":"#6c5ce7"} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
     {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"}>
+      {modal.hint&&<div style={{fontSize:11,color:"#9fb0c2",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
@@ -2164,7 +2166,7 @@ export default function KaizenPoker(){
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f1c40f":undefined}/>;})}</div>
-      {modal.canCancel&&<Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
+      {modal.canCancel&&<Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
     {modal?.type==="soloLookup"&&<Modal title="Challenger Lookup">
       <div style={{display:"grid",gap:6}}>
         <div style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"0 8px",fontSize:10,fontWeight:800,color:"#d8c08d",letterSpacing:1.2,textTransform:"uppercase"}}>
@@ -2218,13 +2220,13 @@ export default function KaizenPoker(){
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
         {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} disabled={!tutorialAllows("modalRank",r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:tutorialAllows("modalRank",r)?"#f1c40f":"#6b7280",fontSize:18,fontWeight:900,cursor:tutorialAllows("modalRank",r)?"pointer":"default",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalRank",r)?1:0.45}}>{r}</button>))}</div>
-      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalRank"}/></div>}</Modal>}
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalRank"}/></div>}</Modal>}
     {modal?.type==="pickSuit"&&<Modal title={modal.title}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
         {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} disabled={!tutorialAllows("modalSuit",s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:tutorialAllows("modalSuit",s)?SC[s]:"#6b7280",fontSize:28,cursor:tutorialAllows("modalSuit",s)?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalSuit",s)?1:0.45}}>{SUITS[s]}</button>))}</div>
-      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label="Cancel / Skip" bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalSuit"}/></div>}</Modal>}
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalSuit"}/></div>}</Modal>}
     {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}${modal.queenSourceLabel?` (${modal.queenSourceLabel})`:""}`}>
       {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
