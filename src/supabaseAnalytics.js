@@ -6,6 +6,23 @@ const SYNC_ENABLED = import.meta.env.VITE_ENABLE_ANALYTICS_SYNC === "true";
 
 const isConfigured = () => Boolean(SYNC_ENABLED && SUPABASE_URL && SUPABASE_ANON_KEY);
 
+export function getAnalyticsDebugInfo() {
+  let projectRef = "";
+  try {
+    projectRef = SUPABASE_URL ? new URL(SUPABASE_URL).hostname.split(".")[0] || "" : "";
+  } catch {
+    projectRef = "";
+  }
+  return {
+    enabled: SYNC_ENABLED,
+    hasUrl: Boolean(SUPABASE_URL),
+    hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+    configured: isConfigured(),
+    projectRef,
+    supabaseUrl: SUPABASE_URL || "",
+  };
+}
+
 function getHeaders() {
   return {
     apikey: SUPABASE_ANON_KEY,

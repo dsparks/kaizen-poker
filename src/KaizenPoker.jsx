@@ -24,7 +24,7 @@ import {
   multiplayerEnabled,
   updateLiveGame,
 } from "./liveGameClient.js";
-import { syncTrackedGame } from "./supabaseAnalytics.js";
+import { getAnalyticsDebugInfo, syncTrackedGame } from "./supabaseAnalytics.js";
 import {
   getTutorialPrompt,
   getTutorialRoundSetup,
@@ -666,6 +666,14 @@ export default function KaizenPoker(){
   const[galleryHoverId,setGalleryHoverId]=useState(null);
   const[resumeAvailable,setResumeAvailable]=useState(()=>!!loadLocalGameSnapshot());
   const[playtestEnabled,setPlaytestEnabled]=useState(()=>hasPlaytestFlag());
+  const[analyticsSyncState,setAnalyticsSyncState]=useState(()=>({
+    ...getAnalyticsDebugInfo(),
+    lastAttemptAt:null,
+    lastSuccessAt:null,
+    lastError:"",
+    lastStatus:"idle",
+    lastGameId:null,
+  }));
   const gameTransport=createGameTransport({setGs});
   const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()});
   const pollRef=useRef(null);
@@ -760,7 +768,41 @@ export default function KaizenPoker(){
     if(!analyticsAuthorityRef.current)return;
     saveActiveTrackedGame(trackedRef.current);
     if(syncTimerRef.current)clearTimeout(syncTimerRef.current);
-    syncTimerRef.current=setTimeout(()=>{const snap=trackedRef.current;if(snap)void syncTrackedGame(snap).catch(err=>console.error("Analytics sync failed",err));},500);
+    syncTimerRef.current=setTimeout(()=>{
+      const snap=trackedRef.current;
+      if(!snap)return;
+      const attemptedAt=new Date().toISOString();
+      setAnalyticsSyncState(prev=>({
+        ...prev,
+        ...getAnalyticsDebugInfo(),
+        lastAttemptAt:attemptedAt,
+        lastStatus:"syncing",
+        lastGameId:snap.gameId||prev.lastGameId,
+      }));
+      void syncTrackedGame(snap)
+        .then(()=>{
+          setAnalyticsSyncState(prev=>({
+            ...prev,
+            ...getAnalyticsDebugInfo(),
+            lastAttemptAt:attemptedAt,
+            lastSuccessAt:new Date().toISOString(),
+            lastError:"",
+            lastStatus:"success",
+            lastGameId:snap.gameId||prev.lastGameId,
+          }));
+        })
+        .catch(err=>{
+          console.error("Analytics sync failed",err);
+          setAnalyticsSyncState(prev=>({
+            ...prev,
+            ...getAnalyticsDebugInfo(),
+            lastAttemptAt:attemptedAt,
+            lastError:err?.message||String(err),
+            lastStatus:"error",
+            lastGameId:snap.gameId||prev.lastGameId,
+          }));
+        });
+    },500);
   };
   const setTracked=updater=>{
     trackedRef.current=typeof updater==="function"?updater(trackedRef.current):updater;
@@ -777,7 +819,37 @@ export default function KaizenPoker(){
     if(!closed)return;
     trackedRef.current=closed;
     saveActiveTrackedGame(closed);
-    void syncTrackedGame(closed).catch(err=>console.error("Analytics close sync failed",err));
+    const attemptedAt=new Date().toISOString();
+    setAnalyticsSyncState(prev=>({
+      ...prev,
+      ...getAnalyticsDebugInfo(),
+      lastAttemptAt:attemptedAt,
+      lastStatus:"syncing",
+      lastGameId:closed.gameId||prev.lastGameId,
+    }));
+    void syncTrackedGame(closed)
+      .then(()=>{
+        setAnalyticsSyncState(prev=>({
+          ...prev,
+          ...getAnalyticsDebugInfo(),
+          lastAttemptAt:attemptedAt,
+          lastSuccessAt:new Date().toISOString(),
+          lastError:"",
+          lastStatus:"success",
+          lastGameId:closed.gameId||prev.lastGameId,
+        }));
+      })
+      .catch(err=>{
+        console.error("Analytics close sync failed",err);
+        setAnalyticsSyncState(prev=>({
+          ...prev,
+          ...getAnalyticsDebugInfo(),
+          lastAttemptAt:attemptedAt,
+          lastError:err?.message||String(err),
+          lastStatus:"error",
+          lastGameId:closed.gameId||prev.lastGameId,
+        }));
+      });
   };
   const trackEvent=(gLike,eventType,eventPayload={},opts={})=>{
     if(!trackedRef.current)return;
@@ -2241,6 +2313,7 @@ export default function KaizenPoker(){
             cards={CARDS}
             onOpenGallery={startGallery}
             onOpenSoloArt={()=>startGame("solo_art")}
+            analyticsSyncState={analyticsSyncState}
           />
         </div>}
       </div>

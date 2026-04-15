@@ -92,7 +92,7 @@ function createSandboxPreset(key,makeFreshGame){
   return g;
 }
 
-export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards,onOpenGallery,onOpenSoloArt}){
+export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards,onOpenGallery,onOpenSoloArt,analyticsSyncState}){
   const [open,setOpen]=useState(false);
   const [selectedCard,setSelectedCard]=useState(cards[0]?.id||"2C");
   const [selectedZone,setSelectedZone]=useState("aHand");
@@ -161,6 +161,24 @@ export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards
         </>}
       </div>
       {open&&<div style={{marginTop:10,display:"grid",gap:12}}>
+        <div style={{display:"grid",gap:8}}>
+          <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1}}>ANALYTICS</div>
+          <div style={{display:"grid",gap:6,padding:"8px 10px",borderRadius:10,background:"#0b1220",border:"1px solid #243244"}}>
+            <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#94a3b8"}}>
+              <span>Enabled: <strong style={{color:analyticsSyncState?.enabled?"#86efac":"#fca5a5"}}>{analyticsSyncState?.enabled?"yes":"no"}</strong></span>
+              <span>Configured: <strong style={{color:analyticsSyncState?.configured?"#86efac":"#fca5a5"}}>{analyticsSyncState?.configured?"yes":"no"}</strong></span>
+              <span>Project: <strong style={{color:"#e2e8f0"}}>{analyticsSyncState?.projectRef||"(none)"}</strong></span>
+              <span>Status: <strong style={{color:analyticsSyncState?.lastStatus==="success"?"#86efac":analyticsSyncState?.lastStatus==="error"?"#fca5a5":analyticsSyncState?.lastStatus==="syncing"?"#fcd34d":"#cbd5e1"}}>{analyticsSyncState?.lastStatus||"idle"}</strong></span>
+            </div>
+            <div style={{display:"grid",gap:3,fontSize:10,color:"#64748b"}}>
+              <div>Last attempt: <span style={{color:"#cbd5e1"}}>{analyticsSyncState?.lastAttemptAt||"never"}</span></div>
+              <div>Last success: <span style={{color:"#cbd5e1"}}>{analyticsSyncState?.lastSuccessAt||"never"}</span></div>
+              <div>Last game ID: <span style={{color:"#cbd5e1"}}>{analyticsSyncState?.lastGameId||"none"}</span></div>
+              {analyticsSyncState?.lastError&&<div style={{color:"#fca5a5"}}>Last error: {analyticsSyncState.lastError}</div>}
+            </div>
+          </div>
+        </div>
+
         <div style={{display:"grid",gap:8}}>
           <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1}}>QUICK STATE</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
