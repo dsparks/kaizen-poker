@@ -462,6 +462,27 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
       </div>
     </Modal>}
   </>);}
+function FaceDownActionSlot({id,canPeek=false,copySticker}){const[hover,setHover]=useState(false);const[pos,setPos]=useState({x:0,y:0});
+  const renderStyle=useContext(CardRenderContext);
+  const previewW=renderStyle==="image"?220:160;
+  const previewH=renderStyle==="image"?292:220;
+  const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(8,pos.x+14));
+  const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(8,pos.y-previewH-12));
+  return(<>
+    <div className="kp-action-slot"
+      onMouseEnter={canPeek?e=>{setPos({x:e.clientX,y:e.clientY});setHover(true);}:undefined}
+      onMouseLeave={canPeek?()=>setHover(false):undefined}
+      onMouseMove={canPeek?e=>setPos({x:e.clientX,y:e.clientY}):undefined}
+      style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033",cursor:canPeek?"help":"default"}}>
+      <div style={{textAlign:"center",lineHeight:1.2}}>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:"uppercase"}}>Hidden</div>
+        <div style={{fontSize:8,color:"#516172"}}>{canPeek?"Hover to peek":"Face-down"}</div>
+      </div>
+    </div>
+    {canPeek&&hover&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
+      <Card id={id} copySticker={copySticker}/>
+    </div>}
+  </>);}
 function VictoryCascade({winner,cards=[]}){if(!winner||winner==="TIE")return null;
   const ids=(cards.length?cards:CARDS.slice(0,7).map(c=>c.id)).filter(Boolean);
   if(!ids.length)return null;
@@ -1957,7 +1978,7 @@ export default function KaizenPoker(){
     return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictoryCascade winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
   };
 
-  return(<CardRenderContext.Provider value={cardRenderStyle}><div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+  return(<CardRenderContext.Provider value={cardRenderStyle}><div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}@media (max-width:900px){.kp-table-frame{display:none}.kp-main-column{padding-left:20px!important;padding-right:12px!important}}`}</style>
     <style>{`@keyframes kpVictoryCascade{0%{opacity:0;transform:translate3d(0,-145px,0) rotate(-8deg)}6%{opacity:1}52%{transform:translate3d(var(--kp-drift),58vh,0) rotate(var(--kp-rot))}72%{transform:translate3d(var(--kp-bounce),76vh,0) rotate(var(--kp-rot-bounce))}86%{opacity:1;transform:translate3d(var(--kp-settle),86vh,0) rotate(var(--kp-rot-settle))}100%{opacity:0;transform:translate3d(var(--kp-exit),108vh,0) rotate(var(--kp-rot-exit))}}@keyframes kpVictoryTrail{0%,9%{opacity:0;transform:scaleY(.35)}16%,74%{opacity:.82;transform:scaleY(1)}100%{opacity:0;transform:scaleY(.18)}}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
@@ -2086,12 +2107,7 @@ export default function KaizenPoker(){
             <div style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:"1px solid #b96d5a55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
               <div style={{fontSize:9,color:"#e48b8b",fontWeight:800,letterSpacing:1,marginBottom:6}}>YOUR ACTIONS</div>
               <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
-                {getP(gs,"A").map((a,i)=>a.faceDown?<div key={i} className="kp-action-slot" style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033"}}>
-                    <div style={{textAlign:"center",lineHeight:1.2}}>
-                      <div style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:"uppercase"}}>Hidden</div>
-                      <div style={{fontSize:8,color:"#516172"}}>Face-down</div>
-                    </div>
-                  </div>
+                {getP(gs,"A").map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                   :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                     <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                   </div>)}
@@ -2101,12 +2117,7 @@ export default function KaizenPoker(){
           :<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
             <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
             <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
-              {getP(gs,pl).map((a,i)=>a.faceDown?<div key={i} className="kp-action-slot" style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033"}}>
-                  <div style={{textAlign:"center",lineHeight:1.2}}>
-                    <div style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:"uppercase"}}>Hidden</div>
-                    <div style={{fontSize:8,color:"#516172"}}>Face-down</div>
-                  </div>
-                </div>
+              {getP(gs,pl).map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek={pl===viewerPlayer} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                   <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 </div>)}</div></div>))}</div>}
@@ -2146,7 +2157,7 @@ export default function KaizenPoker(){
       </div>
       {/* Log */}
       <div style={{width:260,minHeight:0,height:"100%",overflow:"hidden",borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
-        <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px"}}>GAME LOG</div>
+        <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px",position:"sticky",top:0,zIndex:1,background:"linear-gradient(180deg,#0b1016 0%,#0b1016f2 78%,#0b101600 100%)"}}>GAME LOG</div>
         <div ref={logRef} style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
           {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("🏆")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
     </div>
