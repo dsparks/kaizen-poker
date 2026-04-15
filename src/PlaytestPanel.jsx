@@ -1,16 +1,4 @@
 import { useMemo, useState } from "react";
-import { runSelfTests } from "./gameSelfTest.js";
-
-const CHECKLIST=[
-  "Straight and straight flush comparisons",
-  "Ace-low rules: wheel, Nerf, Nudge",
-  "Duplicate and Reflect copied effects",
-  "Queen effects on unmodified 2s only",
-  "Post-score effects: Forecast, Vanish, Capitulate",
-  "Sudden Death draw/action counts",
-  "Face-down play plus Refresh/Sift/Declutter",
-  "Discard and scrap targeting edge cases"
-];
 
 const ZONE_DEFS=[
   {key:"aHand",label:"A Hand",kind:"cards"},
@@ -104,14 +92,10 @@ function createSandboxPreset(key,makeFreshGame){
   return g;
 }
 
-export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards}){
+export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards,onOpenGallery,onOpenSoloArt}){
   const [open,setOpen]=useState(false);
-  const [mode,setMode]=useState("checklist");
-  const [checks,setChecks]=useState(()=>Object.fromEntries(CHECKLIST.map(item=>[item,false])));
-  const [report,setReport]=useState(null);
   const [selectedCard,setSelectedCard]=useState(cards[0]?.id||"2C");
   const [selectedZone,setSelectedZone]=useState("aHand");
-  const completed=Object.values(checks).filter(Boolean).length;
   const sortedCards=useMemo(()=>[...cards].sort((a,b)=>a.id.localeCompare(b.id)),[cards]);
 
   if(!gs)return null;
@@ -170,39 +154,13 @@ export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards
         <button onClick={()=>setOpen(v=>!v)} style={{padding:"5px 12px",borderRadius:8,background:"#111827",border:"1px solid #334155",color:"#cbd5e1",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1}}>
           {open?"Hide":"Show"} Playtest
         </button>
-        <span style={{fontSize:10,color:"#64748b"}}>{completed}/{CHECKLIST.length} checklist items marked</span>
+        <span style={{fontSize:10,color:"#64748b"}}>Sandbox tools and hidden prototype links</span>
         {open&&<>
-          <button onClick={()=>setMode("checklist")} style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(mode==="checklist"?"#f1c40f66":"#334155"),background:mode==="checklist"?"#f1c40f22":"#0f172a",color:mode==="checklist"?"#f8e08a":"#94a3b8",cursor:"pointer",fontSize:10,fontWeight:700}}>Checklist</button>
-          <button onClick={()=>setMode("sandbox")} style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(mode==="sandbox"?"#2ecc7166":"#334155"),background:mode==="sandbox"?"#2ecc7122":"#0f172a",color:mode==="sandbox"?"#86efac":"#94a3b8",cursor:"pointer",fontSize:10,fontWeight:700}}>Sandbox</button>
+          {onOpenGallery&&<button onClick={onOpenGallery} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #ec5da866",background:"#f8b4d922",color:"#f8b4d9",cursor:"pointer",fontSize:10,fontWeight:700}}>Card Image Gallery</button>}
+          {onOpenSoloArt&&<button onClick={onOpenSoloArt} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #60a5fa66",background:"#60a5fa22",color:"#93c5fd",cursor:"pointer",fontSize:10,fontWeight:700}}>Solo Art Test</button>}
         </>}
-        <button onClick={()=>setReport(runSelfTests())} style={{padding:"5px 12px",borderRadius:8,background:"#f1c40f",border:"none",color:"#111",cursor:"pointer",fontSize:10,fontWeight:800}}>
-          Run Logic Checks
-        </button>
       </div>
-      {open&&mode==="checklist"&&<div style={{marginTop:10,display:"grid",gap:12}}>
-        <div>
-          <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1,marginBottom:6}}>MANUAL CHECKLIST</div>
-          <div style={{display:"grid",gap:5}}>
-            {CHECKLIST.map(item=><label key={item} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"#cbd5e1",cursor:"pointer"}}>
-              <input type="checkbox" checked={checks[item]} onChange={()=>setChecks(s=>({...s,[item]:!s[item]}))}/>
-              <span>{item}</span>
-            </label>)}
-          </div>
-        </div>
-        {report&&<div>
-          <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1,marginBottom:6}}>LOGIC CHECKS</div>
-          <div style={{fontSize:11,color:report.passed===report.total?"#2ecc71":"#f1c40f",marginBottom:6}}>
-            {report.passed}/{report.total} checks passed
-          </div>
-          <div style={{display:"grid",gap:5}}>
-            {report.results.map(result=><div key={result.name} style={{padding:"6px 8px",borderRadius:6,background:result.pass?"#052e1c":"#3b0d0d",border:`1px solid ${result.pass?"#14532d":"#7f1d1d"}`}}>
-              <div style={{fontSize:11,color:result.pass?"#86efac":"#fca5a5",fontWeight:700}}>{result.pass?"PASS":"FAIL"} - {result.name}</div>
-              <div style={{fontSize:10,color:"#cbd5e1",marginTop:2}}>{result.detail}</div>
-            </div>)}
-          </div>
-        </div>}
-      </div>}
-      {open&&mode==="sandbox"&&<div style={{marginTop:10,display:"grid",gap:12}}>
+      {open&&<div style={{marginTop:10,display:"grid",gap:12}}>
         <div style={{display:"grid",gap:8}}>
           <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1}}>QUICK STATE</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>

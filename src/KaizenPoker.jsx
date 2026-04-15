@@ -188,73 +188,6 @@ const CHALLENGER_LOOKUP={
   "A":{handRank:13,handName:"Flush Five",description:"Top-tier Challenger result: Flush House / Flush Five"},
 };
 const CHALLENGER_ROWS=["2","3","4","5","6","7","8","9","10","J","Q","K","A"].map(rank=>({rank,...CHALLENGER_LOOKUP[rank]}));
-const THEME_DEMO_HAND=["3S","4D","8H","10H","JC","KH","AS"];
-const THEME_DEMO_SCORING=["10H","JC","KH","4D","AS"];
-const THEME_DEMO_LOG=[
-  "Round 4 - Sudden pressure",
-  "You play Consider and keep the top card.",
-  "The Challenger reveals a 9 for Full House pressure.",
-  "Chippy: One sharp hand wins the chip.",
-];
-const THEME_DEMOS={
-  vintage_casino:{
-    title:"Vintage Casino",
-    eyebrow:"Smoky felt / brass rail / supper-club energy",
-    description:"A classic card room look: green baize, brass trim, cream labels, and old-house scoreboard details.",
-    shell:"radial-gradient(circle at 50% -10%,#3f2513 0%,#1f3c2f 28%,#10251d 58%,#050908 100%)",
-    panel:"linear-gradient(180deg,#1f4737ee,#10251dee)",
-    panelBorder:"#b8945a66",
-    accent:"#f3c56c",
-    accentSoft:"#dcb77a",
-    ink:"#f7edd6",
-    subInk:"#cab892",
-    buttonA:"linear-gradient(135deg,#f3d48d,#d39d41)",
-    buttonB:"linear-gradient(135deg,#7bd7b0,#2e8a6d)",
-    chip:"#d8483e",
-    titleFont:"Georgia, 'Times New Roman', serif",
-    bodyFont:"'Courier New', monospace",
-    ornament:"linear-gradient(90deg,transparent,#f3c56c55,transparent)",
-    badgeBg:"#2c160e",
-  },
-  storybook_cardroom:{
-    title:"Storybook Card Room",
-    eyebrow:"Illustrated tavern / parchment / magical table",
-    description:"A warmer, more whimsical room with parchment panels, lantern light, and a slightly fairy-tale table presence.",
-    shell:"radial-gradient(circle at 50% -10%,#7a5232 0%,#35513f 26%,#1b3027 60%,#0a1310 100%)",
-    panel:"linear-gradient(180deg,#f2e4c8f2,#d7c1a1ee)",
-    panelBorder:"#8b5e3c88",
-    accent:"#8d4f2b",
-    accentSoft:"#ae7b4d",
-    ink:"#2d1f16",
-    subInk:"#614734",
-    buttonA:"linear-gradient(135deg,#f4c987,#d79256)",
-    buttonB:"linear-gradient(135deg,#b3d7a6,#6da172)",
-    chip:"#d26454",
-    titleFont:"Palatino, 'Book Antiqua', Georgia, serif",
-    bodyFont:"Georgia, serif",
-    ornament:"linear-gradient(90deg,transparent,#8d4f2b55,transparent)",
-    badgeBg:"#fff8ee",
-  },
-  faithful_balatro:{
-    title:"Faithful Balatro",
-    eyebrow:"High-contrast neon / punchy stakes / maximal arcade-casino",
-    description:"A loud, flashy take with bold contrast, oversized headers, glowing counters, and a punchier stage presence.",
-    shell:"radial-gradient(circle at 50% -10%,#62221c 0%,#251435 26%,#13111f 58%,#06070c 100%)",
-    panel:"linear-gradient(180deg,#23192df2,#111722f4)",
-    panelBorder:"#ffdf6a66",
-    accent:"#ffe36e",
-    accentSoft:"#ff8a66",
-    ink:"#fff7dc",
-    subInk:"#f8cf77",
-    buttonA:"linear-gradient(135deg,#ffe36e,#ff9f43)",
-    buttonB:"linear-gradient(135deg,#6cf0ff,#3f8cff)",
-    chip:"#ff5b4d",
-    titleFont:"Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif",
-    bodyFont:"Trebuchet MS, Verdana, sans-serif",
-    ornament:"linear-gradient(90deg,transparent,#ffe36e77,transparent)",
-    badgeBg:"#160f1c",
-  },
-};
 const ART_SOURCE_WIDTH=896;
 const ART_SOURCE_HEIGHT=1280;
 const ART_CROP_X=36;
@@ -579,139 +512,6 @@ function Chip({filled,color,label,active}){return <div style={{width:22,height:2
   <span style={{fontSize:9,fontWeight:900,color:filled?"#fff7e8":"#8ea0b4",fontFamily:"Georgia,serif",textShadow:"0 1px 2px #0008"}}>{label}</span>
 </div>;}
 
-function ThemeDemoScreen({themeKey,onBack,onStartGame}){
-  const theme=THEME_DEMOS[themeKey]||THEME_DEMOS.vintage_casino;
-  const sampleScoringMods=themeKey==="faithful_balatro"?[{target:"JC",rank:"A",suit:"S"}]:themeKey==="storybook_cardroom"?[{target:"10H",rank:"K",suit:null}]:[];
-  const demoBadgeTheme=themeKey==="storybook_cardroom"
-    ?{background:"#fff9ef",border:`1px solid ${theme.panelBorder}`,color:theme.accent}
-    :{background:theme.badgeBg,border:`1px solid ${theme.panelBorder}`,color:theme.accent};
-  return(
-    <div style={{minHeight:"100vh",background:theme.shell,color:theme.ink,fontFamily:theme.bodyFont,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-      <style>{`@keyframes kpThemeFloat{0%{transform:translateY(0px)}50%{transform:translateY(-10px)}100%{transform:translateY(0px)}}@keyframes kpThemeShimmer{0%{transform:translateX(-16%)}100%{transform:translateX(16%)}}`}</style>
-      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-        <div style={{position:"absolute",inset:18,borderRadius:34,border:`1px solid ${theme.panelBorder}`,boxShadow:`inset 0 0 0 1px ${theme.accent}14`}}/>
-        <div style={{position:"absolute",top:-140,left:"50%",transform:"translateX(-50%)",width:640,height:640,borderRadius:"50%",background:`radial-gradient(circle,${theme.accent}22 0%,transparent 64%)`,animation:"kpThemeFloat 11s ease-in-out infinite"}}/>
-        <div style={{position:"absolute",left:-100,top:220,width:320,height:320,borderRadius:"50%",background:`radial-gradient(circle,${theme.accentSoft}18 0%,transparent 70%)`,animation:"kpThemeFloat 13s ease-in-out infinite"}}/>
-        <div style={{position:"absolute",right:-90,bottom:110,width:280,height:280,borderRadius:"50%",background:`radial-gradient(circle,${theme.accent}16 0%,transparent 72%)`,animation:"kpThemeFloat 9.5s ease-in-out infinite"}}/>
-        {themeKey==="faithful_balatro"&&<div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(180deg,transparent 0 12px,rgba(255,255,255,.025) 12px 13px)",mixBlendMode:"screen",opacity:.45}}/>}
-      </div>
-
-      <div style={{padding:"12px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${theme.panelBorder}`,background:`linear-gradient(180deg,rgba(10,12,18,.18),rgba(10,12,18,.04))`,backdropFilter:"blur(8px)",position:"relative",zIndex:1,flexWrap:"wrap"}}>
-        <span style={{fontFamily:theme.titleFont,fontSize:26,fontWeight:900,letterSpacing:themeKey==="faithful_balatro"?2:3,color:theme.accent}}>KAIZEN POKER</span>
-        <span style={{padding:"5px 11px",borderRadius:999,...demoBadgeTheme,fontSize:10,fontWeight:900,letterSpacing:1.4,textTransform:"uppercase"}}>Theme Demo</span>
-        <span style={{color:theme.subInk,fontSize:11}}>{theme.title}</span>
-        <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
-          <Btn label="Tutorial" bg={theme.buttonA} onClick={()=>onStartGame("tutorial")}/>
-          <Btn label="Solo Mode" bg={theme.buttonB} onClick={()=>onStartGame("solo")}/>
-          <Btn label="Menu" bg="#333" onClick={onBack}/>
-        </div>
-      </div>
-
-      <div style={{padding:20,display:"grid",gridTemplateColumns:"minmax(280px,420px) minmax(0,1fr)",gap:18,flex:1,minHeight:0}}>
-        <div style={{display:"grid",gap:16,alignContent:"start"}}>
-          <div style={{padding:"22px 22px 20px",borderRadius:28,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 26px 60px #00000045,inset 0 1px 0 #ffffff18",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",left:"-18%",top:0,bottom:0,width:"45%",background:theme.ornament,filter:"blur(10px)",opacity:.7,animation:"kpThemeShimmer 7s linear infinite"}}/>
-            <div style={{position:"relative"}}>
-              <div style={{fontSize:11,fontWeight:900,letterSpacing:2,textTransform:"uppercase",color:theme.subInk,marginBottom:8}}>{theme.eyebrow}</div>
-              <div style={{fontFamily:theme.titleFont,fontSize:themeKey==="faithful_balatro"?52:42,fontWeight:900,letterSpacing:themeKey==="faithful_balatro"?1.5:3,lineHeight:1,color:theme.accent,marginBottom:12}}>{theme.title}</div>
-              <div style={{fontSize:15,lineHeight:1.7,color:themeKey==="storybook_cardroom"?theme.subInk:theme.ink,marginBottom:16}}>{theme.description}</div>
-              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                <Btn label="Launch Tutorial" bg={theme.buttonA} onClick={()=>onStartGame("tutorial")}/>
-                <Btn label="Launch Solo" bg={theme.buttonB} onClick={()=>onStartGame("solo")}/>
-              </div>
-            </div>
-          </div>
-
-          <div style={{padding:"16px 18px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000035"}}>
-            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk,marginBottom:10}}>What This Demo Is Testing</div>
-            <div style={{display:"grid",gap:8,fontSize:13,lineHeight:1.55,color:themeKey==="storybook_cardroom"?theme.subInk:theme.ink}}>
-              <div>Typography, framing, and button voice for a full-app reskin.</div>
-              <div>How card faces sit against the table, panels, and accent lighting.</div>
-              <div>Whether the mood feels worth carrying into the real gameplay screens.</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{minHeight:0,display:"grid",gridTemplateRows:"auto auto 1fr auto",gap:14}}>
-          <div style={{padding:"14px 16px",borderRadius:26,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 20px 50px #00000030"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-              <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap"}}>
-                <span style={{fontFamily:theme.titleFont,fontWeight:900,fontSize:themeKey==="faithful_balatro"?24:20,color:theme.accent}}>SHOWDOWN PRESSURE</span>
-                <span style={{fontSize:11,color:theme.subInk,letterSpacing:1.2,textTransform:"uppercase"}}>Round 4</span>
-              </div>
-              <div style={{display:"flex",gap:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:999,background:"#0d1320aa",border:`1px solid ${theme.panelBorder}`}}>
-                  <span style={{fontSize:11,fontWeight:900,color:theme.accent}}>A 5</span>
-                  <span style={{display:"flex",gap:4}}><Chip filled color={theme.chip} label="A" active/><Chip filled color={theme.chip} label="A"/><Chip filled color={theme.chip} label="A"/><Chip filled color={theme.chip} label="A"/><Chip filled color={theme.chip} label="A"/></span>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:999,background:"#0d1320aa",border:`1px solid ${theme.panelBorder}`}}>
-                  <span style={{fontSize:11,fontWeight:900,color:"#7ec8ff"}}>{themeKey==="faithful_balatro"?"BLIND":"B"} 4</span>
-                  <span style={{display:"flex",gap:4}}><Chip filled color="#3498db" label="B" active/><Chip filled color="#3498db" label="B"/><Chip filled color="#3498db" label="B"/><Chip filled color="#3498db" label="B"/></span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{padding:"14px 16px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000030"}}>
-            <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk,marginBottom:10}}>Sample Hand Presentation</div>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
-              {THEME_DEMO_HAND.map(id=><div key={id} style={{animation:"kpThemeFloat 8s ease-in-out infinite",animationDelay:`${RO.indexOf(CM[id].rank)*0.12}s`}}><Card id={id} glow={theme.accent}/></div>)}
-            </div>
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"minmax(280px,1fr) 280px",gap:14,minHeight:0}}>
-            <div style={{padding:"16px 16px 18px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000030",display:"flex",flexDirection:"column",minHeight:0}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:12,flexWrap:"wrap"}}>
-                <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk}}>Scoring Snapshot</div>
-                <HandBadge ids={THEME_DEMO_SCORING} mods={sampleScoringMods}/>
-              </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-                {THEME_DEMO_SCORING.map(id=>{
-                  const mod=sampleScoringMods.find(m=>m.target===id);
-                  return <PreviewCard key={id} id={id} rankSticker={mod?.rank} suitSticker={mod?.suit} />;
-                })}
-              </div>
-              <div style={{padding:"14px 16px",borderRadius:18,background:"#091018c9",border:`1px solid ${theme.panelBorder}`,color:themeKey==="storybook_cardroom"?"#f8efdf":theme.ink,lineHeight:1.6,fontSize:14}}>
-                {themeKey==="vintage_casino"&&"The brass-and-felt version leans classic: old casino rail, subdued glow, and stately typography around the cards."}
-                {themeKey==="storybook_cardroom"&&"The storybook version softens the table into something more illustrated and welcoming, without losing the sense that the cards still matter."}
-                {themeKey==="faithful_balatro"&&"The Balatro-leaning version turns the table into a loud performance stage: high contrast, chunky headers, and a more feverish sense of momentum."}
-              </div>
-            </div>
-
-            <div style={{padding:"16px 16px 18px",borderRadius:24,background:theme.panel,border:`1px solid ${theme.panelBorder}`,boxShadow:"0 18px 42px #00000030",display:"grid",gridTemplateRows:"auto auto 1fr",gap:12,minHeight:0}}>
-              <div style={{fontSize:10,fontWeight:900,letterSpacing:1.6,textTransform:"uppercase",color:theme.subInk}}>Game Log Voice</div>
-              <div style={{display:"grid",gap:8,fontSize:12,color:themeKey==="storybook_cardroom"?theme.subInk:theme.ink}}>
-                {THEME_DEMO_LOG.map((line,idx)=><div key={idx} style={{padding:"8px 10px",borderRadius:12,background:"#091018af",border:`1px solid ${theme.panelBorder}`}}>{line}</div>)}
-              </div>
-              <div style={{alignSelf:"end",display:"flex",justifyContent:"flex-end"}}>
-                <Chippy
-                  title={themeKey==="faithful_balatro"?"Table Talk":"Chippy Preview"}
-                  message={themeKey==="vintage_casino"
-                    ?"The table feels older, steadier, and a little more ceremonial."
-                    :themeKey==="storybook_cardroom"
-                    ?"This one feels friendlier, softer, and a little enchanted."
-                    :"This one is all swagger. If we choose it, we should really commit to the spectacle."}
-                  visible
-                  actionLabel=""
-                  onAction={null}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"6px 4px 0"}}>
-            <div style={{fontSize:12,color:theme.subInk}}>Preview only. Gameplay is unchanged if we later apply one of these themes.</div>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-              <Btn label="Back to Menu" bg="#333" onClick={onBack}/>
-              <Btn label="Play Tutorial in Current Theme Direction" bg={theme.buttonA} onClick={()=>onStartGame("tutorial")}/>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Draggable Modal
 function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});
   const onD=e=>{dr.current=true;off.current={x:e.clientX-pos.x,y:e.clientY-pos.y};
@@ -994,7 +794,6 @@ export default function KaizenPoker(){
   const startGame=(mode="hotseat")=>{const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);};
   const startGallery=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"gallery"});};
   const startRules=()=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"rules"});};
-  const startThemeDemo=theme=>{setTracked(null);setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState({mode:"theme_demo",theme});};
   const acknowledgeTutorial=mark=>{
     if(!gs||gs.mode!=="tutorial")return;
     const g2={...gs,_tutorialAck:mark};
@@ -1856,14 +1655,13 @@ export default function KaizenPoker(){
     <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,maxWidth:560,width:"min(560px,calc(100vw - 48px))"}}>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
-        <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, try your rendered card art in Solo Art Test, or create an online guest game and send the link to a friend.</p>
+        <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
         <div style={{width:"100%",display:"grid",gap:14}}>
           <div style={{display:"grid",gap:8}}>
             <div style={{fontSize:10,fontWeight:800,color:"#cbb58a",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Learn</div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
               <Btn label="Tutorial" bg="linear-gradient(135deg,#f8d77a,#f2a93b)" onClick={()=>startGame("tutorial")}/>
               <Btn label="Rules" bg="linear-gradient(135deg,#ffe3a3,#ffc857)" onClick={startRules}/>
-              <Btn label="Card Image Gallery" bg="linear-gradient(135deg,#f8b4d9,#ec5da8)" onClick={startGallery}/>
             </div>
           </div>
           <div style={{display:"grid",gap:8}}>
@@ -1871,15 +1669,6 @@ export default function KaizenPoker(){
             <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
               <Btn label="Hotseat Game" bg="linear-gradient(135deg,#63d488,#2db56b)" onClick={()=>startGame("hotseat")}/>
               <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
-              <Btn label="Solo Art Test" bg="linear-gradient(135deg,#8ad3ff,#4598ff)" onClick={()=>startGame("solo_art")}/>
-            </div>
-          </div>
-          <div style={{display:"grid",gap:8}}>
-            <div style={{fontSize:10,fontWeight:800,color:"#f2b6ce",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Theme Demos</div>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-              <Btn label="Vintage Casino" bg="linear-gradient(135deg,#f4d48f,#b9873f)" onClick={()=>startThemeDemo("vintage_casino")}/>
-              <Btn label="Storybook Card Room" bg="linear-gradient(135deg,#f7d7af,#c9895f)" onClick={()=>startThemeDemo("storybook_cardroom")}/>
-              <Btn label="Faithful Balatro" bg="linear-gradient(135deg,#ffe36e,#ff6b57)" onClick={()=>startThemeDemo("faithful_balatro")}/>
             </div>
           </div>
           <div style={{display:"grid",gap:8}}>
@@ -1939,10 +1728,6 @@ export default function KaizenPoker(){
         </div>
       </div>
     </div>);
-  }
-
-  if(gs.mode==="theme_demo"){
-    return <ThemeDemoScreen themeKey={gs.theme} onBack={clearGameState} onStartGame={startGame}/>;
   }
 
   if(gs.mode==="gallery"){
@@ -2349,7 +2134,14 @@ export default function KaizenPoker(){
           <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif",position:"relative",zIndex:32}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
           <div style={{position:"relative",zIndex:32}}><Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div></div>}
         {gs.mode!=="tutorial"&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
-          <PlaytestPanel gs={gs} onReplaceGameState={replaceSandboxState} makeFreshGame={buildFreshGame} cards={CARDS}/>
+          <PlaytestPanel
+            gs={gs}
+            onReplaceGameState={replaceSandboxState}
+            makeFreshGame={buildFreshGame}
+            cards={CARDS}
+            onOpenGallery={startGallery}
+            onOpenSoloArt={()=>startGame("solo_art")}
+          />
         </div>}
       </div>
       {/* Log */}
