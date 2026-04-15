@@ -30,14 +30,14 @@ function gameRow(tracked) {
   const winnerSlot = tracked.outcome?.winner === "TIE" ? null : tracked.outcome?.winner || null;
   return {
     id: tracked.gameId,
-    status: tracked.finishedAt ? "finished" : "active",
+    status: tracked.finishedAt ? "finished" : tracked.closedAt ? tracked.closeReason || "abandoned" : "active",
     mode: tracked.source,
     winner_player_slot: winnerSlot,
     winner_profile_id: winnerSlot ? tracked.players[winnerSlot]?.profileId || null : null,
     a_profile_id: tracked.players.A?.profileId || null,
     b_profile_id: tracked.players.B?.profileId || null,
     started_at: tracked.startedAt,
-    finished_at: tracked.finishedAt || null,
+    finished_at: tracked.finishedAt || tracked.closedAt || null,
     app_version: tracked.appVersion,
     rules_version: tracked.rulesVersion,
     source: tracked.source,

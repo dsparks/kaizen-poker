@@ -1,12 +1,14 @@
 # Kaizen Poker
 
-A two-player deckcrafting poker game. Each round: draw seven, play two as actions, score the best five-card poker hand. First to seven chips wins.
+A two-player deckbuilding poker duel prototype. Each round, players draw seven cards, play two Actions, then score the best five-card poker hand they can make. First to seven chips wins.
 
 ## Play Online
 
-Visit: `https://dsparks.github.io/kaizen-poker/`
+Live build:
 
-Guest online play is now supported through Supabase-backed live game rows. One player creates an online game, copies the invite link, and the second player joins from another browser.
+`https://dsparks.github.io/kaizen-poker/`
+
+The app supports guest remote play through Supabase-backed live game rows. One player creates a game, copies the invite link, and the second player joins from another browser.
 
 ## Develop Locally
 
@@ -15,26 +17,38 @@ npm install
 npm run dev
 ```
 
-The app opens at `http://localhost:5173`.
+Vite serves the app at:
+
+`http://localhost:5173`
+
+## Main Modes
+
+- `Tutorial`: guided onboarding with Chippy
+- `Hotseat Game`: two players sharing one screen
+- `Solo Mode`: race the Challenger to seven chips
+- `Rules`: embedded PDF viewer for the rulebook
+- `Online Game`: guest remote multiplayer
+
+Some prototype-only tools and art modes still exist in the codebase, but they are hidden from the normal player-facing menu.
 
 ## Analytics Tracking
 
-The app now records a structured tracked game alongside the human-readable battle log.
+The app records a structured tracked game alongside the human-readable game log.
 
 Tracked data includes:
 
-- full initial 26-card deck order for Player A and Player B
-- explicit opening hands for both players
-- ordered game events with per-event sequence numbers
+- initial 26-card deck order for both players
+- opening hands
+- ordered game events
 - round summaries
 - final winner and final chip counts
-- derived per-card deck presence and usage rows
+- derived per-card deck, presence, and usage rows
 
-Tracked games are stored locally during play in `localStorage`, then archived on game end.
+Tracked games are saved locally during play in `localStorage`, then archived on game end.
 
 ## Optional Supabase Sync
 
-Analytics sync is optional and does not control gameplay. The game still runs locally in hot-seat mode; Supabase is only used to persist analytics data.
+Supabase is optional for analytics sync and required for remote guest multiplayer. Local hotseat, tutorial, and solo gameplay still work without it.
 
 ### 1. Create a Supabase project
 
@@ -42,7 +56,7 @@ Create a project at `https://supabase.com`.
 
 ### 2. Add environment variables
 
-Copy `.env.example` to `.env.local` and fill in your project values:
+Copy `.env.example` to `.env.local` and fill in:
 
 ```bash
 VITE_ENABLE_ANALYTICS_SYNC=true
@@ -50,43 +64,26 @@ VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 ```
 
-If `VITE_ENABLE_ANALYTICS_SYNC` is `false`, the app keeps tracking locally but skips network sync.
+If `VITE_ENABLE_ANALYTICS_SYNC` is `false`, the app still tracks locally but skips network sync.
 
 ### 3. Run the database migrations
 
-Apply:
+Apply these migrations in order:
 
 - [supabase/migrations/0001_analytics_schema.sql](supabase/migrations/0001_analytics_schema.sql)
 - [supabase/migrations/0002_live_games.sql](supabase/migrations/0002_live_games.sql)
 - [supabase/migrations/0003_security_advisor_fixes.sql](supabase/migrations/0003_security_advisor_fixes.sql)
 - [supabase/migrations/0004_solo_analytics_views.sql](supabase/migrations/0004_solo_analytics_views.sql)
 
-That migration creates:
+Those migrations create:
 
-- `player_profiles`
-- `games`
-- `game_initial_state`
-- `game_events`
-- `game_rounds`
-- `game_player_decks`
-- `game_player_card_presence`
-- `game_player_card_usage`
+- analytics tables such as `games`, `game_initial_state`, `game_events`, `game_rounds`, `game_player_decks`, `game_player_card_presence`, and `game_player_card_usage`
+- the `live_games` table used by guest remote multiplayer
+- analytics views for deck win rates, opening hand win rates, usage summaries, and completed solo runs
 
-It also creates analytics views:
+### 4. Guest Remote Multiplayer
 
-- `v_card_deck_win_rates`
-- `v_card_opening_hand_win_rates`
-- `v_card_usage_summary`
-- `v_completed_solo_runs`
-- `v_completed_solo_run_card_outcomes`
-- `v_solo_card_run_win_rates`
-
-The second migration creates the `live_games` table used by guest online multiplayer.
-The later migration tightens RLS and fixes the Security Advisor findings.
-
-### 4. Guest Online Multiplayer
-
-Once the migrations are applied and the app is built with your Supabase URL/key:
+Once Supabase is configured:
 
 1. Open the app
 2. Click `Create Online Game`
@@ -94,36 +91,24 @@ Once the migrations are applied and the app is built with your Supabase URL/key:
 4. Send it to your friend
 5. Your friend opens the link and joins as Player B
 
-The app uses guest seat tokens stored in browser localStorage so refreshes on the same browser keep the seat.
+The app stores guest seat tokens in browser `localStorage`, so refreshing the same browser keeps the seat when possible.
 
-### 4. Enable analytics on GitHub Pages
+### 5. Enable analytics on GitHub Pages
 
-If you want the deployed site at `https://dsparks.github.io/kaizen-poker/` to send analytics too, add these repository secrets in GitHub:
+If you want the deployed GitHub Pages build to send analytics too, add these repository secrets:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Path in GitHub:
+GitHub path:
 
-`Repo -> Settings -> Secrets and variables -> Actions -> New repository secret`
+`Repo -> Settings -> Secrets and variables -> Actions`
 
-Then push to `main` again. The deploy workflow reads those secrets at build time and bakes them into the GitHub Pages bundle.
+Then push to `main` again so the deploy workflow can bake those values into the bundle.
 
-## Current Analytics Flow
+## Current Event Stream
 
-During play, the app writes:
-
-1. `games`
-2. `game_initial_state`
-3. append-only `game_events`
-4. `game_rounds`
-5. derived deck / presence / usage rows
-
-Guest profile IDs are generated locally and synced into `player_profiles`, so the schema is ready for future account support.
-
-## What The Event Stream Captures
-
-The current tracked event stream includes:
+The tracked event stream currently includes:
 
 - `game_started`
 - `initial_deal`
@@ -142,17 +127,9 @@ The current tracked event stream includes:
 - `post_score_effect`
 - `game_finished`
 
-## Baseline Analytics Queries
+## Example Solo Analytics Query
 
-This schema supports the minimum balance-analysis questions directly:
-
-- win rate with `[Card]` in your deck
-- win rate with `[Card]` in your opening hand
-- per-card draw / play / scoring-hand / scrap counts
-
-The most immediately useful view is `v_card_deck_win_rates`, which lets you estimate card strength from very large samples based only on deck membership.
-
-For completed solo-run balance questions, `v_completed_solo_run_card_outcomes` is the most flexible starting point. Example:
+For completed solo-run balance questions, `v_completed_solo_run_card_outcomes` is a good starting point:
 
 ```sql
 select
@@ -173,17 +150,7 @@ order by win_rate_pct desc nulls last, total_runs desc, card_id;
 
 ## Deploy to GitHub Pages
 
-1. Create a new GitHub repo named `kaizen-poker`
-2. Push this folder:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/kaizen-poker.git
-git push -u origin main
-```
-
-3. In GitHub, go to `Settings -> Pages -> Source` and select `GitHub Actions`
-4. The deploy workflow runs automatically on push
+1. Create a GitHub repo named `kaizen-poker`
+2. Push this project
+3. In GitHub, set `Settings -> Pages -> Source` to `GitHub Actions`
+4. Pushes to `main` will trigger the deploy workflow

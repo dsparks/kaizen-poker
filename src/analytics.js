@@ -4,6 +4,8 @@ export const ANALYTICS_SOURCE = "local_hotseat";
 export const SOLO_ANALYTICS_SOURCE = "solo_variant";
 export const SOLO_ART_ANALYTICS_SOURCE = "solo_art_test";
 export const ONLINE_ANALYTICS_SOURCE = "online_guest";
+export const RULES_ANALYTICS_SOURCE = "rules_viewer";
+export const GALLERY_ANALYTICS_SOURCE = "card_image_gallery";
 const TUTORIAL_ANALYTICS_SOURCE = "tutorial";
 const ACTIVE_GAME_KEY = "kaizenPoker.activeTrackedGame";
 const COMPLETED_GAMES_KEY = "kaizenPoker.completedTrackedGames";
@@ -44,6 +46,10 @@ function resolveTrackedPlayerProfile(slot, mode) {
 const analyticsSourceForMode = mode =>
   mode === "tutorial"
     ? TUTORIAL_ANALYTICS_SOURCE
+    : mode === "rules"
+    ? RULES_ANALYTICS_SOURCE
+    : mode === "gallery"
+    ? GALLERY_ANALYTICS_SOURCE
     : mode === "solo_art" || mode === SOLO_ART_ANALYTICS_SOURCE
     ? SOLO_ART_ANALYTICS_SOURCE
     : mode === "solo" || mode === SOLO_ANALYTICS_SOURCE
@@ -53,14 +59,38 @@ const analyticsSourceForMode = mode =>
     : ANALYTICS_SOURCE;
 
 export function buildTrackedGame(gs) {
+  const safeGs = {
+    mode: gs?.mode || "hotseat",
+    phase: gs?.phase || "setup",
+    round: gs?.round || 1,
+    firstPlayer: gs?.firstPlayer || "A",
+    currentPlayer: gs?.currentPlayer || gs?.firstPlayer || "A",
+    aDeck: [...(gs?.aDeck || [])],
+    bDeck: [...(gs?.bDeck || [])],
+    aHand: [...(gs?.aHand || [])],
+    bHand: [...(gs?.bHand || [])],
+    aDiscard: [...(gs?.aDiscard || [])],
+    bDiscard: [...(gs?.bDiscard || [])],
+    aPlay: [...(gs?.aPlay || [])],
+    bPlay: [...(gs?.bPlay || [])],
+    log: [...(gs?.log || [])],
+    _aReq: gs?._aReq || 2,
+    _bReq: gs?._bReq || 2,
+    _createdAt: gs?._createdAt,
+    _gameId: gs?._gameId,
+    _aInitialDeck: gs?._aInitialDeck,
+    _bInitialDeck: gs?._bInitialDeck,
+    _aInitialHand: gs?._aInitialHand,
+    _bInitialHand: gs?._bInitialHand,
+  };
   const startedAt = gs._createdAt || nowIso();
-  const source = analyticsSourceForMode(gs.mode);
+  const source = analyticsSourceForMode(safeGs.mode);
   const players = {
-    A: resolveTrackedPlayerProfile("A", gs.mode),
-    B: resolveTrackedPlayerProfile("B", gs.mode),
+    A: resolveTrackedPlayerProfile("A", safeGs.mode),
+    B: resolveTrackedPlayerProfile("B", safeGs.mode),
   };
   const tracked = {
-    gameId: gs._gameId || mkId(),
+    gameId: safeGs._gameId || mkId(),
     source,
     appVersion: APP_VERSION,
     rulesVersion: RULES_VERSION,
@@ -70,19 +100,19 @@ export function buildTrackedGame(gs) {
       B: { profileId: players.B.id, isGuest: players.B.isGuest !== false, displayName: players.B.displayName },
     },
     initialState: {
-      aInitialDeck: [...(gs._aInitialDeck || gs.aDeck || [])],
-      bInitialDeck: [...(gs._bInitialDeck || gs.bDeck || [])],
-      aInitialHand: [...(gs._aInitialHand || gs.aHand || [])],
-      bInitialHand: [...(gs._bInitialHand || gs.bHand || [])],
-      initialFirstPlayer: gs.firstPlayer,
-      initialRound: gs.round || 1,
-      initialState: clone(gs),
+      aInitialDeck: [...(safeGs._aInitialDeck || safeGs.aDeck || [])],
+      bInitialDeck: [...(safeGs._bInitialDeck || safeGs.bDeck || [])],
+      aInitialHand: [...(safeGs._aInitialHand || safeGs.aHand || [])],
+      bInitialHand: [...(safeGs._bInitialHand || safeGs.bHand || [])],
+      initialFirstPlayer: safeGs.firstPlayer,
+      initialRound: safeGs.round || 1,
+      initialState: clone(safeGs),
     },
     events: [],
     rounds: [],
     outcome: null,
   };
-  return appendInitialEvents(tracked, gs);
+  return appendInitialEvents(tracked, safeGs);
 }
 
 function appendInitialEvents(tracked, gs) {
@@ -189,9 +219,27 @@ export function finalizeTrackedGame(tracked, gs, winner) {
   }, { phase: "game_over", playerSlot: winner === "TIE" ? null : winner });
 }
 
+export function closeTrackedGame(tracked, gs, reason = "abandoned") {
+  if (!tracked || tracked.outcome || tracked.closedAt) return tracked;
+  const closed = {
+    ...tracked,
+    closedAt: nowIso(),
+    closeReason: reason,
+    finalState: clone(gs || tracked.initialState?.initialState || {}),
+  };
+  return appendTrackedEvent(closed, gs, "session_closed", {
+    reason,
+  }, { phase: gs?.phase || "session_end", playerSlot: null });
+}
+
 export function saveActiveTrackedGame(tracked) {
   if (!hasStorage() || !tracked) return;
   window.localStorage.setItem(ACTIVE_GAME_KEY, JSON.stringify(tracked));
+}
+
+export function clearActiveTrackedGame() {
+  if (!hasStorage()) return;
+  window.localStorage.removeItem(ACTIVE_GAME_KEY);
 }
 
 export function archiveCompletedTrackedGame(tracked) {
