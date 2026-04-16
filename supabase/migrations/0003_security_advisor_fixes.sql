@@ -35,6 +35,15 @@ $$;
 
 grant usage on schema public to anon;
 
+grant select on table public.player_profiles to anon;
+grant select on table public.games to anon;
+grant select on table public.game_initial_state to anon;
+grant select on table public.game_events to anon;
+grant select on table public.game_rounds to anon;
+grant select on table public.game_player_decks to anon;
+grant select on table public.game_player_card_presence to anon;
+grant select on table public.game_player_card_usage to anon;
+
 grant insert, update on table public.player_profiles to anon;
 grant insert, update on table public.games to anon;
 grant insert, update on table public.game_initial_state to anon;
@@ -44,21 +53,86 @@ grant insert, update on table public.game_player_decks to anon;
 grant insert, update on table public.game_player_card_presence to anon;
 grant insert, update on table public.game_player_card_usage to anon;
 
-revoke select, delete on table public.player_profiles from anon;
-revoke select, delete on table public.games from anon;
-revoke select, delete on table public.game_initial_state from anon;
-revoke select, delete on table public.game_events from anon;
-revoke select, delete on table public.game_rounds from anon;
-revoke select, delete on table public.game_player_decks from anon;
-revoke select, delete on table public.game_player_card_presence from anon;
-revoke select, delete on table public.game_player_card_usage from anon;
+revoke delete on table public.player_profiles from anon;
+revoke delete on table public.games from anon;
+revoke delete on table public.game_initial_state from anon;
+revoke delete on table public.game_events from anon;
+revoke delete on table public.game_rounds from anon;
+revoke delete on table public.game_player_decks from anon;
+revoke delete on table public.game_player_card_presence from anon;
+revoke delete on table public.game_player_card_usage from anon;
+
+create policy "anon select guest player profiles"
+on public.player_profiles
+for select
+to anon
+using (
+  auth.role() = 'anon'
+  and auth_user_id is null
+);
+
+create policy "anon select games"
+on public.games
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
+
+create policy "anon select game initial state"
+on public.game_initial_state
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
+
+create policy "anon select game events"
+on public.game_events
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
+
+create policy "anon select game rounds"
+on public.game_rounds
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
+
+create policy "anon select game player decks"
+on public.game_player_decks
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
+
+create policy "anon select game player card presence"
+on public.game_player_card_presence
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
+
+create policy "anon select game player card usage"
+on public.game_player_card_usage
+for select
+to anon
+using (
+  auth.role() = 'anon'
+);
 
 create policy "anon insert guest player profiles"
 on public.player_profiles
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
   and auth_user_id is null
 );
 
@@ -67,11 +141,11 @@ on public.player_profiles
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
   and auth_user_id is null
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
   and auth_user_id is null
 );
 
@@ -80,7 +154,7 @@ on public.games
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update games"
@@ -88,10 +162,10 @@ on public.games
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon insert game initial state"
@@ -99,7 +173,7 @@ on public.game_initial_state
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update game initial state"
@@ -107,10 +181,10 @@ on public.game_initial_state
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon insert game events"
@@ -118,7 +192,7 @@ on public.game_events
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update game events"
@@ -126,10 +200,10 @@ on public.game_events
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon insert game rounds"
@@ -137,7 +211,7 @@ on public.game_rounds
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update game rounds"
@@ -145,10 +219,10 @@ on public.game_rounds
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon insert game player decks"
@@ -156,7 +230,7 @@ on public.game_player_decks
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update game player decks"
@@ -164,10 +238,10 @@ on public.game_player_decks
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon insert game player card presence"
@@ -175,7 +249,7 @@ on public.game_player_card_presence
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update game player card presence"
@@ -183,10 +257,10 @@ on public.game_player_card_presence
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon insert game player card usage"
@@ -194,7 +268,7 @@ on public.game_player_card_usage
 for insert
 to anon
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 create policy "anon update game player card usage"
@@ -202,10 +276,10 @@ on public.game_player_card_usage
 for update
 to anon
 using (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 )
 with check (
-  current_setting('request.jwt.claim.role', true) = 'anon'
+  auth.role() = 'anon'
 );
 
 -- =========================================================

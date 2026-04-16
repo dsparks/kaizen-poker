@@ -40,7 +40,15 @@ async function restUpsert(table, rows, onConflict) {
     headers: getHeaders(),
     body: JSON.stringify(rows),
   });
-  if (!response.ok) throw new Error(`Supabase upsert failed for ${table}: ${response.status}`);
+  if (!response.ok) {
+    let details = "";
+    try {
+      details = await response.text();
+    } catch {
+      details = "";
+    }
+    throw new Error(`Supabase upsert failed for ${table}: ${response.status}${details ? ` - ${details}` : ""}`);
+  }
 }
 
 function gameRow(tracked) {
