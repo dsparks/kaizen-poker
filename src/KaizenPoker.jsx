@@ -224,6 +224,61 @@ const ART_IMAGE_HEIGHT_SCALE=ART_SOURCE_HEIGHT/ART_CROP_HEIGHT;
 const ART_IMAGE_OFFSET_X=`-${(ART_CROP_X/ART_CROP_WIDTH)*100}%`;
 const ART_IMAGE_OFFSET_Y=`-${(ART_CROP_Y/ART_CROP_HEIGHT)*100}%`;
 const RULES_PDF_PATH=rulesPdfUrl;
+const SFX_ENABLED_KEY="kaizenPoker.sfxEnabled";
+const SFX_URLS={
+  camera:"https://assets.mixkit.co/active_storage/sfx/1133/1133.wav",
+  confirm:"https://assets.mixkit.co/active_storage/sfx/1104/1104.wav",
+  error:"https://assets.mixkit.co/active_storage/sfx/1110/1110.wav",
+  chip:"https://assets.mixkit.co/active_storage/sfx/3187/3187.wav",
+  victory:"https://assets.mixkit.co/active_storage/sfx/2059/2059.wav",
+  chippy:"https://assets.mixkit.co/active_storage/sfx/269/269.wav",
+  shuffle:"https://cdn.pixabay.com/download/audio/2022/03/24/audio_2b254f7c73.mp3?filename=freesound_community-riffle-card-shuffle-104313.mp3",
+};
+let globalSfxEnabled=true;
+const sfxCache=new Map();
+const sfxStopTimers=new Map();
+const setGlobalSfxEnabled=value=>{globalSfxEnabled=value;};
+const getSfxEnabledDefault=()=>{
+  if(typeof window==="undefined")return true;
+  try{
+    const raw=window.localStorage.getItem(SFX_ENABLED_KEY);
+    return raw==null?true:raw==="true";
+  }catch{return true;}
+};
+function getSfxAudio(name){
+  if(!SFX_URLS[name]||typeof Audio==="undefined")return null;
+  if(!sfxCache.has(name)){
+    const audio=new Audio(SFX_URLS[name]);
+    audio.preload="auto";
+    sfxCache.set(name,audio);
+  }
+  return sfxCache.get(name);
+}
+function playSfx(name,{volume=1,reset=true}={}){
+  if(!globalSfxEnabled)return;
+  const audio=getSfxAudio(name);
+  if(!audio)return;
+  try{
+    const priorStopTimer=sfxStopTimers.get(name);
+    if(priorStopTimer){
+      clearTimeout(priorStopTimer);
+      sfxStopTimers.delete(name);
+    }
+    if(reset)audio.currentTime=0;
+    audio.volume=Math.max(0,Math.min(1,volume));
+    void audio.play().catch(()=>{});
+    if(name==="shuffle"){
+      const stopTimer=setTimeout(()=>{
+        try{
+          audio.pause();
+          audio.currentTime=0;
+        }catch{}
+        sfxStopTimers.delete(name);
+      },2500);
+      sfxStopTimers.set(name,stopTimer);
+    }
+  }catch{}
+}
 
 // ============================================================
 // ENGINE
@@ -234,9 +289,11 @@ function drawCards(gs,player,n){
   const st={...gs};const dk=player==="A"?[...st.aDeck]:[...st.bDeck];
   const dc=player==="A"?[...st.aDiscard]:[...st.bDiscard];
   const hand=player==="A"?[...st.aHand]:[...st.bHand];const drawn=[];
-  for(let i=0;i<n;i++){if(!dk.length){if(!dc.length)return{...st,error:"DECK_EXHAUSTED"};dk.push(...shuf(dc));dc.length=0;}
+  let reshuffled=false;
+  for(let i=0;i<n;i++){if(!dk.length){if(!dc.length)return{...st,error:"DECK_EXHAUSTED"};dk.push(...shuf(dc));dc.length=0;reshuffled=true;}
     drawn.push(dk.shift());hand.push(drawn[drawn.length-1]);}
   if(player==="A"){st.aDeck=dk;st.aDiscard=dc;st.aHand=hand}else{st.bDeck=dk;st.bDiscard=dc;st.bHand=hand}
+  if(reshuffled)st._lastReshuffleAt=`${Date.now()}-${player}-${Math.random().toString(16).slice(2,8)}`;
   return{...st,drawn};}
 export function evalHand(cardIds,mods=[]){
   let eff=cardIds.map(id=>{const b=CM[id];const m=mods.find(x=>x.target===id);
@@ -549,7 +606,8 @@ function GalleryThumbCard({id,onHover,onLeave,active=false,scale=1}){return <div
 </div>;}
 function HandBadge({ids,mods}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span style={{padding:"3px 10px",borderRadius:5,background:`${c}18`,border:`1px solid ${c}44`,color:c,fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{r.handName}</span>;}
-function Btn({label,bg="#333",onClick,disabled}){return(<button onClick={onClick} disabled={disabled} style={{padding:"8px 16px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#94a3b8":"#081018",border:"1px solid "+(bg==="#333"?"#334155":"#ffffff22"),borderRadius:10,fontWeight:800,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1,boxShadow:disabled?"none":"0 8px 18px #00000033, inset 0 1px 0 #ffffff22",transform:"translateY(0)",transition:"transform 0.15s, box-shadow 0.15s, opacity 0.15s"}}>{label}</button>);}
+function Btn({label,bg="#333",onClick,disabled,silent=false}){return(<button onClick={e=>{if(disabled)return;if(!silent)playSfx("confirm",{volume:.28});onClick?.(e);}} disabled={disabled} style={{padding:"8px 16px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#94a3b8":"#081018",border:"1px solid "+(bg==="#333"?"#334155":"#ffffff22"),borderRadius:10,fontWeight:800,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1,boxShadow:disabled?"none":"0 8px 18px #00000033, inset 0 1px 0 #ffffff22",transform:"translateY(0)",transition:"transform 0.15s, box-shadow 0.15s, opacity 0.15s"}}>{label}</button>);}
+function SfxToggle({enabled,onToggle}){return(<button onClick={()=>{playSfx(enabled?"error":"confirm",{volume:.24});onToggle();}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:enabled?"#b9f3cf":"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:enabled?"#123023":"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>SFX {enabled?"On":"Off"}</button>);}
 function Chip({filled,color,label,active}){return <div style={{width:22,height:22,borderRadius:"50%",display:"grid",placeItems:"center",position:"relative",
   background:filled?`radial-gradient(circle at 35% 30%,#fff8,${color} 25%,${color}dd 58%,#0008 100%)`:"radial-gradient(circle at 35% 30%,#32404d,#18202a 68%,#081018 100%)",
   border:`2px solid ${filled?`${color}aa`:"#445262"}`,boxShadow:filled?`0 0 14px ${color}55, inset 0 1px 0 #fff8, 0 6px 12px #0005`:"inset 0 1px 0 #ffffff14, 0 4px 10px #0004",
@@ -656,6 +714,7 @@ export default function KaizenPoker(){
   const[gs,setGs]=useState(null);const[modal,setModal]=useState(null);const[fdMode,setFdMode]=useState(false);
   const[undoState,setUndoState]=useState(null); // snapshot before last action, for undo
   const[toast,setToast]=useState(null);
+  const[sfxEnabled,setSfxEnabled]=useState(()=>getSfxEnabledDefault());
   const[joinCode,setJoinCode]=useState("");
   const[shareLink,setShareLink]=useState("");
   const[onlineError,setOnlineError]=useState("");
@@ -678,6 +737,12 @@ export default function KaizenPoker(){
   const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()});
   const pollRef=useRef(null);
   const analyticsAuthorityRef=useRef(true);
+  const prevPhaseRef=useRef(null);
+  const prevChipsRef=useRef({a:0,b:0});
+  const prevGameOverRef=useRef(false);
+  const prevChippyVisibleRef=useRef(false);
+  const prevGalleryHoverRef=useRef(null);
+  const prevReshuffleRef=useRef(null);
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(canResumeLocally(nextGs)){
@@ -876,6 +941,7 @@ export default function KaizenPoker(){
 
   const flashToast=(msg,tone="info")=>{
     if(toastTimerRef.current)clearTimeout(toastTimerRef.current);
+    if(tone==="frozen"||tone==="fizzle"||tone==="cancel")playSfx("error",{volume:.26});
     setToast({msg,tone,key:Date.now()+Math.random()});
     toastTimerRef.current=setTimeout(()=>setToast(null),1800);
   };
@@ -1002,6 +1068,37 @@ export default function KaizenPoker(){
     },1200);
   };
 
+  const tutorialPrompt=gs?.mode==="tutorial"?getTutorialPrompt(gs,modal,fdMode):null;
+  const tutorialAckReady=gs?.mode==="tutorial" && gs.phase==="action" && gs.currentPlayer==="B" && gs._tutorialAck==="opp-turn";
+  const tutorialAllows=(kind,value=null)=>{
+    if(gs?.mode!=="tutorial")return true;
+    const expect=tutorialPrompt?.expect;
+    if(!expect)return true;
+    if(expect.kind==="none"||expect.kind==="ack")return false;
+    if(expect.kind==="menu")return kind==="menu";
+    if(expect.kind!==kind)return false;
+    return expect.value==null||expect.value===value;
+  };
+  const tutorialZoneTarget=tutorialPrompt?.expect?.kind==="inspectZone"?tutorialPrompt.expect.value:null;
+  const tutorialCanToggleZone=key=>!tutorialZoneTarget||tutorialZoneTarget===key;
+  const handleTutorialZoneToggle=key=>{
+    if(gs?.mode!=="tutorial"||tutorialZoneTarget!==key)return;
+    acknowledgeTutorial(`zone:${key}`);
+  };
+  const tutorialTagStyles={
+    aDiscard:{label:"A Discard",color:"#e74c3c",background:"transparent",glow:"#e74c3c55"},
+    bDiscard:{label:"B Discard",color:"#3498db",background:"transparent",glow:"#3498db55"},
+    scrap:{label:"Scrap",color:"#9b59b6",background:"transparent",glow:"#9b59b655"},
+  };
+  const tutorialTag=tutorialPrompt?.tagKey?tutorialTagStyles[tutorialPrompt.tagKey]||null:null;
+
+  useEffect(()=>{
+    setGlobalSfxEnabled(sfxEnabled);
+    if(typeof window!=="undefined"){
+      try{window.localStorage.setItem(SFX_ENABLED_KEY,String(sfxEnabled));}catch{}
+    }
+  },[sfxEnabled]);
+
   useEffect(()=>{
     if(!gs||gs.phase!=="score"||modal)return;
     const flow=gs._scoreFlow;
@@ -1042,29 +1139,45 @@ export default function KaizenPoker(){
     if(logRef.current) logRef.current.scrollTop=logRef.current.scrollHeight;
   },[gs?.log?.length]);
 
-  const tutorialPrompt=gs?.mode==="tutorial"?getTutorialPrompt(gs,modal,fdMode):null;
-  const tutorialAckReady=gs?.mode==="tutorial" && gs.phase==="action" && gs.currentPlayer==="B" && gs._tutorialAck==="opp-turn";
-  const tutorialAllows=(kind,value=null)=>{
-    if(gs?.mode!=="tutorial")return true;
-    const expect=tutorialPrompt?.expect;
-    if(!expect)return true;
-    if(expect.kind==="none"||expect.kind==="ack")return false;
-    if(expect.kind==="menu")return kind==="menu";
-    if(expect.kind!==kind)return false;
-    return expect.value==null||expect.value===value;
-  };
-  const tutorialZoneTarget=tutorialPrompt?.expect?.kind==="inspectZone"?tutorialPrompt.expect.value:null;
-  const tutorialCanToggleZone=key=>!tutorialZoneTarget||tutorialZoneTarget===key;
-  const handleTutorialZoneToggle=key=>{
-    if(gs?.mode!=="tutorial"||tutorialZoneTarget!==key)return;
-    acknowledgeTutorial(`zone:${key}`);
-  };
-  const tutorialTagStyles={
-    aDiscard:{label:"A Discard",color:"#e74c3c",background:"transparent",glow:"#e74c3c55"},
-    bDiscard:{label:"B Discard",color:"#3498db",background:"transparent",glow:"#3498db55"},
-    scrap:{label:"Scrap",color:"#9b59b6",background:"transparent",glow:"#9b59b655"},
-  };
-  const tutorialTag=tutorialPrompt?.tagKey?tutorialTagStyles[tutorialPrompt.tagKey]||null:null;
+  useEffect(()=>{
+    if(!gs)return;
+    if(prevPhaseRef.current && prevPhaseRef.current!==gs.phase){
+      if(gs.phase==="reveal")playSfx("camera",{volume:.26});
+      if(gs.phase==="gameOver")playSfx("camera",{volume:.3});
+    }
+    prevPhaseRef.current=gs.phase;
+  },[gs?.phase]);
+
+  useEffect(()=>{
+    if(!gs)return;
+    const prev=prevChipsRef.current;
+    if(gs.aChips>prev.a||gs.bChips>prev.b)playSfx("chip",{volume:.34});
+    prevChipsRef.current={a:gs.aChips||0,b:gs.bChips||0};
+  },[gs?.aChips,gs?.bChips]);
+
+  useEffect(()=>{
+    if(!gs?._lastReshuffleAt)return;
+    if(gs._lastReshuffleAt!==prevReshuffleRef.current)playSfx("shuffle",{volume:.2});
+    prevReshuffleRef.current=gs._lastReshuffleAt;
+  },[gs?._lastReshuffleAt]);
+
+  useEffect(()=>{
+    const isGameOver=!!(gs&&gs.phase==="gameOver");
+    if(isGameOver&&!prevGameOverRef.current)playSfx("victory",{volume:.38});
+    prevGameOverRef.current=isGameOver;
+  },[gs?.phase]);
+
+  useEffect(()=>{
+    const visible=!!((soloIntroVisible&&gs&&isSoloMode(gs.mode))||(gs?.mode==="tutorial"&&tutorialPrompt));
+    if(visible&&!prevChippyVisibleRef.current)playSfx("chippy",{volume:.24});
+    prevChippyVisibleRef.current=visible;
+  },[soloIntroVisible,gs?.mode,tutorialPrompt]);
+
+  useEffect(()=>{
+    if(gs?.mode!=="gallery"){prevGalleryHoverRef.current=null;return;}
+    if(galleryHoverId&&galleryHoverId!==prevGalleryHoverRef.current)playSfx("camera",{volume:.18});
+    prevGalleryHoverRef.current=galleryHoverId;
+  },[gs?.mode,galleryHoverId]);
 
   useEffect(()=>{
     if(!gs||gs.mode!=="tutorial"||gs.phase!=="action"||gs.currentPlayer!=="B"||modal||fdMode)return;
@@ -1813,6 +1926,7 @@ export default function KaizenPoker(){
     <div style={{position:"absolute",width:420,height:420,borderRadius:"50%",background:"radial-gradient(circle,#c49a5a14 0%,transparent 68%)",bottom:-180,left:-120}}/>
     <div style={{position:"absolute",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#2ecc7114 0%,transparent 72%)",top:120,right:-80}}/>
     <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,maxWidth:560,width:"min(560px,calc(100vw - 48px))"}}>
+      <div style={{width:"100%",display:"flex",justifyContent:"flex-end"}}><SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/></div>
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
         <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
@@ -1867,7 +1981,8 @@ export default function KaizenPoker(){
         <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
         <span style={{color:"#445"}}>Rules</span>
         <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Rules</span>
-        <button onClick={clearGameState} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
+        <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
+        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
         <a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",textDecoration:"none",boxShadow:"inset 0 1px 0 #ffffff10"}}>Open PDF</a>
       </div>
       <div style={{padding:18,position:"relative",zIndex:1,height:"calc(100vh - 59px)",overflow:"hidden"}}>
@@ -1927,7 +2042,8 @@ export default function KaizenPoker(){
         <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
         <span style={{color:"#445"}}>Card Image Gallery</span>
         <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Card Image Gallery</span>
-        <button onClick={clearGameState} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
+        <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
+        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
       </div>
       <div style={{padding:18,position:"relative",zIndex:1,flex:1,minHeight:0,overflow:"auto"}}>
         <div style={{minWidth:0,padding:"16px 18px 18px",borderRadius:28,background:"linear-gradient(180deg,#133328d8,#0c241ddd)",border:"1px solid #8c6a3a44",boxShadow:"0 30px 80px #00000033,inset 0 1px 0 #f6e3b51a"}}>
@@ -2156,7 +2272,8 @@ export default function KaizenPoker(){
           :"Game Over"}
       </span>
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>SUDDEN DEATH</span>}
-      <button onClick={()=>setModal({type:"mainMenu"})} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
+      <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
+      <button onClick={()=>{playSfx("confirm",{volume:.28});setModal({type:"mainMenu"});}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
       <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
         <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
           <span style={{color:"#e74c3c",fontWeight:800}}>{isSoloMode(gs.mode)?"YOU":"A"} {gs.aChips}</span>
