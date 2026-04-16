@@ -43,6 +43,41 @@ export const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
 export const FACE=["J","Q","K"];
 const LOCAL_GAME_SNAPSHOT_KEY="kaizen-poker:last-local-game:v1";
 const PLAYTEST_QUERY_FLAG="playtest";
+const ROUTE_BY_MODE={
+  home:"",
+  hotseat:"hotseat",
+  tutorial:"tutorial",
+  solo:"solo",
+  solo_art:"solo-art",
+  gallery:"gallery",
+  rules:"rules",
+};
+const MODE_BY_ROUTE=Object.fromEntries(
+  Object.entries(ROUTE_BY_MODE)
+    .filter(([,route])=>route)
+    .map(([mode,route])=>[route,mode])
+);
+const normalizeHashRoute=hash=>{
+  const raw=(hash||"").replace(/^#/,"").replace(/^\/+/,"").trim().toLowerCase();
+  return raw.replace(/\/+$/,"");
+};
+const getRequestedModeFromHash=()=>{
+  if(typeof window==="undefined")return null;
+  const route=normalizeHashRoute(window.location.hash);
+  return MODE_BY_ROUTE[route]||null;
+};
+const updateHashForMode=(mode,{replace=false,preserveGameSearch=false}={})=>{
+  if(typeof window==="undefined")return;
+  try{
+    const route=ROUTE_BY_MODE[mode]??"";
+    const nextHash=route?`#/${route}`:"";
+    const params=new URLSearchParams(window.location.search);
+    if(!preserveGameSearch)params.delete("game");
+    const nextSearch=params.toString();
+    const nextUrl=`${window.location.pathname}${nextSearch?`?${nextSearch}`:""}${nextHash}`;
+    window.history[replace?"replaceState":"pushState"]({},"",nextUrl);
+  }catch{}
+};
 export function lowerRanks(rank){
   if(rank==="A") return RO.filter(r=>r!=="A");
   if(rank==="2") return ["A"];
@@ -743,6 +778,7 @@ export default function KaizenPoker(){
   const prevChippyVisibleRef=useRef(false);
   const prevGalleryHoverRef=useRef(null);
   const prevReshuffleRef=useRef(null);
+  const initialRouteHandledRef=useRef(false);
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(canResumeLocally(nextGs)){
@@ -794,7 +830,7 @@ export default function KaizenPoker(){
   const clearGameState=()=>{
     flushTrackedSession(gs,"left_mode");
     if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;}
-    if(typeof window!=="undefined") window.history.replaceState({}, "", window.location.pathname);
+    updateHashForMode("home",{replace:true});
     onlineRef.current={active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()};
     analyticsAuthorityRef.current=true;
     setJoinCode("");
@@ -1010,10 +1046,17 @@ export default function KaizenPoker(){
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const buildPassiveModeState=mode=>({mode,phase:"browse",round:1,firstPlayer:"A",currentPlayer:"A",aDeck:[],bDeck:[],aHand:[],bHand:[],aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],log:[],_createdAt:new Date().toISOString()});
-  const startGame=(mode="hotseat")=>{flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);};
-  const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);};
-  const startGallery=()=>{flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);};
-  const startRules=()=>{flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);};
+  const startGame=(mode="hotseat",{replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
+  const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
+  const startGallery=({replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
+  const startRules=({replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
+  const launchModeFromHash=useCallback((requestedMode,{replaceUrl=false}={})=>{
+    if(!requestedMode||requestedMode==="home")return false;
+    if(requestedMode==="gallery"){startGallery({replaceUrl});return true;}
+    if(requestedMode==="rules"){startRules({replaceUrl});return true;}
+    if(["hotseat","tutorial","solo","solo_art"].includes(requestedMode)){startGame(requestedMode,{replaceUrl});return true;}
+    return false;
+  },[gs]);
   const acknowledgeTutorial=mark=>{
     if(!gs||gs.mode!=="tutorial")return;
     const g2={...gs,_tutorialAck:mark};
@@ -1270,14 +1313,19 @@ export default function KaizenPoker(){
 
   useEffect(()=>{
     if(typeof window==="undefined")return;
+    if(initialRouteHandledRef.current)return;
+    initialRouteHandledRef.current=true;
     const params=new URLSearchParams(window.location.search);
     const gameId=params.get("game");
     if(gameId){
       setJoinCode(gameId);
       void joinOnlineGame(gameId);
+    }else{
+      const requestedMode=getRequestedModeFromHash();
+      if(requestedMode)launchModeFromHash(requestedMode,{replaceUrl:true});
     }
     return()=>{if(pollRef.current)clearInterval(pollRef.current);};
-  },[joinOnlineGame]);
+  },[joinOnlineGame,launchModeFromHash]);
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
