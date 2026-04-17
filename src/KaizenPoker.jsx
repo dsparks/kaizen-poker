@@ -600,32 +600,159 @@ function FaceDownActionSlot({id,canPeek=false,copySticker}){const[hover,setHover
       <Card id={id} copySticker={copySticker}/>
     </div>}
   </>);}
-function VictoryCascade({winner,cards=[]}){if(!winner||winner==="TIE")return null;
-  const ids=(cards.length?cards:CARDS.slice(0,7).map(c=>c.id)).filter(Boolean);
-  if(!ids.length)return null;
-  const color=winner==="A"?"#e74c3c":"#3498db";
-  const items=Array.from({length:26},(_,i)=>({
-    id:ids[i%ids.length],
-    left:(i*37+11)%96,
-    delay:-(i%11)*0.42,
-    duration:4.4+(i%7)*0.32,
-    drift:((i%5)-2)*34,
-    bounce:((i%5)-2)*-6,
-    settle:((i%5)-2)*4,
-    exit:((i%5)-2)*10,
-    rotate:(i%2?1:-1)*(18+(i%6)*9),
-    rotateBounce:(i%2?-1:1)*(8+(i%4)*3),
-    rotateSettle:(i%2?1:-1)*(5+(i%3)*2),
-    rotateExit:(i%2?1:-1)*(12+(i%5)*4),
-  }));
-  return(<div aria-hidden="true" style={{position:"fixed",inset:0,zIndex:31,pointerEvents:"none",overflow:"hidden"}}>
-    {items.map((it,i)=><div key={`${it.id}-${i}`} style={{position:"absolute",top:-132,left:`${it.left}%`,transform:"translateX(-50%)",animation:`kpVictoryCascade ${it.duration}s cubic-bezier(.16,.72,.28,1) ${it.delay}s infinite`,["--kp-drift"]:`${it.drift}px`,["--kp-bounce"]:`${it.bounce}px`,["--kp-settle"]:`${it.settle}px`,["--kp-exit"]:`${it.exit}px`,["--kp-rot"]:`${it.rotate}deg`,["--kp-rot-bounce"]:`${it.rotateBounce}deg`,["--kp-rot-settle"]:`${it.rotateSettle}deg`,["--kp-rot-exit"]:`${it.rotateExit}deg`}}>
-      <div style={{position:"absolute",left:10,top:-62,width:16,height:150,borderRadius:999,background:`linear-gradient(180deg,transparent,${color}55,transparent)`,filter:"blur(6px)",animation:`kpVictoryTrail ${it.duration}s ease-out ${it.delay}s infinite`}}/>
-      <div style={{transform:`rotate(${it.rotate/3}deg)`,filter:`drop-shadow(0 12px 18px #0008) drop-shadow(0 0 10px ${color}66)`}}>
-        <Card id={it.id} small glow={color}/>
-      </div>
+function getCascadeCardPool(gs){
+  if(!gs)return [];
+  const playIds=zone=>(zone||[]).map(card=>typeof card==="string"?card:card?.id).filter(Boolean);
+  const ids=[
+    ...(gs.aHand||[]),
+    ...(gs.bHand||[]),
+    ...(gs.aDeck||[]),
+    ...(gs.bDeck||[]),
+    ...(gs.aDiscard||[]),
+    ...(gs.bDiscard||[]),
+    ...playIds(gs.aPlay),
+    ...playIds(gs.bPlay),
+    ...(gs.scrap||[]),
+    ...(gs._soloRevealedCards||[]),
+    gs._soloReveal?.cardId,
+  ].filter(Boolean);
+  return [...new Set(ids)];
+}
+function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")return null;
+  const rafRef=useRef(null);
+  const spriteRefs=useRef([]);
+  const spritesRef=useRef([]);
+  const cardsKey=(cards||[]).join("|");
+  const idsRef=useRef([]);
+  if(!idsRef.current.length||idsRef.current._key!==cardsKey){
+    const pool=(cards.length?cards:CARDS.map(c=>c.id)).filter(Boolean);
+    const shuffled=shuf(pool);
+    const fallback=CARDS.map(c=>c.id);
+    const targetCount=52;
+    const sampled=Array.from({length:targetCount},(_,i)=>shuffled[i%Math.max(1,shuffled.length)]||fallback[i%fallback.length]);
+    idsRef.current=sampled;
+    idsRef.current._key=cardsKey;
+  }
+  const spriteIds=idsRef.current;
+  useEffect(()=>{
+    if(!spriteIds.length)return;
+    const sprites=spriteIds.map((id,i)=>({
+      key:`${id}-${i}`,
+      id,
+      x:0,y:0,vx:0,vy:0,rot:0,vr:0,
+      width:68,height:95,
+      bounce:0.76,
+      restFor:0,
+      active:false,
+      queued:true,
+      hasDropped:false,
+    }));
+    spritesRef.current=sprites;
+    const spawnSprite=s=>{
+      s.x=Math.random()*Math.max(100,window.innerWidth-140);
+      s.y=-(Math.random()*220)-120;
+      s.vx=(Math.random()*180)-90;
+      s.vy=40+(Math.random()*120);
+      s.rot=((Math.random()*26)-13)*Math.PI/180;
+      s.vr=((Math.random()*1.5)-0.75);
+      s.bounce=0.72+(Math.random()*0.08);
+      s.restFor=0;
+      s.active=true;
+      s.queued=false;
+      s.hasDropped=true;
+    };
+    const syncNode=s=>{
+      const node=spriteRefs.current.find(entry=>entry?.dataset?.spriteKey===s.key);
+      if(!node)return;
+      node.style.transform=`translate3d(${s.x}px, ${s.y}px, 0) rotate(${s.rot}rad)`;
+      node.style.opacity=s.active?"1":"0";
+    };
+    sprites.forEach(syncNode);
+    let lastTs=0;
+    let spawnAccumulator=0;
+    const spawnInterval=0.2;
+    const floorPad=8;
+    const gravity=1180;
+    const step=ts=>{
+      if(!lastTs)lastTs=ts;
+      const dt=Math.min((ts-lastTs)/1000,0.033);
+      lastTs=ts;
+      spawnAccumulator+=dt;
+      while(spawnAccumulator>=spawnInterval){
+        spawnAccumulator-=spawnInterval;
+        const nextQueued=sprites.find(sprite=>sprite.queued);
+        if(nextQueued)spawnSprite(nextQueued);
+        else break;
+      }
+      for(const s of sprites){
+        if(s.active){
+          s.vy+=gravity*dt;
+          s.x+=s.vx*dt;
+          s.y+=s.vy*dt;
+          s.rot+=s.vr*dt;
+          s.vx*=0.999;
+          s.vr*=0.996;
+          if(s.x<=-10){
+            s.x=-10;
+            s.vx=Math.abs(s.vx)*0.9;
+            s.vr*=-0.92;
+          }else if(s.x+s.width>=window.innerWidth+10){
+            s.x=window.innerWidth-s.width+10;
+            s.vx=-Math.abs(s.vx)*0.9;
+            s.vr*=-0.92;
+          }
+          const floorY=window.innerHeight-s.height-floorPad;
+          if(s.y>=floorY){
+            s.y=floorY;
+            if(Math.abs(s.vy)>70){
+              s.vy=-Math.abs(s.vy)*s.bounce;
+              s.vx*=0.985;
+              s.vr*=0.94;
+            }else{
+              s.vy=0;
+              s.vx*=0.94;
+              s.vr*=0.9;
+              if(Math.abs(s.vx)<8&&Math.abs(s.vr)<0.08){
+                s.vx=0;
+                s.vr=0;
+                s.active=false;
+                s.restFor=0;
+              }
+            }
+          }
+        }else{
+          if(s.hasDropped){
+            s.restFor+=dt;
+            if(s.restFor>1.2){
+              s.queued=true;
+              s.hasDropped=false;
+              s.x=-220;
+              s.y=-220;
+              s.restFor=0;
+            }
+          }
+        }
+        syncNode(s);
+      }
+      rafRef.current=requestAnimationFrame(step);
+    };
+    rafRef.current=requestAnimationFrame(step);
+    return()=>{
+      if(rafRef.current)cancelAnimationFrame(rafRef.current);
+    };
+  },[cardsKey,winner,spriteIds.length]);
+  const glowColor=winner==="A"?"#e74c3c":"#3498db";
+  return <div aria-hidden="true" style={{position:"fixed",inset:0,zIndex:31,pointerEvents:"none",overflow:"hidden"}}>
+    {spriteIds.map((id,i)=><div
+      key={`${id}-${i}`}
+      data-sprite-key={`${id}-${i}`}
+      ref={node=>{if(node)spriteRefs.current[i]=node;}}
+      style={{position:"absolute",top:0,left:0,transform:"translate3d(-200px,-200px,0)",opacity:0,willChange:"transform, opacity",transition:"opacity 0.12s linear",filter:`drop-shadow(0 10px 18px #0008) drop-shadow(0 0 12px ${glowColor}66)`}}
+    >
+      <Card id={id} small glow={glowColor}/>
     </div>)}
-  </div>);}
+  </div>;
+}
 function GalleryThumbCard({id,onHover,onLeave,active=false,scale=1}){return <div
   onMouseEnter={onHover}
   onMouseLeave={onLeave}
@@ -2193,7 +2320,7 @@ export default function KaizenPoker(){
     const aH=getH(gs,"A"),bH=getH(gs,"B");
     const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
     const winnerPlayer=w==="A"?"A":w==="B"?"B":null;
-    const cascadeCards=isSoloMode(gs.mode)&&w==="B"?(gs._soloReveal?.cardId?[gs._soloReveal.cardId]:bH):(w==="A"?aH:bH);
+    const cascadeCards=getCascadeCardPool(gs);
     const wText=isSoloMode(gs.mode)
       ?(isFinal
         ?(w==="A"?"You win the solo run!":w==="B"?"The Challenger wins the solo run!":"The solo run ends in a tie!")
@@ -2293,12 +2420,11 @@ export default function KaizenPoker(){
       </div>
     );
     if(!isFinal)return <div style={{position:"fixed",inset:0,zIndex:25,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(13,21,29,.18) 0%,rgba(10,15,22,.78) 38%,rgba(5,8,12,.9) 100%)",backdropFilter:"blur(6px)"}}>{shell}</div>;
-    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictoryCascade winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
+    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictorySolitaireCanvas winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
   };
 
   return(<CardRenderContext.Provider value={cardRenderStyle}><div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}@media (max-width:900px){.kp-table-frame{display:none}.kp-main-column{padding-left:20px!important;padding-right:12px!important}}`}</style>
-    <style>{`@keyframes kpVictoryCascade{0%{opacity:0;transform:translate3d(0,-145px,0) rotate(-8deg)}6%{opacity:1}52%{transform:translate3d(var(--kp-drift),58vh,0) rotate(var(--kp-rot))}72%{transform:translate3d(var(--kp-bounce),76vh,0) rotate(var(--kp-rot-bounce))}86%{opacity:1;transform:translate3d(var(--kp-settle),86vh,0) rotate(var(--kp-rot-settle))}100%{opacity:0;transform:translate3d(var(--kp-exit),108vh,0) rotate(var(--kp-rot-exit))}}@keyframes kpVictoryTrail{0%,9%{opacity:0;transform:scaleY(.35)}16%,74%{opacity:.82;transform:scaleY(1)}100%{opacity:0;transform:scaleY(.18)}}`}</style>
     <style>{`.kp-log-scroll{scrollbar-width:thin;scrollbar-color:#7d6a44 #0c131a}.kp-log-scroll::-webkit-scrollbar{width:12px}.kp-log-scroll::-webkit-scrollbar-track{background:linear-gradient(180deg,#0d151d,#0a1118);border-left:1px solid #223141;box-shadow:inset 1px 0 0 #ffffff08}.kp-log-scroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#b89252,#6d5632);border-radius:999px;border:2px solid #0c131a;box-shadow:inset 0 1px 0 #f7dfac66,0 0 0 1px #4c3920}.kp-log-scroll::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#d5af67,#80653b)}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
       <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
