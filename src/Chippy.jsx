@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export default function Chippy({ title = "Chippy", message = "", visible = true, actionLabel = "", onAction = null, tag = null }) {
+export default function Chippy({
+  title = "Chippy",
+  message = "",
+  visible = true,
+  actionLabel = "",
+  onAction = null,
+  tag = null,
+  initialPos = null,
+  draggable = true,
+}) {
   const rootRef = useRef(null);
   const dragRef = useRef(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -16,12 +25,17 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
 
   useEffect(() => {
     if (!visible || placed || typeof window === "undefined") return;
+    if (initialPos) {
+      setPos(initialPos);
+      setPlaced(true);
+      return;
+    }
     setPos({
       x: Math.max(24, window.innerWidth - 760),
       y: Math.max(24, window.innerHeight - 360),
     });
     setPlaced(true);
-  }, [visible, placed]);
+  }, [visible, placed, initialPos]);
 
   useEffect(() => {
     const onMove = e => {
@@ -61,6 +75,7 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
   if (!visible || !message) return null;
 
   const startDrag = e => {
+    if (!draggable) return;
     dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
   };
 
@@ -76,7 +91,7 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
         alignItems: "flex-end",
         gap: 12,
         pointerEvents: "auto",
-        cursor: "grab",
+        cursor: draggable ? "grab" : "default",
         userSelect: "none",
       }}
     >
@@ -115,7 +130,7 @@ export default function Chippy({ title = "Chippy", message = "", visible = true,
             </span>
           </div>
         )}
-        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{message}</div>
+        <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-line" }}>{message}</div>
         {actionLabel && onAction && (
           <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
             <button

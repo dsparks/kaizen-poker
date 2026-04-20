@@ -45,7 +45,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
   if (gs._tutorialComplete || gs.phase === "gameOver" || gs.phase === "tutorialDone") {
     return {
       title: "Tutorial Complete",
-      message: "Nice work. You have played through the full flow of a round, seen face-down play, and watched a Remember card pay off from scrap. Press MENU whenever you want to start a fresh game.",
+      message: "Nice work. Now that you've seen how the game works, you're ready to play. Press MENU whenever you want to start a fresh game.",
       expect: { kind: "menu" },
     };
   }
@@ -57,32 +57,32 @@ export function getTutorialPrompt(gs, modal, fdMode) {
   if (round === 1) {
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 0) return {
       title: "First Action",
-      message: "I'm Chippy. Each round starts with two Actions for each player, then both hands score. Let's open with Loot.",
+      message: "Hi! I'm Chippy. Welcome to Kaizen Poker.\nEach round starts with two Actions for each player, then both hands score. Go ahead and start by clicking Loot, to play it as an Action.",
       expect: { kind: "playCard", value: "3D" },
     };
     if (modal?.type === "pickDiscard" && /^Loot/.test(modal.title || "")) return {
       title: "Draw Then Discard",
-      message: "Keep Nerf and let Prune go. Loot gives you value right away, so the question is which card helps this hand less right now.",
+      message: "Keep Nerf and let Prune go. Loot gives you the opportunity to see an additional card, so the question is which card helps this hand less right now.",
       expect: { kind: "modalCard", value: "2C" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1) return {
       title: "Second Action",
-      message: "Now play Buff. Buff is a Modify, so it waits in play for now and makes its choice during scoring.",
+      message: "Now play Buff. Buff is a Modify action, so it waits in play for now and you'll assign it to one of your scoring cards later.",
       expect: { kind: "playCard", value: "10H" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Opponent Turn",
-      message: "Your turn is done. Watch the other side now: Mill sends cards into discard, then Trim turns one of those cards into scrap. Click OK when you're ready.",
+      message: "Your turn is done. Your opponent plays Mill to put some cards into their discard, then Trim to scrap one of those discarded cards.",
       expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal && !(gs.aMods || []).length) return {
       title: "Score Phase",
-      message: "Action phase is over. Reveal and score. Because Buff is still in play, you'll choose how it changes your scoring hand.",
+      message: "The Action phase is over; time for the Score phase. Because Buff is still in play, you'll choose how it changes your scoring hand.",
       expect: { kind: "reveal" },
     };
     if (modal?.type === "pickFromList" && /Buff/.test(modal.title || "")) return {
       title: "Choose The Target",
-      message: "Pick Nerf. We're about to turn that Ten into a King.",
+      message: "Pick Nerf. We're about to turn that 10 into a King.",
       expect: { kind: "modalCard", value: "10S" },
     };
     if (modal?.type === "pickRank" && /Buff/.test(modal.title || "")) return {
@@ -100,17 +100,17 @@ export function getTutorialPrompt(gs, modal, fdMode) {
   if (round === 2) {
     if (modal?.type === "refreshOpts") return {
       title: "Default Face-Down Reward",
-      message: "This is the default face-down reward: Refresh. You discard a card, then draw a replacement. Choose Refresh.",
+      message: "If you don't have any Actions you want to play, you can always play a card facedown. The default face-down ability is Refresh. You discard a card, then draw a replacement. Click Refresh.",
       expect: { kind: "refreshChoice", value: "refresh" },
     };
     if (modal?.type === "pickDiscard" && /^Refresh/.test(modal.title || "")) return {
       title: "Refresh",
-      message: "Discard Recall. The face-down card is already spent, so Refresh lets you trade away the weaker piece and keep the rest.",
+      message: "Discard Recall. The face-down card is already spent, so Refresh lets you trade away a card you don't want and keep the rest.",
       expect: { kind: "modalCard", value: "5H" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 0) return {
       title: "A Simple First Action",
-      message: "Play Freeze. Freeze is an Amend, so it changes the rules of the round instead of changing a scoring card.",
+      message: "Play Freeze. Freeze is an Amend Action, so it changes the rules of the round instead of changing a scoring card.",
       expect: { kind: "playCard", value: "7C" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1 && !fdMode) return {

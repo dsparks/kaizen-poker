@@ -45,6 +45,8 @@ const LOCAL_GAME_SNAPSHOT_KEY="kaizen-poker:last-local-game:v1";
 const PLAYTEST_QUERY_FLAG="playtest";
 const ROUTE_BY_MODE={
   home:"",
+  demo:"demo",
+  remote:"remote",
   hotseat:"hotseat",
   tutorial:"tutorial",
   solo:"solo",
@@ -66,6 +68,7 @@ const getRequestedModeFromHash=()=>{
   const route=normalizeHashRoute(window.location.hash);
   return MODE_BY_ROUTE[route]||null;
 };
+const isHomeRouteVariant=mode=>mode==="demo"||mode==="remote";
 const updateHashForMode=(mode,{replace=false,preserveGameSearch=false}={})=>{
   if(typeof window==="undefined")return;
   try{
@@ -887,6 +890,8 @@ export default function KaizenPoker(){
   const[galleryHoverId,setGalleryHoverId]=useState(null);
   const[resumeAvailable,setResumeAvailable]=useState(()=>!!loadLocalGameSnapshot());
   const[playtestEnabled,setPlaytestEnabled]=useState(()=>hasPlaytestFlag());
+  const[homeRoute,setHomeRoute]=useState(()=>getRequestedModeFromHash());
+  const[demoChippyDismissed,setDemoChippyDismissed]=useState(false);
   const[analyticsSyncState,setAnalyticsSyncState]=useState(()=>({
     ...getAnalyticsDebugInfo(),
     lastAttemptAt:null,
@@ -957,7 +962,7 @@ export default function KaizenPoker(){
   const clearGameState=()=>{
     flushTrackedSession(gs,"left_mode");
     if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;}
-    updateHashForMode("home",{replace:true});
+    updateHashForMode(isHomeRouteVariant(homeRoute)?homeRoute:"home",{replace:true});
     onlineRef.current={active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()};
     analyticsAuthorityRef.current=true;
     setJoinCode("");
@@ -1177,7 +1182,12 @@ export default function KaizenPoker(){
   const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
   const startGallery=({replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
   const startRules=({replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
+  const setHomeRouteVariant=useCallback((variant="home",{replaceUrl=false}={})=>{
+    setHomeRoute(variant);
+    updateHashForMode(variant,{replace:replaceUrl});
+  },[]);
   const launchModeFromHash=useCallback((requestedMode,{replaceUrl=false}={})=>{
+    if(isHomeRouteVariant(requestedMode)){setHomeRoute(requestedMode);return false;}
     if(!requestedMode||requestedMode==="home")return false;
     if(requestedMode==="gallery"){startGallery({replaceUrl});return true;}
     if(requestedMode==="rules"){startRules({replaceUrl});return true;}
@@ -1453,6 +1463,25 @@ export default function KaizenPoker(){
     }
     return()=>{if(pollRef.current)clearInterval(pollRef.current);};
   },[joinOnlineGame,launchModeFromHash]);
+
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const syncHomeRoute=()=>{
+      const requested=getRequestedModeFromHash();
+      if(requested&&requested!=="home"){
+        const launched=launchModeFromHash(requested);
+        if(!launched)setHomeRoute(requested);
+        return;
+      }
+      setHomeRoute(requested);
+    };
+    window.addEventListener("hashchange",syncHomeRoute);
+    return()=>window.removeEventListener("hashchange",syncHomeRoute);
+  },[launchModeFromHash]);
+
+  useEffect(()=>{
+    setDemoChippyDismissed(false);
+  },[homeRoute]);
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
@@ -2094,6 +2123,13 @@ export default function KaizenPoker(){
   // ============================================================
   // RENDER
   // ============================================================
+  const homeLinkStyle={color:"#8fd0ff",fontWeight:700,textDecoration:"underline",textUnderlineOffset:2,pointerEvents:"auto"};
+  const demoChippyMessage=<>
+    Welcome to the Kaizen Poker demo! In lieu of a demo video, I&apos;ve put together a playable web version of the game. Feel free to peruse the <a href="#/rules" style={homeLinkStyle}>rules</a>, try an introductory <a href="#/tutorial" style={homeLinkStyle}>tutorial</a>, or play the full game: <a href="#/hotseat" style={homeLinkStyle}>two-player hotseat</a>, <a href="#/solo" style={homeLinkStyle}>solo versus a Challenger deck</a>, or even <a href="#/remote" style={homeLinkStyle}>two-player remote</a>.
+    <br/><br/>
+    You can contact the designer <a href="mailto:dsparks@gmail.com" style={homeLinkStyle}>here</a>. Have fun!
+  </>;
+
   if(!gs)return(<>
     <div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
     <div style={{position:"absolute",inset:20,borderRadius:34,border:"2px solid #b8965b33",boxShadow:"inset 0 0 0 1px #f8e7b11a"}}/>
@@ -2122,19 +2158,19 @@ export default function KaizenPoker(){
             </div>
           </div>
           <div style={{display:"grid",gap:8}}>
-            <div style={{fontSize:10,fontWeight:800,color:"#9fbdf2",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Play Remotely</div>
+            <div style={{fontSize:10,fontWeight:800,color:homeRoute==="remote"?"#d9e7ff":"#9fbdf2",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center",textShadow:homeRoute==="remote"?"0 0 14px rgba(96,165,250,.45)":"none"}}>Play Remotely</div>
             <div style={{display:"flex",justifyContent:"center"}}>
               <Btn label="Create Online Game" bg="linear-gradient(135deg,#67a8ff,#2563eb)" onClick={startOnlineGame}/>
             </div>
           </div>
         </div>
-      <div style={{width:"100%",display:"grid",gap:8,paddingTop:2}}>
-        <div style={{fontSize:10,fontWeight:800,color:"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Remote Game</div>
+      <div style={{width:"100%",display:"grid",gap:8,paddingTop:2,paddingBottom:homeRoute==="remote"?6:0,borderRadius:18,background:homeRoute==="remote"?"linear-gradient(180deg,#12304a55,#0f172a00)":"transparent",boxShadow:homeRoute==="remote"?"inset 0 0 0 1px #60a5fa33, 0 0 28px #60a5fa18":"none",transition:"all .2s ease"}}>
+        <div style={{fontSize:10,fontWeight:800,color:homeRoute==="remote"?"#dbeafe":"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Remote Game</div>
         <input
           value={joinCode}
           onChange={e=>setJoinCode(e.target.value)}
           placeholder="Paste game link or game ID"
-          style={{width:"100%",padding:"10px 12px",borderRadius:12,border:"1px solid #334155",background:"#0f172a",color:"#dbe5ee",fontSize:13}}
+          style={{width:"100%",padding:"10px 12px",borderRadius:12,border:`1px solid ${homeRoute==="remote"?"#60a5fa":"#334155"}`,background:"#0f172a",color:"#dbe5ee",fontSize:13,boxShadow:homeRoute==="remote"?"0 0 0 1px #60a5fa33 inset, 0 0 18px #60a5fa14":"none"}}
         />
         <div style={{display:"flex",justifyContent:"center"}}>
           <Btn label="Join Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={()=>joinOnlineGame(joinCode)}/>
@@ -2142,6 +2178,15 @@ export default function KaizenPoker(){
       </div>
         {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
         </div></div>
+    {homeRoute==="demo"&&!demoChippyDismissed&&<Chippy
+      title="Kaizen Poker Demo"
+      message={demoChippyMessage}
+      visible
+      actionLabel="OK"
+      onAction={()=>setDemoChippyDismissed(true)}
+      initialPos={{x:150,y:252}}
+      draggable={false}
+    />}
   </>);
 
   if(gs.mode==="rules"){
@@ -2262,7 +2307,7 @@ export default function KaizenPoker(){
   const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
-  const soloIntroMessage="Solo Mode is a race to seven chips against the Challenger. You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.";
+  const soloIntroMessage='Solo Mode is a race to seven chips against the "Challenger Deck." You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.';
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
   const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
