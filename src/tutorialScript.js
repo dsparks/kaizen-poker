@@ -120,7 +120,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && fdMode) return {
       title: "Pick A Card To Hide",
-      message: "Choose Exchange. We don't want its printed text here; we want the face-down effect instead.",
+      message: "Now play Exchange. We don't want its ability here; we'll use the face-down effect instead.",
       expect: { kind: "playFaceDownCard", value: "6H" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
@@ -130,12 +130,12 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "score" && !modal) return {
       title: "Reveal Again",
-      message: "Reveal and score. This round is here to show how face-down play gives you a flexible fallback.",
+      message: "Reveal and score. Now you've seen how face-down play gives you a flexible fallback.",
       expect: { kind: "reveal" },
     };
     if (gs.phase === "reveal") return {
       title: "Face-Down Basics",
-      message: "That's the core idea. Face-down play gives you a dependable option when the printed text isn't what you need. Press Next Round.",
+      message: "When you don't love any of the actions your cards offer, face-down play gives you a nice fallback option. Press Next Round.",
       expect: { kind: "next" },
     };
   }
@@ -143,22 +143,22 @@ export function getTutorialPrompt(gs, modal, fdMode) {
   if (round === 3) {
     if (modal?.type === "rejuvenate") return {
       title: "Discard Camouflage",
-      message: "Choose only Camouflage. We want it in your discard first so you can see exactly where it goes before it reaches scrap.",
+      message: "Choose only Camouflage. We want it in your discard first, you'll scrap it soon.",
       expect: { kind: "none" },
     };
     if (modal?.type === "pickFromList" && /Impeach/.test(modal.title || "")) return {
       title: "Scrap Camouflage",
-      message: "Pick Camouflage. Impeach scraps a face card, so this is the move from discard into scrap.",
+      message: "Pick Camouflage. Impeach scraps a face card, moving it from your discard to the scrap pile.",
       expect: { kind: "modalCard", value: "QD" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 0) return {
       title: "Build The Lesson Yourself",
-      message: "Stay with the same game and play Rejuvenate. We're going to move Camouflage from your hand into your discard first.",
+      message: "Play Rejuvenate. (We're going to use it to move Camouflage into your discard, then scrap it.)",
       expect: { kind: "playCard", value: "KH" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1 && ack !== "zone:aDiscard") return {
       title: "Inspect Your Discard",
-      message: "Open A Discard. Camouflage is sitting there now, and plenty of actions care about that pile.",
+      message: "Click the A Discard to see what's in your own discard pile. It's often useful to know what's in your own or your opponent's discard pile. You should see Camouflage sitting there now.",
       tagKey: "aDiscard",
       expect: { kind: "inspectZone", value: "aDiscard" },
     };
@@ -175,7 +175,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Continuity Matters",
-      message: "Now the setup is in place. Your opponent will take two quiet Actions, and then you'll see Camouflage pay off during scoring. Click OK when you're ready.",
+      message: "Your opponent will take two quiet Actions, and then you'll see Camouflage pay off during scoring. Click OK when you're ready.",
       expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal) return {
@@ -195,7 +195,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "reveal") return {
       title: "Tutorial Wrap-Up",
-      message: "There it is. Camouflage only mattered because you carried it from hand to discard, then from discard to scrap. Press Finish Tutorial when you're ready.",
+      message: "There is a lot more to explore in Kaizen Poker, but now you know some of the basics. Press Finish Tutorial when you're ready.",
       expect: { kind: "next" },
     };
   }
