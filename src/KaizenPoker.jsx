@@ -31,6 +31,7 @@ import {
   TUTORIAL_INITIAL_DECKS,
   TUTORIAL_TOTAL_ROUNDS,
 } from "./tutorialScript.js";
+import { trackUmami, trackUmamiScreen } from "./umami.js";
 
 // ============================================================
 // DATA (unchanged)
@@ -911,6 +912,7 @@ export default function KaizenPoker(){
   const prevGalleryHoverRef=useRef(null);
   const prevReshuffleRef=useRef(null);
   const initialRouteHandledRef=useRef(false);
+  const lastUmamiScreenRef=useRef("");
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(canResumeLocally(nextGs)){
@@ -960,6 +962,7 @@ export default function KaizenPoker(){
   };
   const patchGameState=updater=>gameTransport.patch(updater);
   const clearGameState=()=>{
+    trackUmami("return_to_menu",{from_mode:gs?.mode||"home",home_route:isHomeRouteVariant(homeRoute)?homeRoute:"home"});
     flushTrackedSession(gs,"left_mode");
     if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;}
     updateHashForMode(isHomeRouteVariant(homeRoute)?homeRoute:"home",{replace:true});
@@ -978,6 +981,7 @@ export default function KaizenPoker(){
     gameTransport.clear();
   };
   const enablePlaytestMode=()=>{
+    trackUmami("playtest_enabled",{source:"join_remote_game_magic_word"});
     if(typeof window!=="undefined"){
       try{
         const params=new URLSearchParams(window.location.search);
@@ -1178,11 +1182,12 @@ export default function KaizenPoker(){
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const buildPassiveModeState=mode=>({mode,phase:"browse",round:1,firstPlayer:"A",currentPlayer:"A",aDeck:[],bDeck:[],aHand:[],bHand:[],aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],log:[],_createdAt:new Date().toISOString()});
-  const startGame=(mode="hotseat",{replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
-  const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
-  const startGallery=({replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
-  const startRules=({replaceUrl=false}={})=>{flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
+  const startGame=(mode="hotseat",{replaceUrl=false}={})=>{trackUmami("mode_started",{mode,entry:"local"});flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
+  const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;trackUmami("mode_resumed",{mode:saved.mode||"hotseat"});flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
+  const startGallery=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"gallery",entry:"menu"});flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
+  const startRules=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"rules",entry:"menu"});flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
   const setHomeRouteVariant=useCallback((variant="home",{replaceUrl=false}={})=>{
+    trackUmami("home_variant_opened",{variant:variant||"home"});
     setHomeRoute(variant);
     updateHashForMode(variant,{replace:replaceUrl});
   },[]);
@@ -1396,6 +1401,7 @@ export default function KaizenPoker(){
   const startOnlineGame=async()=>{
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
     try{
+      trackUmami("remote_game_create_attempt",{source:"menu"});
       flushTrackedSession(gs,"mode_switch");
       const token=makeSeatToken();
       const g=buildFreshGame("online");
@@ -1403,10 +1409,12 @@ export default function KaizenPoker(){
       analyticsAuthorityRef.current=true;
       trackedRef.current=tracked;
       const row=await createLiveGame({gameId:g._gameId,state:g,tracked,playerAToken:token});
+      trackUmami("remote_game_created",{source:"menu",seat:"A"});
       storeSeat(row.id,"A",token);
       hydrateFromLiveRow(row,{seat:"A",token,authority:true});
       startLivePolling(row.id,true);
     }catch(err){
+      trackUmami("remote_game_create_failed",{source:"menu"});
       console.error(err);
       setOnlineError(err.message||"Unable to create online game.");
     }
@@ -1422,6 +1430,7 @@ export default function KaizenPoker(){
     if(!gameId){setOnlineError("Enter a game link or game ID.");return;}
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
     try{
+      trackUmami("remote_game_join_attempt",{source:"join_form"});
       let row=await fetchLiveGame(gameId);
       if(!row){setOnlineError("That online game was not found.");return;}
       let seatInfo=loadSeat(gameId);
@@ -1440,9 +1449,11 @@ export default function KaizenPoker(){
       }else{
         seat=null;token=null;
       }
+      trackUmami("remote_game_joined",{source:"join_form",seat:seat||"spectator"});
       hydrateFromLiveRow(row,{seat,token,authority});
       startLivePolling(gameId,authority);
     }catch(err){
+      trackUmami("remote_game_join_failed",{source:"join_form"});
       console.error(err);
       setOnlineError(err.message||"Unable to join online game.");
     }
@@ -1482,6 +1493,23 @@ export default function KaizenPoker(){
   useEffect(()=>{
     setDemoChippyDismissed(false);
   },[homeRoute]);
+
+  useEffect(()=>{
+    const screen=liveGameId
+      ?"remote_game"
+      :gs?.mode
+        ?gs.mode
+        :isHomeRouteVariant(homeRoute)
+          ?homeRoute
+          :"home";
+    if(screen===lastUmamiScreenRef.current)return;
+    lastUmamiScreenRef.current=screen;
+    trackUmamiScreen(screen,{
+      mode:gs?.mode||"",
+      live_game:liveGameId?"yes":"no",
+      home_route:isHomeRouteVariant(homeRoute)?homeRoute:"home",
+    });
+  },[gs?.mode,homeRoute,liveGameId]);
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
@@ -2183,7 +2211,7 @@ export default function KaizenPoker(){
       message={demoChippyMessage}
       visible
       actionLabel="OK"
-      onAction={()=>setDemoChippyDismissed(true)}
+      onAction={()=>{trackUmami("demo_intro_dismissed",{source:"demo_route"});setDemoChippyDismissed(true);}}
       initialPos={{x:150,y:252}}
       draggable={false}
     />}
