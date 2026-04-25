@@ -893,6 +893,11 @@ export default function KaizenPoker(){
   const[playtestEnabled,setPlaytestEnabled]=useState(()=>hasPlaytestFlag());
   const[homeRoute,setHomeRoute]=useState(()=>getRequestedModeFromHash());
   const[demoChippyDismissed,setDemoChippyDismissed]=useState(false);
+  const[viewportSize,setViewportSize]=useState(()=>({
+    width:typeof window!=="undefined"?window.innerWidth:1280,
+    height:typeof window!=="undefined"?window.innerHeight:800,
+  }));
+  const[mobileLogOpen,setMobileLogOpen]=useState(false);
   const[analyticsSyncState,setAnalyticsSyncState]=useState(()=>({
     ...getAnalyticsDebugInfo(),
     lastAttemptAt:null,
@@ -1495,6 +1500,18 @@ export default function KaizenPoker(){
   },[homeRoute]);
 
   useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const syncViewport=()=>setViewportSize({width:window.innerWidth,height:window.innerHeight});
+    syncViewport();
+    window.addEventListener("resize",syncViewport);
+    window.addEventListener("orientationchange",syncViewport);
+    return()=>{
+      window.removeEventListener("resize",syncViewport);
+      window.removeEventListener("orientationchange",syncViewport);
+    };
+  },[]);
+
+  useEffect(()=>{
     const screen=liveGameId
       ?"remote_game"
       :gs?.mode
@@ -1510,6 +1527,12 @@ export default function KaizenPoker(){
       home_route:isHomeRouteVariant(homeRoute)?homeRoute:"home",
     });
   },[gs?.mode,homeRoute,liveGameId]);
+
+  const isMobileLandscape=viewportSize.width>viewportSize.height&&viewportSize.width<=960&&viewportSize.height<=560;
+
+  useEffect(()=>{
+    if(!isMobileLandscape&&mobileLogOpen)setMobileLogOpen(false);
+  },[isMobileLandscape,mobileLogOpen]);
 
   // Actions that reveal new info (need confirmation, can't undo after)
   const REVEALS=new Set(["3C","3D","3S","4C","4D","4H","5C","8H","KC","KD","KH","AD","7H"]);
@@ -2356,6 +2379,18 @@ export default function KaizenPoker(){
   }).filter(Boolean):[];
 
   const isSuddenDeath=gs.aChips===6||gs.bChips===6;
+  const headerPad=isMobileLandscape?"8px 10px":"10px 16px";
+  const headerGap=isMobileLandscape?8:12;
+  const headerFontSize=isMobileLandscape?11:12;
+  const mainPad=isMobileLandscape?10:16;
+  const mainGap=isMobileLandscape?8:12;
+  const panelPad=isMobileLandscape?"10px 12px":"12px 14px";
+  const handPad=isMobileLandscape?"10px 12px":"14px 16px";
+  const handGap=isMobileLandscape?6:8;
+  const sectionRadius=isMobileLandscape?16:18;
+  const handCardSmall=isMobileLandscape;
+  const actionAreaMinHeight=isMobileLandscape?78:95;
+  const publicAreaGap=isMobileLandscape?10:16;
 
   const pClr=viewerPlayer==="A"?"#e74c3c":"#3498db";
   const chipGoal=7;
@@ -2504,7 +2539,7 @@ export default function KaizenPoker(){
       <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
       <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)",animation:"floatGlow 10s ease-in-out infinite"}}/>
     </div>
-    <div style={{padding:"10px 16px",borderBottom:isSuddenDeath?"2px solid #d27d5c":"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:isSuddenDeath?"linear-gradient(180deg,#4b1f18dd,#1c120ddd)":"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
+    <div style={{padding:headerPad,borderBottom:isSuddenDeath?"2px solid #d27d5c":"1px solid #6e573122",display:"flex",alignItems:"center",gap:headerGap,background:isSuddenDeath?"linear-gradient(180deg,#4b1f18dd,#1c120ddd)":"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:headerFontSize,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
       <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
       <span style={{color:"#445"}}>Round {gs.round}</span>
       <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
@@ -2521,18 +2556,19 @@ export default function KaizenPoker(){
       {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>SUDDEN DEATH</span>}
       <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
       <button onClick={()=>{playSfx("confirm",{volume:.28});setModal({type:"mainMenu"});}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
-      <div style={{marginLeft:"auto",display:"flex",gap:10,flexWrap:"wrap"}}>
-        <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
+      {isMobileLandscape&&<button onClick={()=>setMobileLogOpen(true)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>LOG</button>}
+      <div style={{marginLeft:"auto",display:"flex",gap:isMobileLandscape?6:10,flexWrap:"wrap"}}>
+        <div style={{padding:isMobileLandscape?"5px 8px":"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
           <span style={{color:"#e74c3c",fontWeight:800}}>{isSoloMode(gs.mode)?"YOU":"A"} {gs.aChips}</span>
           <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#e74c3c")}</span>
         </div>
-        <div style={{padding:"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{padding:isMobileLandscape?"5px 8px":"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
           <span style={{color:"#3498db",fontWeight:800}}>{isSoloMode(gs.mode)?"CHALLENGER":"B"} {gs.bChips}</span>
           <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#3498db")}</span>
         </div>
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
-      <div className="kp-main-column" style={{flex:1,minWidth:0,minHeight:0,padding:16,display:"flex",flexDirection:"column",gap:12,overflowY:"auto",overflowX:"hidden"}}>
+      <div className="kp-main-column" style={{flex:1,minWidth:0,minHeight:0,padding:mainPad,display:"flex",flexDirection:"column",gap:mainGap,overflowY:"auto",overflowX:"hidden"}}>
         {toast&&<div key={toast.key} style={{position:"sticky",top:6,zIndex:5,display:"flex",justifyContent:"center",pointerEvents:"none",marginBottom:-2}}>
           <div style={{
             padding:"8px 14px",
@@ -2555,7 +2591,7 @@ export default function KaizenPoker(){
             animation:"toastPop 0.18s ease-out"
           }}>{toast.msg}</div>
         </div>}
-        {isOnlineMode&&<div style={{background:"linear-gradient(180deg,#132333dd,#0d1824f2)",border:"1px solid #3b82f655",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",boxShadow:"inset 0 1px 0 #ffffff10"}}>
+        {isOnlineMode&&<div style={{background:"linear-gradient(180deg,#132333dd,#0d1824f2)",border:"1px solid #3b82f655",borderRadius:12,padding:isMobileLandscape?"7px 10px":"8px 12px",display:"flex",gap:isMobileLandscape?8:10,alignItems:"center",flexWrap:"wrap",boxShadow:"inset 0 1px 0 #ffffff10"}}>
           <span style={{fontSize:10,fontWeight:800,color:"#93c5fd",letterSpacing:1.2,textTransform:"uppercase"}}>Online Game</span>
           {seatPlayer
             ?<span style={{fontSize:11,color:"#dbeafe"}}>You are Player {seatPlayer}</span>
@@ -2569,13 +2605,13 @@ export default function KaizenPoker(){
         </div>}
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
-          return(<div style={{background:"linear-gradient(180deg,#18372bdd,#11271fff)",border:"1px solid #8f744333",borderRadius:8,padding:"6px 10px",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",boxShadow:"inset 0 1px 0 #f0e0b10d"}}>
+          return(<div style={{background:"linear-gradient(180deg,#18372bdd,#11271fff)",border:"1px solid #8f744333",borderRadius:8,padding:isMobileLandscape?"5px 8px":"6px 10px",display:"flex",flexWrap:"wrap",gap:isMobileLandscape?6:8,alignItems:"center",boxShadow:"inset 0 1px 0 #f0e0b10d"}}>
             <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
             {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" - "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
         {/* Play areas */}
         {isSoloMode(gs.mode)
-          ?<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>
-            <div style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#11293ad8,#0b1c28dc)",border:"1px solid #658dbb55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
+          ?<div style={{display:"flex",gap:publicAreaGap,flexWrap:"wrap",minWidth:0}}>
+            <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#11293ad8,#0b1c28dc)",border:"1px solid #658dbb55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
                 <div style={{fontSize:9,color:"#89b8ff",fontWeight:800,letterSpacing:1}}>CHALLENGER DECK</div>
                 <button
@@ -2597,7 +2633,7 @@ export default function KaizenPoker(){
                   Challenger Lookup
                 </button>
               </div>
-              <div style={{display:"flex",gap:16,alignItems:"center",minHeight:95}}>
+              <div style={{display:"flex",gap:isMobileLandscape?10:16,alignItems:"center",minHeight:actionAreaMinHeight}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:"1 1 auto"}}>
                   <div style={{display:"flex",alignItems:"center",minWidth:gs._soloRevealedCards?.length?110:0}}>
                     {(gs._soloRevealedCards||[]).map((id,i)=>{
@@ -2622,9 +2658,9 @@ export default function KaizenPoker(){
                 </div>
               </div>
             </div>
-            <div style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:"1px solid #b96d5a55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
+            <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:"1px solid #b96d5a55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
               <div style={{fontSize:9,color:"#e48b8b",fontWeight:800,letterSpacing:1,marginBottom:6}}>YOUR ACTIONS</div>
-              <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:4,minHeight:actionAreaMinHeight,flexWrap:"wrap"}}>
                 {getP(gs,"A").map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                   :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                     <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
@@ -2632,15 +2668,15 @@ export default function KaizenPoker(){
               </div>
             </div>
           </div>
-          :<div style={{display:"flex",gap:16,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:"12px 14px",borderRadius:18,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
+          :<div style={{display:"flex",gap:publicAreaGap,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
             <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
-            <div style={{display:"flex",gap:4,minHeight:95,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:4,minHeight:actionAreaMinHeight,flexWrap:"wrap"}}>
               {getP(gs,pl).map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek={pl===viewerPlayer} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                   <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 </div>)}</div></div>))}</div>}
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A" viewerPlayer={viewerPlayer}/><DeckStats gs={gs} player="B" viewerPlayer={viewerPlayer}/></>} onToggleZone={handleTutorialZoneToggle} canToggleZone={tutorialCanToggleZone} spotlightZone={tutorialZoneTarget}/>
-        {actionSummaryRows.length>0&&<div style={{padding:"10px 12px",borderRadius:14,background:"linear-gradient(180deg,#11212fdd,#0b1620e6)",border:"1px solid #39526a55",boxShadow:"0 10px 24px #00000018,inset 0 1px 0 #ffffff08",display:"grid",gap:6}}>
+        {actionSummaryRows.length>0&&<div style={{padding:isMobileLandscape?"8px 10px":"10px 12px",borderRadius:14,background:"linear-gradient(180deg,#11212fdd,#0b1620e6)",border:"1px solid #39526a55",boxShadow:"0 10px 24px #00000018,inset 0 1px 0 #ffffff08",display:"grid",gap:6}}>
           <div style={{fontSize:9,color:"#8ea0b4",fontWeight:800,letterSpacing:1.1,textTransform:"uppercase"}}>Action Summary</div>
           {actionSummaryRows.map(row=><div key={row.pl} style={{fontSize:11,lineHeight:1.45,color:"#cbd5e1"}}>
             <span style={{color:row.pl==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800}}>{row.label}:</span>{" "}
@@ -2648,7 +2684,7 @@ export default function KaizenPoker(){
           </div>)}
         </div>}
         {/* Hand */}
-        <div style={{padding:"14px 16px",borderRadius:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${viewerPlayer==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
+        <div style={{padding:handPad,borderRadius:isMobileLandscape?16:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${viewerPlayer==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
           <div style={{fontSize:11,color:viewerPlayer==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             YOUR HAND (Player {viewerPlayer})
             {canAct&&<span style={{color:pClr,fontSize:10}}>- {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
@@ -2656,11 +2692,11 @@ export default function KaizenPoker(){
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
             {canAct&&undoState&&!isOnlineMode&&<Btn label="<- Undo" bg="#e67e22" onClick={doUndo}/>}
             {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,viewerPlayer)}/>}</div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:handGap,flexWrap:"wrap"}}>
             {sortC(hand).map(id=>{
               const tutorialActionKind=fdMode?"playFaceDownCard":"playCard";
               const tutorialEnabled=tutorialAllows(tutorialActionKind,id);
-              return(<Card key={id} id={id} onClick={canAct&&tutorialEnabled?()=>handlePlayCard(id):undefined}
+              return(<Card key={id} id={id} small={handCardSmall} onClick={canAct&&tutorialEnabled?()=>handlePlayCard(id):undefined}
                 glow={canAct&&tutorialEnabled?(fdMode?"#888":"#58c6ff"):canAct?(fdMode?"#555":pClr):undefined} isNew={gs.newCards.includes(id)}/>);
             })}</div></div>
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
@@ -2682,11 +2718,22 @@ export default function KaizenPoker(){
         </div>}
       </div>
       {/* Log */}
-      <div style={{width:260,minHeight:0,height:"100%",overflow:"hidden",borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
+      {!isMobileLandscape&&<div style={{width:260,minHeight:0,height:"100%",overflow:"hidden",borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
         <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px",position:"sticky",top:0,zIndex:1,background:"linear-gradient(180deg,#0b1016 0%,#0b1016f2 78%,#0b101600 100%)"}}>GAME LOG</div>
         <div ref={logRef} className="kp-log-scroll" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
-        {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("WINNER:")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>
+        {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("WINNER:")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>}
     </div>
+    {isMobileLandscape&&mobileLogOpen&&<div style={{position:"fixed",inset:0,zIndex:24,display:"flex",justifyContent:"flex-end",background:"rgba(3,7,12,.56)",backdropFilter:"blur(4px)"}} onClick={()=>setMobileLogOpen(false)}>
+      <div style={{width:"min(86vw,360px)",height:"100%",overflow:"hidden",borderLeft:"1px solid #2a3644",background:"linear-gradient(180deg,#0b1016,#091018)",display:"flex",flexDirection:"column",boxShadow:"-24px 0 60px #00000055"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,borderBottom:"1px solid #1c2733",background:"linear-gradient(180deg,#101721,#0c131c)"}}>
+          <div style={{fontSize:10,fontWeight:800,color:"#8ea0b4",letterSpacing:1.6,textTransform:"uppercase"}}>Game Log</div>
+          <button onClick={()=>setMobileLogOpen(false)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>Close</button>
+        </div>
+        <div ref={logRef} className="kp-log-scroll" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"10px 12px 14px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
+          {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("WINNER:")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}
+        </div>
+      </div>
+    </div>}
     {gs.phase==="reveal"&&renderShowdown(isMatchOver(gs))}
     {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
     {/* MODALS */}
