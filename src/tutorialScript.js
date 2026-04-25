@@ -1,15 +1,15 @@
 export const TUTORIAL_TOTAL_ROUNDS = 3;
 export const TUTORIAL_INITIAL_DECKS = {
   A: [
-    "3D", "10H", "KC", "KD", "9H", "9C", "2C", "10S",
+    "3D", "10H", "KC", "KD", "9H", "9C", "2C", "6D",
     "7C", "6H", "5H", "4D", "4S", "AC", "QC", "AD",
     "KH", "9D", "QD", "2D", "4C", "8C", "3C", "6C",
     "5D", "QH",
   ],
   B: [
-    "5C", "2S", "7H", "7S", "3H", "3S", "KS", "6D",
+    "5C", "2S", "7H", "7S", "3H", "3S", "KS", "10S",
     "JD", "AS", "8H", "7D", "10C", "4H", "JH", "QS",
-    "6S", "2H", "5S", "10D", "JC", "AH", "8D", "9S",
+    "6S", "5S", "2H", "10D", "JC", "AH", "8D", "9S",
     "8S", "JS",
   ],
 };
@@ -18,7 +18,7 @@ export const TUTORIAL_ROUNDS = {
   1: {
     computerActions: [
       { cardId: "5C" },
-      { cardId: "2S", choice: { target: "6D" } },
+      { cardId: "2S", choice: { target: "JD" } },
     ],
   },
   2: {
@@ -30,7 +30,7 @@ export const TUTORIAL_ROUNDS = {
   3: {
     computerActions: [
       { cardId: "2H", choice: { target: "AS" } },
-      { cardId: "5S", choice: { target: "JD" } },
+      { cardId: "8S" },
     ],
   },
 };
@@ -62,7 +62,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (modal?.type === "pickDiscard" && /^Loot/.test(modal.title || "")) return {
       title: "Draw Then Discard",
-      message: "Keep Nerf and let Prune go. Loot gives you the opportunity to see an additional card, so the question is which card helps this hand less right now.",
+      message: "Click Prune to discard it. Loot gives you the opportunity to see an additional card, so the question is which card helps this hand less right now.",
       expect: { kind: "modalCard", value: "2C" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1) return {
@@ -72,7 +72,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
       title: "Opponent Turn",
-      message: "Your turn is done. Your opponent plays Mill to put some cards into their discard, then Trim to scrap one of those discarded cards.",
+      message: "Your Action phase is done. Your opponent plays Mill to put some cards into their discard, then Trim to scrap one of those discarded cards.",
       expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal && !(gs.aMods || []).length) return {
@@ -82,8 +82,8 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
     if (modal?.type === "pickFromList" && /Buff/.test(modal.title || "")) return {
       title: "Choose The Target",
-      message: "Pick Nerf. We're about to turn that 10 into a King.",
-      expect: { kind: "modalCard", value: "10S" },
+      message: "Pick the 6. We're about to turn it into a King.",
+      expect: { kind: "modalCard", value: "6D" },
     };
     if (modal?.type === "pickRank" && /Buff/.test(modal.title || "")) return {
       title: "Choose The New Rank",
