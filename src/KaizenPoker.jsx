@@ -2382,13 +2382,13 @@ export default function KaizenPoker(){
   const headerPad=isMobileLandscape?"8px 10px":"10px 16px";
   const headerGap=isMobileLandscape?8:12;
   const headerFontSize=isMobileLandscape?11:12;
-  const mainPad=isMobileLandscape?10:16;
+  const mainPad=isMobileLandscape?8:16;
   const mainGap=isMobileLandscape?8:12;
-  const panelPad=isMobileLandscape?"10px 12px":"12px 14px";
-  const handPad=isMobileLandscape?"10px 12px":"14px 16px";
-  const handGap=isMobileLandscape?6:8;
+  const panelPad=isMobileLandscape?"8px 10px":"12px 14px";
+  const handPad=isMobileLandscape?"8px 10px":"14px 16px";
+  const handGap=isMobileLandscape?4:8;
   const sectionRadius=isMobileLandscape?16:18;
-  const handCardSmall=isMobileLandscape;
+  const handCardSmall=false;
   const actionAreaMinHeight=isMobileLandscape?78:95;
   const publicAreaGap=isMobileLandscape?10:16;
 
@@ -2692,13 +2692,16 @@ export default function KaizenPoker(){
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
             {canAct&&undoState&&!isOnlineMode&&<Btn label="<- Undo" bg="#e67e22" onClick={doUndo}/>}
             {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,viewerPlayer)}/>}</div>
-          <div style={{display:"flex",gap:handGap,flexWrap:"wrap"}}>
-            {sortC(hand).map(id=>{
-              const tutorialActionKind=fdMode?"playFaceDownCard":"playCard";
-              const tutorialEnabled=tutorialAllows(tutorialActionKind,id);
-              return(<Card key={id} id={id} small={handCardSmall} onClick={canAct&&tutorialEnabled?()=>handlePlayCard(id):undefined}
-                glow={canAct&&tutorialEnabled?(fdMode?"#888":"#58c6ff"):canAct?(fdMode?"#555":pClr):undefined} isNew={gs.newCards.includes(id)}/>);
-            })}</div></div>
+          <div style={isMobileLandscape?{overflowX:"auto",overflowY:"hidden",paddingBottom:4}:{}}>
+            <div style={{display:"flex",gap:handGap,flexWrap:isMobileLandscape?"nowrap":"wrap",alignItems:"flex-start",minWidth:isMobileLandscape?"max-content":"0"}}>
+              {sortC(hand).map(id=>{
+                const tutorialActionKind=fdMode?"playFaceDownCard":"playCard";
+                const tutorialEnabled=tutorialAllows(tutorialActionKind,id);
+                return(<Card key={id} id={id} small={handCardSmall} onClick={canAct&&tutorialEnabled?()=>handlePlayCard(id):undefined}
+                  glow={canAct&&tutorialEnabled?(fdMode?"#888":"#58c6ff"):canAct?(fdMode?"#555":pClr):undefined} isNew={gs.newCards.includes(id)}/>);
+              })}
+            </div>
+          </div></div>
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20,position:"relative"}}>
