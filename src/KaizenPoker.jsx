@@ -2368,13 +2368,13 @@ export default function KaizenPoker(){
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const soloIntroMessage='Solo Mode is a race to seven chips against the "Challenger Deck." You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.\n\nYou can play with the Challenger deck face-up (Easy), or face-down (Difficult). Which would you prefer?';
-  const setSoloDifficulty=useCallback((difficulty)=>{
+  const setSoloDifficulty=(difficulty)=>{
     if(!gs||!isSoloMode(gs.mode))return;
     const nextDifficulty=difficulty===SOLO_DIFFICULTIES.easy?SOLO_DIFFICULTIES.easy:SOLO_DIFFICULTIES.difficult;
     const g2={...gs,_soloDifficulty:nextDifficulty};
     setSoloIntroVisible(false);
     commitGameState(g2);
-  },[gs]);
+  };
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
   const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
