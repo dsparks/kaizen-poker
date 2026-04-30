@@ -6,6 +6,7 @@ export default function Chippy({
   visible = true,
   actionLabel = "",
   onAction = null,
+  actionButtons = null,
   tag = null,
   initialPos = null,
   draggable = true,
@@ -74,6 +75,10 @@ export default function Chippy({
 
   if (!visible || !message) return null;
 
+  const buttons = Array.isArray(actionButtons) && actionButtons.length
+    ? actionButtons
+    : (actionLabel && onAction ? [{ label: actionLabel, onClick: onAction }] : []);
+
   const startDrag = e => {
     if (!draggable) return;
     dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
@@ -131,28 +136,31 @@ export default function Chippy({
           </div>
         )}
         <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-line" }}>{message}</div>
-        {actionLabel && onAction && (
-          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-            <button
-              onClick={e => {
-                e.stopPropagation();
-                onAction();
-              }}
-              style={{
-                pointerEvents: "auto",
-                padding: "6px 12px",
-                borderRadius: 999,
-                border: "1px solid #8fc5ff66",
-                background: "linear-gradient(180deg,#1f4d74,#173a59)",
-                color: "#eaf6ff",
-                fontSize: 11,
-                fontWeight: 800,
-                cursor: "pointer",
-                boxShadow: "inset 0 1px 0 #ffffff18",
-              }}
-            >
-              {actionLabel}
-            </button>
+        {buttons.length>0 && (
+          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+            {buttons.map((button, index) => (
+              <button
+                key={`${button.label}-${index}`}
+                onClick={e => {
+                  e.stopPropagation();
+                  button.onClick?.();
+                }}
+                style={{
+                  pointerEvents: "auto",
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  border: "1px solid #8fc5ff66",
+                  background: button.background || "linear-gradient(180deg,#1f4d74,#173a59)",
+                  color: "#eaf6ff",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  boxShadow: "inset 0 1px 0 #ffffff18",
+                }}
+              >
+                {button.label}
+              </button>
+            ))}
           </div>
         )}
         <div

@@ -234,6 +234,10 @@ export const CARDS=CARDS_BASE.map(card=>({
 export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
 const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
 const SOLO_TARGET_CHIPS=7;
+const SOLO_DIFFICULTIES={
+  easy:"easy",
+  difficult:"difficult",
+};
 const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
 const CardRenderContext=createContext("html");
 const CHALLENGER_LOOKUP={
@@ -410,15 +414,16 @@ function getRoundRequirements(gs){
   if(bClose&&!aClose){aDraw=8;aActions=3;}
   return {aActions,bActions,aDraw,bDraw,suddenDeath:aClose||bClose};
 }
-function initGame(mode="hotseat"){const all=shuf(CARDS.map(c=>c.id));
+function initGame(mode="hotseat",options={}){const all=shuf(CARDS.map(c=>c.id));
   const startedAt=new Date().toISOString();
   const gameId=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():`kp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const aInitialDeck=all.slice(0,26),bInitialDeck=all.slice(26),aInitialHand=aInitialDeck.slice(0,7),bInitialHand=isSoloMode(mode)?[]:bInitialDeck.slice(0,7);
+  const soloDifficulty=isSoloMode(mode)?(options.soloDifficulty||SOLO_DIFFICULTIES.difficult):null;
   return{mode,aDeck:all.slice(7,26),bDeck:isSoloMode(mode)?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:isSoloMode(mode)?[]:sortC(all.slice(26,33)),
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
     log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,_remotePrompt:null,
-    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
+    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_soloDifficulty:soloDifficulty,_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 function tutorialRoundState(roundNumber,baseState=null){
   const seed=baseState?cloneGs(baseState):initGame("tutorial");
@@ -1179,15 +1184,15 @@ export default function KaizenPoker(){
     }
   };
 
-  const buildFreshGame=(mode="hotseat")=>{
-    let g=mode==="tutorial"?tutorialRoundState(1):initGame(mode);
+  const buildFreshGame=(mode="hotseat",options={})=>{
+    let g=mode==="tutorial"?tutorialRoundState(1):initGame(mode,options);
     g=L(g,`=== ROUND 1 === ${isSoloMode(mode)?"Solo Mode":mode==="tutorial"?"Tutorial begins":"Player A"} acts first`);
     g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     if(isSoloMode(mode))g=L(g,`Challenger Deck: ${g.bDeck.length} cards ready`);
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const buildPassiveModeState=mode=>({mode,phase:"browse",round:1,firstPlayer:"A",currentPlayer:"A",aDeck:[],bDeck:[],aHand:[],bHand:[],aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],log:[],_createdAt:new Date().toISOString()});
-  const startGame=(mode="hotseat",{replaceUrl=false}={})=>{trackUmami("mode_started",{mode,entry:"local"});flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode);setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
+  const startGame=(mode="hotseat",{replaceUrl=false,soloDifficulty=null}={})=>{trackUmami("mode_started",{mode,entry:"local"});flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode,soloDifficulty?{soloDifficulty}:{});setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
   const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;trackUmami("mode_resumed",{mode:saved.mode||"hotseat"});flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
   const startGallery=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"gallery",entry:"menu"});flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
   const startRules=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"rules",entry:"menu"});flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
@@ -2356,9 +2361,20 @@ export default function KaizenPoker(){
   const seatPlayer=isOnlineMode?(liveSeat||onlineRef.current.seat||null):null;
   const viewerPlayer=gs.mode==="tutorial"?"A":isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
   const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
+  const soloDifficulty=gs._soloDifficulty||SOLO_DIFFICULTIES.difficult;
+  const easySoloMode=isSoloMode(gs.mode)&&soloDifficulty===SOLO_DIFFICULTIES.easy;
+  const challengerTopCardId=easySoloMode?(gs.bDeck[0]||null):null;
+  const challengerTopLookup=challengerTopCardId?CHALLENGER_LOOKUP[CM[challengerTopCardId].rank]:null;
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
-  const soloIntroMessage='Solo Mode is a race to seven chips against the "Challenger Deck." You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.';
+  const soloIntroMessage='Solo Mode is a race to seven chips against the "Challenger Deck." You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.\n\nYou can play with the Challenger deck face-up (Easy), or face-down (Difficult). Which would you prefer?';
+  const setSoloDifficulty=useCallback((difficulty)=>{
+    if(!gs||!isSoloMode(gs.mode))return;
+    const nextDifficulty=difficulty===SOLO_DIFFICULTIES.easy?SOLO_DIFFICULTIES.easy:SOLO_DIFFICULTIES.difficult;
+    const g2={...gs,_soloDifficulty:nextDifficulty};
+    setSoloIntroVisible(false);
+    commitGameState(g2);
+  },[gs]);
   const onlineReady=!isOnlineMode||onlineStatus!=="waiting";
   const canControlSeat=!isOnlineMode||(!!seatPlayer&&seatPlayer===actingPlayer);
   const canUseOnlineControls=!isOnlineMode||(onlineReady&&!!seatPlayer&&seatPlayer===actingPlayer);
@@ -2650,11 +2666,24 @@ export default function KaizenPoker(){
                       {gs.bDeck.length} card{gs.bDeck.length!==1?"s":""} remain
                       {(gs._soloRevealedCards?.length||0)>0&&<span style={{color:"#89b8ff",fontWeight:600}}> | {(gs._soloRevealedCards||[]).length} revealed</span>}
                     </div>
-                    <div style={{fontSize:10,color:"#8ca0b3",lineHeight:1.4,whiteSpace:"normal"}}>Sweep over the revealed stack to inspect what the Challenger has shown so far.</div>
+                    <div style={{fontSize:10,color:"#8ca0b3",lineHeight:1.4,whiteSpace:"normal"}}>
+                      {easySoloMode
+                        ?"Easy mode shows the top Challenger card and the hand it maps to."
+                        :"Sweep over the revealed stack to inspect what the Challenger has shown so far."}
+                    </div>
                   </div>
                 </div>
-                <div style={{display:"flex",gap:4,flexShrink:0}}>
-                  {Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><div key={i} style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",boxShadow:"0 8px 18px #00000033",transform:`translateX(${i*-46}px)`}}/>)}
+                <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                  {easySoloMode&&challengerTopCardId
+                    ?<div style={{position:"relative"}}>
+                      <PreviewCard id={challengerTopCardId} glow="#3498db"/>
+                      {challengerTopLookup&&<div style={{position:"absolute",left:6,right:6,bottom:6,padding:"4px 6px",borderRadius:8,background:"linear-gradient(180deg,#0f2435f0,#09131df4)",border:"1px solid #5ca9ff66",boxShadow:"0 10px 18px #00000033,inset 0 1px 0 #ffffff10",textAlign:"center"}}>
+                        <div style={{fontSize:8,color:"#8fd0ff",fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{challengerTopCardId} maps to</div>
+                        <div style={{fontSize:10,color:"#eaf6ff",fontWeight:800,lineHeight:1.2}}>{challengerTopLookup.handName}</div>
+                      </div>}
+                    </div>
+                    :Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><div key={i} style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",boxShadow:"0 8px 18px #00000033",transform:`translateX(${i*-46}px)`}}/>)
+                  }
                 </div>
               </div>
             </div>
@@ -2831,7 +2860,15 @@ export default function KaizenPoker(){
         {modal.camo&&<Btn label="Suit Only" bg="#3498db" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
         <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
-    {soloIntroVisible&&isSoloMode(gs.mode)&&<Chippy title="Solo Mode" message={soloIntroMessage} visible actionLabel="OK" onAction={()=>setSoloIntroVisible(false)} />}
+    {soloIntroVisible&&isSoloMode(gs.mode)&&<Chippy
+      title="Solo Mode"
+      message={soloIntroMessage}
+      visible
+      actionButtons={[
+        {label:"Easy",onClick:()=>setSoloDifficulty(SOLO_DIFFICULTIES.easy),background:"linear-gradient(180deg,#2e7d5a,#1f5c41)"},
+        {label:"Difficult",onClick:()=>setSoloDifficulty(SOLO_DIFFICULTIES.difficult)}
+      ]}
+    />}
     {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
   </div></CardRenderContext.Provider>);
 }
