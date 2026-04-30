@@ -256,8 +256,8 @@ const CHALLENGER_LOOKUP={
   "A":{handRank:13,handName:"Flush Five",description:"Top-tier Challenger result: Flush House / Flush Five"},
 };
 const CHALLENGER_ROWS=["2","3","4","5","6","7","8","9","10","J","Q","K","A"].map(rank=>({rank,...CHALLENGER_LOOKUP[rank]}));
-const ART_SOURCE_WIDTH=896;
-const ART_SOURCE_HEIGHT=1280;
+const ART_SOURCE_WIDTH=1049;
+const ART_SOURCE_HEIGHT=1499;
 const ART_CROP_X=36;
 const ART_CROP_Y=36;
 const ART_CROP_WIDTH=ART_SOURCE_WIDTH-(ART_CROP_X*2);
@@ -2114,7 +2114,12 @@ export default function KaizenPoker(){
     if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`WINNER: ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g._remotePrompt=null;
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
-    g.round++;g.firstPlayer=isSoloMode(g.mode)?"A":g.firstPlayer==="A"?"B":"A";g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
+    const nextFirstPlayer=isSoloMode(g.mode)
+      ?"A"
+      :(g._revealWinner==="A"||g._revealWinner==="B"
+        ?g._revealWinner
+        :g.firstPlayer);
+    g.round++;g.firstPlayer=nextFirstPlayer;g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
     g=L(g,`=== ROUND ${g.round} === ${isSoloMode(g.mode)?"Solo Mode":`Player ${g.firstPlayer} acts first`}`);
     const {aActions:aR,bActions:bR,aDraw:aD,bDraw:bD,suddenDeath}=getRoundRequirements(g);
     if(suddenDeath)g=L(g,"SUDDEN DEATH!");
