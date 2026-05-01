@@ -2368,8 +2368,11 @@ export default function KaizenPoker(){
   const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
   const soloDifficulty=gs._soloDifficulty||SOLO_DIFFICULTIES.difficult;
   const easySoloMode=isSoloMode(gs.mode)&&soloDifficulty===SOLO_DIFFICULTIES.easy;
-  const challengerTopCardId=easySoloMode?(gs.bDeck[0]||null):null;
-  const challengerTopLookup=challengerTopCardId?CHALLENGER_LOOKUP[CM[challengerTopCardId].rank]:null;
+  const showingRevealedChallengerCard=easySoloMode&&!!gs._soloReveal?.cardId&&gs.phase!=="action";
+  const challengerDisplayCardId=easySoloMode
+    ?(showingRevealedChallengerCard?(gs._soloReveal?.cardId||null):(gs.bDeck[0]||null))
+    :null;
+  const challengerDisplayLookup=challengerDisplayCardId?CHALLENGER_LOOKUP[CM[challengerDisplayCardId].rank]:null;
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
   const soloIntroMessage='Solo Mode is a race to seven chips against the "Challenger Deck." You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.\n\nYou can play with the Challenger deck face-up (Easy), or face-down (Difficult). Which would you prefer?';
@@ -2673,18 +2676,19 @@ export default function KaizenPoker(){
                     </div>
                     <div style={{fontSize:10,color:"#8ca0b3",lineHeight:1.4,whiteSpace:"normal"}}>
                       {easySoloMode
-                        ?"Easy mode shows the top Challenger card and the hand it maps to."
+                        ?(showingRevealedChallengerCard
+                          ?"Easy mode is showing the Challenger card that was just revealed for this round."
+                          :"Easy mode shows the top Challenger card and the hand it maps to.")
                         :"Sweep over the revealed stack to inspect what the Challenger has shown so far."}
                     </div>
                   </div>
                 </div>
                 <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
-                  {easySoloMode&&challengerTopCardId
+                  {easySoloMode&&challengerDisplayCardId
                     ?<div style={{position:"relative"}}>
-                      <PreviewCard id={challengerTopCardId} glow="#3498db"/>
-                      {challengerTopLookup&&<div style={{position:"absolute",left:6,right:6,bottom:6,padding:"4px 6px",borderRadius:8,background:"linear-gradient(180deg,#0f2435f0,#09131df4)",border:"1px solid #5ca9ff66",boxShadow:"0 10px 18px #00000033,inset 0 1px 0 #ffffff10",textAlign:"center"}}>
-                        <div style={{fontSize:8,color:"#8fd0ff",fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{challengerTopCardId} maps to</div>
-                        <div style={{fontSize:10,color:"#eaf6ff",fontWeight:800,lineHeight:1.2}}>{challengerTopLookup.handName}</div>
+                      <PreviewCard id={challengerDisplayCardId} glow="#3498db"/>
+                      {challengerDisplayLookup&&<div style={{position:"absolute",left:6,right:6,bottom:6,padding:"4px 6px",borderRadius:8,background:"linear-gradient(180deg,#0f2435f0,#09131df4)",border:"1px solid #5ca9ff66",boxShadow:"0 10px 18px #00000033,inset 0 1px 0 #ffffff10",textAlign:"center"}}>
+                        <div style={{fontSize:10,color:"#eaf6ff",fontWeight:800,lineHeight:1.2}}>{challengerDisplayLookup.handName}</div>
                       </div>}
                     </div>
                     :Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><div key={i} style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",boxShadow:"0 8px 18px #00000033",transform:`translateX(${i*-46}px)`}}/>)
