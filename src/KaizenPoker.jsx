@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
@@ -830,7 +830,7 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
     <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
 
-// Deck knowledge tracker — shows cards player has seen (not in their deck)
+// Deck memory tracker — shows cards whose current location the player can reasonably know
 function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
   const canView=player===viewerPlayer||(isSoloMode(gs.mode)&&player==="B");
   if(!canView)return null;
@@ -839,30 +839,87 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
   const currentHand=player==="A"?gs.aHand:gs.bHand;
   const currentPlay=player==="A"?gs.aPlay:gs.bPlay;
   const currentDiscard=player==="A"?gs.aDiscard:gs.bDiscard;
-  const currentSet=new Set(currentDeck);
-  const outOfDeck=initialDeck.filter(id=>!currentSet.has(id));
-  const rc={},sc={};outOfDeck.forEach(id=>{const c=CM[id];if(!c)return;rc[c.rank]=(rc[c.rank]||0)+1;sc[c.suit]=(sc[c.suit]||0)+1;});
-  const zoneCounts=[
-    {label:"Deck",count:currentDeck.length},
-    {label:"Hand",count:currentHand.length},
-    {label:"Play",count:currentPlay.length},
-    {label:"Discard",count:currentDiscard.length},
-    {label:"Scrap",count:gs.scrap.length},
-  ];
+  const easySoloTopId=isSoloMode(gs.mode)&&player==="B"&&gs._soloDifficulty===SOLO_DIFFICULTIES.easy&&gs.phase==="action"
+    ?(gs.bDeck[0]||null)
+    :null;
+  const revealedSoloSet=isSoloMode(gs.mode)&&player==="B"
+    ?new Set(gs._soloRevealedCards||[])
+    :new Set();
+  const zoneMeta={
+    H:{label:"Hand",color:"#f5d38f",background:"#f5d38f24",border:"#f5d38f55"},
+    P:{label:"In Play",color:"#7ce7bc",background:"#7ce7bc1f",border:"#7ce7bc55"},
+    D:{label:"Deck",color:"#74b7ff",background:"#74b7ff22",border:"#74b7ff55"},
+    d:{label:"Discard",color:"#ff9f8d",background:"#ff9f8d20",border:"#ff9f8d55"},
+    S:{label:"Scrap",color:"#d4a6ff",background:"#d4a6ff22",border:"#d4a6ff55"},
+    R:{label:"Revealed",color:"#96e6ff",background:"#96e6ff1d",border:"#96e6ff55"},
+  };
+  const getMemoryZone=id=>{
+    if(currentHand.includes(id))return"H";
+    if(currentPlay.some(a=>a?.id===id))return"P";
+    if(currentDiscard.includes(id))return"d";
+    if(gs.scrap.includes(id))return"S";
+    if(easySoloTopId===id)return"D";
+    if(revealedSoloSet.has(id))return"R";
+    return null;
+  };
+  const knownCards=initialDeck.filter(id=>getMemoryZone(id));
+  const memoryCounts={
+    H:knownCards.filter(id=>getMemoryZone(id)==="H").length,
+    P:knownCards.filter(id=>getMemoryZone(id)==="P").length,
+    D:knownCards.filter(id=>getMemoryZone(id)==="D").length,
+    d:knownCards.filter(id=>getMemoryZone(id)==="d").length,
+    S:knownCards.filter(id=>getMemoryZone(id)==="S").length,
+    R:knownCards.filter(id=>getMemoryZone(id)==="R").length,
+  };
   const clr=player==="A"?"#e74c3c":"#3498db";
   if(!show)return(<button onClick={()=>setShow(true)} style={{padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:700,
-    border:`1px solid ${clr}44`,background:"transparent",color:`${clr}99`,cursor:"pointer"}}>{player} Stats</button>);
-  return(<div style={{background:"#0a0d11cc",border:`1px solid ${clr}33`,borderRadius:6,padding:6,fontSize:9}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-      <span style={{color:clr,fontWeight:700}}>{player} Stats</span>
+    border:`1px solid ${clr}44`,background:"transparent",color:`${clr}99`,cursor:"pointer"}}>{player} Memory</button>);
+  return(<div style={{background:"linear-gradient(180deg,#091018f0,#060b12f3)",border:`1px solid ${clr}33`,borderRadius:8,padding:8,fontSize:9,boxShadow:"0 10px 24px #00000022,inset 0 1px 0 #ffffff08",maxWidth:"100%",overflowX:"auto"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:8}}>
+      <div style={{display:"grid",gap:2}}>
+        <span style={{color:clr,fontWeight:800,letterSpacing:.8,textTransform:"uppercase"}}>{player} Memory</span>
+        <span style={{fontSize:9,color:"#6f8193"}}>{knownCards.length} card{knownCards.length!==1?"s":""} currently tracked</span>
+      </div>
       <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#556",cursor:"pointer",fontSize:12}}>x</button></div>
-    <div style={{display:"flex",gap:12}}>
-      <div><div style={{color:"#556",marginBottom:2}}>Zone</div>
-        {zoneCounts.map(z=>(<div key={z.label} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:36}}>{z.label}</span><span>{z.count}</span></div>))}</div>
-      <div><div style={{color:"#556",marginBottom:2}}>Rank</div>
-        {RO.map(r=>{if(!rc[r])return null;return(<div key={r} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:18}}>{r}</span><span>{rc[r]}/4</span></div>);})}</div>
-      <div><div style={{color:"#556",marginBottom:2}}>Suit</div>
-        {SO.map(s=>{if(!sc[s])return null;return(<div key={s} style={{display:"flex",gap:4,color:"#aab"}}><span style={{width:18,color:SC[s]}}>{SUITS[s]}</span><span>{sc[s]}/13</span></div>);})}</div>
+    <div style={{display:"grid",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"18px repeat(13, minmax(18px, 1fr))",gap:3,alignItems:"center",minWidth:320}}>
+        <div/>
+        {RO.map(rank=><div key={`head-${rank}`} style={{fontSize:10,color:"#8ea0b4",textAlign:"center",fontWeight:700}}>{rank}</div>)}
+        {SO.map(suit=><Fragment key={`row-${suit}`}>
+          <div style={{fontSize:12,color:SC[suit],textAlign:"center",fontWeight:900,textShadow:`0 0 10px ${SC[suit]}44`}}>{SUITS[suit]}</div>
+          {RO.map(rank=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===suit);const inDeck=initialDeck.includes(card.id);const zone=inDeck?getMemoryZone(card.id):null;const meta=zone?zoneMeta[zone]:null;
+            return <div
+              key={card.id}
+              title={!inDeck
+                ?`${card.rank}${SUITS[card.suit]} is not part of ${player}'s deck`
+                :zone
+                  ?`${card.name} (${card.rank}${SUITS[card.suit]}) - ${meta.label}`
+                  :`${card.name} (${card.rank}${SUITS[card.suit]}) - Unknown`}
+              style={{
+                height:18,
+                borderRadius:4,
+                border:zone?`1px solid ${meta.border}`:"1px solid #1d2a37",
+                background:zone?meta.background:"linear-gradient(180deg,#0c1219,#0a0f15)",
+                display:"grid",
+                placeItems:"center",
+                color:zone?meta.color:"#223142",
+                fontSize:10,
+                fontWeight:800,
+                boxShadow:zone?`inset 0 1px 0 #ffffff10, 0 0 0 1px ${meta.border}22`:"inset 0 1px 0 #ffffff05",
+                opacity:inDeck?1:.18,
+                letterSpacing:.2,
+                userSelect:"none"
+              }}
+            >{zone||""}</div>;})}
+        </Fragment>)}
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        {["H","P","D","d","S",...(memoryCounts.R?["R"]:[])].map(key=><div key={key} title={zoneMeta[key].label} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 7px",borderRadius:999,border:`1px solid ${zoneMeta[key].border}`,background:zoneMeta[key].background,boxShadow:"inset 0 1px 0 #ffffff10"}}>
+          <span style={{minWidth:12,textAlign:"center",fontSize:10,fontWeight:900,color:zoneMeta[key].color}}>{key}</span>
+          <span style={{fontSize:9,color:"#c2d0dc"}}>{zoneMeta[key].label}</span>
+          <span style={{fontSize:9,color:"#6f8193"}}>{memoryCounts[key]||0}</span>
+        </div>)}
+      </div>
     </div></div>);}
 
 // Public zones
