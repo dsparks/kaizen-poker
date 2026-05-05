@@ -1,3 +1,5 @@
+import { CHIPPY_COPY } from "./chippyCopy.jsx";
+
 export const TUTORIAL_TOTAL_ROUNDS = 3;
 export const TUTORIAL_INITIAL_DECKS = {
   A: [
@@ -41,11 +43,12 @@ export function getTutorialRoundSetup(roundNumber) {
 
 export function getTutorialPrompt(gs, modal, fdMode) {
   if (!gs || gs.mode !== "tutorial") return null;
+  const copy = CHIPPY_COPY.tutorial;
 
   if (gs._tutorialComplete || gs.phase === "gameOver" || gs.phase === "tutorialDone") {
     return {
-      title: "Tutorial Complete",
-      message: "Nice work. Now that you've seen how the game works, you're ready to play. Press MENU whenever you want to start a fresh game.",
+      title: copy.complete.title,
+      message: copy.complete.message,
       expect: { kind: "menu" },
     };
   }
@@ -56,153 +59,153 @@ export function getTutorialPrompt(gs, modal, fdMode) {
 
   if (round === 1) {
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 0) return {
-      title: "First Action",
-      message: "Hi! I'm Chippy. Welcome to Kaizen Poker.\nEach round starts with two Actions for each player, then both hands score. Go ahead and start by clicking Loot, to play it as an Action.",
+      title: copy.round1.firstAction.title,
+      message: copy.round1.firstAction.message,
       expect: { kind: "playCard", value: "3D" },
     };
     if (modal?.type === "pickDiscard" && /^Loot/.test(modal.title || "")) return {
-      title: "Draw Then Discard",
-      message: "Click Prune to discard it. Loot gives you the opportunity to see an additional card, so the question is which card helps this hand less right now.",
+      title: copy.round1.drawThenDiscard.title,
+      message: copy.round1.drawThenDiscard.message,
       expect: { kind: "modalCard", value: "2C" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1) return {
-      title: "Second Action",
-      message: "Now play Buff. Buff is a Modify action, so it waits in play for now and you'll assign it to one of your scoring cards later.",
+      title: copy.round1.secondAction.title,
+      message: copy.round1.secondAction.message,
       expect: { kind: "playCard", value: "10H" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
-      title: "Opponent Turn",
-      message: "Your Action phase is done. Your opponent plays Mill to put some cards into their discard, then Trim to scrap one of those discarded cards.",
+      title: copy.round1.opponentTurn.title,
+      message: copy.round1.opponentTurn.message,
       expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal && !(gs.aMods || []).length) return {
-      title: "Score Phase",
-      message: "The Action phase is over; time for the Score phase. Because Buff is still in play, you'll choose how it changes your scoring hand.",
+      title: copy.round1.scorePhase.title,
+      message: copy.round1.scorePhase.message,
       expect: { kind: "reveal" },
     };
     if (modal?.type === "pickFromList" && /Buff/.test(modal.title || "")) return {
-      title: "Choose The Target",
-      message: "Pick the 6. We're about to turn it into a King.",
+      title: copy.round1.chooseTarget.title,
+      message: copy.round1.chooseTarget.message,
       expect: { kind: "modalCard", value: "6D" },
     };
     if (modal?.type === "pickRank" && /Buff/.test(modal.title || "")) return {
-      title: "Choose The New Rank",
-      message: "Choose K. That gives you three Kings and a pair of Nines: a Full House.",
+      title: copy.round1.chooseRank.title,
+      message: copy.round1.chooseRank.message,
       expect: { kind: "modalRank", value: "K" },
     };
     if (gs.phase === "reveal") return {
-      title: "Round One Complete",
-      message: "Strong start. Buff turned two pair into a Full House. Press Next Round and I'll show you the default face-down action.",
+      title: copy.round1.roundComplete.title,
+      message: copy.round1.roundComplete.message,
       expect: { kind: "next" },
     };
   }
 
   if (round === 2) {
     if (modal?.type === "refreshOpts") return {
-      title: "Default Face-Down Reward",
-      message: "If you don't have any Actions you want to play, you can always play a card facedown. The default face-down ability is Refresh. You discard a card, then draw a replacement. Click Refresh.",
+      title: copy.round2.defaultFaceDownReward.title,
+      message: copy.round2.defaultFaceDownReward.message,
       expect: { kind: "refreshChoice", value: "refresh" },
     };
     if (modal?.type === "pickDiscard" && /^Refresh/.test(modal.title || "")) return {
-      title: "Refresh",
-      message: "Discard Recall. The face-down card is already spent, so Refresh lets you trade away a card you don't want and keep the rest.",
+      title: copy.round2.refresh.title,
+      message: copy.round2.refresh.message,
       expect: { kind: "modalCard", value: "5H" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 0) return {
-      title: "A Simple First Action",
-      message: "Play Freeze. Freeze is an Amend Action, so it changes the rules of the round instead of changing a scoring card.",
+      title: copy.round2.firstAction.title,
+      message: copy.round2.firstAction.message,
       expect: { kind: "playCard", value: "7C" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1 && !fdMode) return {
-      title: "Face-Down Play",
-      message: "For your second Action, play a card face-down. Click Play Face-Down. Any card can become a simple utility action this way.",
+      title: copy.round2.faceDownPlay.title,
+      message: copy.round2.faceDownPlay.message,
       expect: { kind: "faceDownToggle" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && fdMode) return {
-      title: "Pick A Card To Hide",
-      message: "Now play Exchange. We don't want its ability here; we'll use the face-down effect instead.",
+      title: copy.round2.pickCardToHide.title,
+      message: copy.round2.pickCardToHide.message,
       expect: { kind: "playFaceDownCard", value: "6H" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
-      title: "Opponent Turn",
-      message: "Good. Now watch the other side: they'll check the top of the deck with Reject, then use another card face-down for a plain Refresh. Click OK to continue.",
+      title: copy.round2.opponentTurn.title,
+      message: copy.round2.opponentTurn.message,
       expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal) return {
-      title: "Reveal Again",
-      message: "Reveal and score. Now you've seen how face-down play gives you a flexible fallback.",
+      title: copy.round2.revealAgain.title,
+      message: copy.round2.revealAgain.message,
       expect: { kind: "reveal" },
     };
     if (gs.phase === "reveal") return {
-      title: "Face-Down Basics",
-      message: "When you don't love any of the actions your cards offer, face-down play gives you a nice fallback option. Press Next Round.",
+      title: copy.round2.faceDownBasics.title,
+      message: copy.round2.faceDownBasics.message,
       expect: { kind: "next" },
     };
   }
 
   if (round === 3) {
     if (modal?.type === "rejuvenate") return {
-      title: "Discard Camouflage",
-      message: "Choose only Camouflage. We want it in your discard first, you'll scrap it soon.",
+      title: copy.round3.discardCamouflage.title,
+      message: copy.round3.discardCamouflage.message,
       expect: { kind: "none" },
     };
     if (modal?.type === "pickFromList" && /Impeach/.test(modal.title || "")) return {
-      title: "Scrap Camouflage",
-      message: "Pick Camouflage. Impeach scraps a face card, moving it from your discard to the scrap pile.",
+      title: copy.round3.scrapCamouflage.title,
+      message: copy.round3.scrapCamouflage.message,
       expect: { kind: "modalCard", value: "QD" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 0) return {
-      title: "Build The Lesson Yourself",
-      message: "Play Rejuvenate. (We're going to use it to move Camouflage into your discard, then scrap it.)",
+      title: copy.round3.buildLessonYourself.title,
+      message: copy.round3.buildLessonYourself.message,
       expect: { kind: "playCard", value: "KH" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1 && ack !== "zone:aDiscard") return {
-      title: "Inspect Your Discard",
-      message: "Click the A Discard to see what's in your own discard pile. It's often useful to know what's in your own or your opponent's discard pile. You should see Camouflage sitting there now.",
+      title: copy.round3.inspectDiscard.title,
+      message: copy.round3.inspectDiscard.message,
       tagKey: "aDiscard",
       expect: { kind: "inspectZone", value: "aDiscard" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 1) return {
-      title: "Move It To Scrap",
-      message: "Now play Impeach. It scraps a face card from your discard, which is exactly what we want here.",
+      title: copy.round3.moveItToScrap.title,
+      message: copy.round3.moveItToScrap.message,
       expect: { kind: "playCard", value: "9D" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "A" && aActions === 2 && ack !== "zone:scrap") return {
-      title: "Inspect Scrap",
-      message: "Open Scrap. Cards there are much harder to get back, and Remember cards can keep affecting the game from that pile.",
+      title: copy.round3.inspectScrap.title,
+      message: copy.round3.inspectScrap.message,
       tagKey: "scrap",
       expect: { kind: "inspectZone", value: "scrap" },
     };
     if (gs.phase === "action" && gs.currentPlayer === "B") return {
-      title: "Continuity Matters",
-      message: "Your opponent will take two quiet Actions, and then you'll see Camouflage pay off during scoring. Click OK when you're ready.",
+      title: copy.round3.continuityMatters.title,
+      message: copy.round3.continuityMatters.message,
       expect: { kind: "ack", value: "opp-turn" },
     };
     if (gs.phase === "score" && !modal) return {
-      title: "Remember Payoff",
-      message: "Reveal and score. Because Camouflage is in scrap, Sculpt is about to get an extra suit-changing option.",
+      title: copy.round3.rememberPayoff.title,
+      message: copy.round3.rememberPayoff.message,
       expect: { kind: "reveal" },
     };
     if (modal?.type === "queen2") return {
-      title: "This Comes From Scrap",
-      message: "Choose Suit Only. That extra option is coming from Camouflage in the scrap pile.",
+      title: copy.round3.thisComesFromScrap.title,
+      message: copy.round3.thisComesFromScrap.message,
       expect: { kind: "queenChoice", value: "suit" },
     };
     if (modal?.type === "pickSuit" && /Camouflage/.test(modal.title || "")) return {
-      title: "Complete The Flush",
-      message: "Pick Clubs. That turns Sculpt into a Club and finishes the Flush.",
+      title: copy.round3.completeFlush.title,
+      message: copy.round3.completeFlush.message,
       expect: { kind: "modalSuit", value: "C" },
     };
     if (gs.phase === "reveal") return {
-      title: "Tutorial Wrap-Up",
-      message: "There is a lot more to explore in Kaizen Poker, but now you know some of the basics. Press Finish Tutorial when you're ready.",
+      title: copy.round3.wrapUp.title,
+      message: copy.round3.wrapUp.message,
       expect: { kind: "next" },
     };
   }
 
   return {
-    title: "Tutorial",
-    message: "Follow along. I'll keep pointing out what matters as you go.",
+    title: copy.fallback.title,
+    message: copy.fallback.message,
     expect: { kind: "none" },
   };
 }

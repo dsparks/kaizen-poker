@@ -1,6 +1,7 @@
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
+import { CHIPPY_COPY, renderChippyMessage } from "./chippyCopy.jsx";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
 import { getRenderedCardSrc } from "./renderedCardImageMap.js";
 import rulesPdfUrl from "../Kaizen Poker rules.pdf";
@@ -866,7 +867,7 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
   const memoryCounts={
     H:knownCards.filter(id=>getMemoryZone(id)==="H").length,
     P:knownCards.filter(id=>getMemoryZone(id)==="P").length,
-    D:knownCards.filter(id=>getMemoryZone(id)==="D").length,
+    D:currentDeck.length,
     d:knownCards.filter(id=>getMemoryZone(id)==="d").length,
     S:knownCards.filter(id=>getMemoryZone(id)==="S").length,
     R:knownCards.filter(id=>getMemoryZone(id)==="R").length,
@@ -2242,11 +2243,7 @@ export default function KaizenPoker(){
   // RENDER
   // ============================================================
   const homeLinkStyle={color:"#8fd0ff",fontWeight:700,textDecoration:"underline",textUnderlineOffset:2,pointerEvents:"auto"};
-  const demoChippyMessage=<>
-    Welcome to the Kaizen Poker demo! In lieu of a demo video, I&apos;ve put together a playable web version of the game. Feel free to peruse the <a href="#/rules" style={homeLinkStyle}>rules</a>, try an introductory <a href="#/tutorial" style={homeLinkStyle}>tutorial</a>, or play the full game: <a href="#/hotseat" style={homeLinkStyle}>two-player hotseat</a>, <a href="#/solo" style={homeLinkStyle}>solo versus a Challenger deck</a>, or even <a href="#/remote" style={homeLinkStyle}>two-player remote</a>.
-    <br/><br/>
-    You can contact the designer <a href="mailto:dsparks@gmail.com" style={homeLinkStyle}>here</a>. Have fun!
-  </>;
+  const demoChippyMessage=renderChippyMessage(CHIPPY_COPY.demo.message,homeLinkStyle);
 
   if(!gs)return(<>
     <div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
@@ -2297,7 +2294,7 @@ export default function KaizenPoker(){
         {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
         </div></div>
     {homeRoute==="demo"&&!demoChippyDismissed&&<Chippy
-      title="Kaizen Poker Demo"
+      title={CHIPPY_COPY.demo.title}
       message={demoChippyMessage}
       visible
       actionLabel="OK"
@@ -2432,7 +2429,7 @@ export default function KaizenPoker(){
   const challengerDisplayLookup=challengerDisplayCardId?CHALLENGER_LOOKUP[CM[challengerDisplayCardId].rank]:null;
   const hand=getH(gs,viewerPlayer);
   const actionsLeft=gs.actionsRequired-gs.regularActionsPlayed+gs.bonusActions;
-  const soloIntroMessage='Solo Mode is a race to seven chips against the "Challenger Deck." You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.\n\nYou can play with the Challenger deck face-up (Easy), or face-down (Difficult). Which would you prefer?';
+  const soloIntroMessage=CHIPPY_COPY.soloIntro.message;
   const setSoloDifficulty=(difficulty)=>{
     if(!gs||!isSoloMode(gs.mode))return;
     const nextDifficulty=difficulty===SOLO_DIFFICULTIES.easy?SOLO_DIFFICULTIES.easy:SOLO_DIFFICULTIES.difficult;
@@ -2927,7 +2924,7 @@ export default function KaizenPoker(){
         <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
     {soloIntroVisible&&isSoloMode(gs.mode)&&<Chippy
-      title="Solo Mode"
+      title={CHIPPY_COPY.soloIntro.title}
       message={soloIntroMessage}
       visible
       actionButtons={[
