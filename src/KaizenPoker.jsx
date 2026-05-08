@@ -239,6 +239,7 @@ const SOLO_DIFFICULTIES={
   easy:"easy",
   difficult:"difficult",
 };
+const KONAMI_SEQUENCE=["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a","Enter"];
 const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
 const CardRenderContext=createContext("html");
 const CHALLENGER_LOOKUP={
@@ -763,6 +764,34 @@ function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")re
     </div>)}
   </div>;
 }
+function KonamiCelebrationOverlay({open,onClose,onReplay,cards=[]}) {
+  useEffect(()=>{
+    if(!open)return undefined;
+    const onKey=e=>{
+      if(e.key==="Escape")onClose?.();
+    };
+    window.addEventListener("keydown",onKey);
+    return()=>window.removeEventListener("keydown",onKey);
+  },[open,onClose]);
+  if(!open)return null;
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:40,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.14) 0%,rgba(10,15,22,.84) 38%,rgba(5,8,12,.96) 100%)",backdropFilter:"blur(8px)"}}>
+      <VictorySolitaireCanvas winner="A" cards={cards}/>
+      <div style={{position:"relative",padding:"22px 24px",background:"linear-gradient(180deg,#17131ef4,#0a0f16f6)",borderRadius:24,border:"2px solid #f1c40f55",boxShadow:"0 40px 100px #00000055,inset 0 1px 0 #ffffff18",maxWidth:460,width:"min(460px,calc(100vw - 36px))",textAlign:"center",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
+        <div style={{position:"relative",fontSize:11,fontWeight:800,color:"#7f93a8",letterSpacing:4,textTransform:"uppercase",marginBottom:8}}>Secret Unlocked</div>
+        <div style={{position:"relative",fontSize:34,fontWeight:900,color:"#f3d7a4",fontFamily:"Georgia,serif",lineHeight:1.05,marginBottom:10,textShadow:"0 0 24px #f1c40f44"}}>Victory Lap</div>
+        <div style={{position:"relative",fontSize:13,color:"#dbe5ee",lineHeight:1.55,marginBottom:16}}>
+          The old code still works. Enjoy the cardfall.
+        </div>
+        <div style={{position:"relative",display:"flex",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
+          <Btn label="Again" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={onReplay}/>
+          <Btn label="Close" bg="#333" onClick={onClose}/>
+        </div>
+      </div>
+    </div>
+  );
+}
 function GalleryThumbCard({id,onHover,onLeave,active=false,scale=1}){return <div
   onMouseEnter={onHover}
   onMouseLeave={onLeave}
@@ -956,6 +985,8 @@ export default function KaizenPoker(){
   const[playtestEnabled,setPlaytestEnabled]=useState(()=>hasPlaytestFlag());
   const[homeRoute,setHomeRoute]=useState(()=>getRequestedModeFromHash());
   const[demoChippyDismissed,setDemoChippyDismissed]=useState(false);
+  const[konamiCelebrationOpen,setKonamiCelebrationOpen]=useState(false);
+  const[konamiCelebrationKey,setKonamiCelebrationKey]=useState(0);
   const[viewportSize,setViewportSize]=useState(()=>({
     width:typeof window!=="undefined"?window.innerWidth:1280,
     height:typeof window!=="undefined"?window.innerHeight:800,
@@ -981,6 +1012,7 @@ export default function KaizenPoker(){
   const prevReshuffleRef=useRef(null);
   const initialRouteHandledRef=useRef(false);
   const lastUmamiScreenRef=useRef("");
+  const konamiProgressRef=useRef(0);
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(canResumeLocally(nextGs)){
@@ -1465,6 +1497,33 @@ export default function KaizenPoker(){
     },650);
     return()=>clearTimeout(timer);
   },[gs,modal,fdMode]);
+
+  useEffect(()=>{
+    const isEditableTarget=target=>{
+      if(!target)return false;
+      const tagName=target.tagName?.toLowerCase?.();
+      return tagName==="input"||tagName==="textarea"||tagName==="select"||target.isContentEditable;
+    };
+    const onKeyDown=e=>{
+      if(isEditableTarget(e.target))return;
+      const normalized=e.key.length===1?e.key.toLowerCase():e.key;
+      const expected=KONAMI_SEQUENCE[konamiProgressRef.current];
+      if(normalized===expected){
+        konamiProgressRef.current+=1;
+        if(konamiProgressRef.current===KONAMI_SEQUENCE.length){
+          konamiProgressRef.current=0;
+          setKonamiCelebrationKey(v=>v+1);
+          setKonamiCelebrationOpen(true);
+          playSfx("victory",{volume:.34});
+          trackUmami("konami_celebration_opened",{mode:gs?.mode||"home"});
+        }
+        return;
+      }
+      konamiProgressRef.current=normalized===KONAMI_SEQUENCE[0]?1:0;
+    };
+    window.addEventListener("keydown",onKeyDown);
+    return()=>window.removeEventListener("keydown",onKeyDown);
+  },[gs?.mode]);
 
   const startOnlineGame=async()=>{
     if(!multiplayerEnabled()){setOnlineError("Supabase multiplayer is not configured.");return;}
@@ -2244,8 +2303,16 @@ export default function KaizenPoker(){
   // ============================================================
   const homeLinkStyle={color:"#8fd0ff",fontWeight:700,textDecoration:"underline",textUnderlineOffset:2,pointerEvents:"auto"};
   const demoChippyMessage=renderChippyMessage(CHIPPY_COPY.demo.message,homeLinkStyle);
+  const konamiCards=gs?getCascadeCardPool(gs):CARDS.map(c=>c.id);
 
   if(!gs)return(<>
+    <KonamiCelebrationOverlay
+      key={`konami-home-${konamiCelebrationKey}`}
+      open={konamiCelebrationOpen}
+      cards={konamiCards}
+      onReplay={()=>{setKonamiCelebrationKey(v=>v+1);playSfx("victory",{volume:.34});}}
+      onClose={()=>setKonamiCelebrationOpen(false)}
+    />
     <div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
     <div style={{position:"absolute",inset:20,borderRadius:34,border:"2px solid #b8965b33",boxShadow:"inset 0 0 0 1px #f8e7b11a"}}/>
     <div style={{position:"absolute",width:520,height:520,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,#f1c40f08 35%,transparent 70%)",top:-220,left:"50%",transform:"translateX(-50%)"}}/>
@@ -2609,7 +2676,15 @@ export default function KaizenPoker(){
     return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictorySolitaireCanvas winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
   };
 
-  return(<CardRenderContext.Provider value={cardRenderStyle}><div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+  return(<CardRenderContext.Provider value={cardRenderStyle}>
+    <KonamiCelebrationOverlay
+      key={`konami-live-${konamiCelebrationKey}`}
+      open={konamiCelebrationOpen}
+      cards={konamiCards}
+      onReplay={()=>{setKonamiCelebrationKey(v=>v+1);playSfx("victory",{volume:.34});}}
+      onClose={()=>setKonamiCelebrationOpen(false)}
+    />
+    <div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}@media (max-width:900px){.kp-table-frame{display:none}.kp-main-column{padding-left:20px!important;padding-right:12px!important}}`}</style>
     <style>{`.kp-log-scroll{scrollbar-width:thin;scrollbar-color:#7d6a44 #0c131a}.kp-log-scroll::-webkit-scrollbar{width:12px}.kp-log-scroll::-webkit-scrollbar-track{background:linear-gradient(180deg,#0d151d,#0a1118);border-left:1px solid #223141;box-shadow:inset 1px 0 0 #ffffff08}.kp-log-scroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#b89252,#6d5632);border-radius:999px;border:2px solid #0c131a;box-shadow:inset 0 1px 0 #f7dfac66,0 0 0 1px #4c3920}.kp-log-scroll::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#d5af67,#80653b)}`}</style>
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
