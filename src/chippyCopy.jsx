@@ -10,6 +10,11 @@ export const CHIPPY_COPY = {
     message:
       "Welcome to the Kaizen Poker demo! In lieu of a demo video, I've put together a playable web version of the game. Feel free to peruse the [rules](#/rules), try an introductory [tutorial](#/tutorial), or play the full game: [two-player hotseat](#/hotseat), [solo versus a Challenger deck](#/solo), or even [two-player remote](#/remote).\n\nYou can contact the designer [here](mailto:dsparks@gmail.com). Have fun!",
   },
+  gallery: {
+    title: "Card Image Gallery",
+    message:
+      "This gallery shows the current print prototype. The illustrations are generative AI, and I do not plan to publish the game with this artwork. They are included here to reinforce the names and abilities of the cards, and to suggest the visual language and UX the game has been developed around.",
+  },
   soloIntro: {
     title: "Solo Mode",
     message:

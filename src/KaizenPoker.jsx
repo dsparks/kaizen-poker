@@ -985,6 +985,7 @@ export default function KaizenPoker(){
   const[playtestEnabled,setPlaytestEnabled]=useState(()=>hasPlaytestFlag());
   const[homeRoute,setHomeRoute]=useState(()=>getRequestedModeFromHash());
   const[demoChippyDismissed,setDemoChippyDismissed]=useState(false);
+  const[galleryChippyDismissed,setGalleryChippyDismissed]=useState(false);
   const[konamiCelebrationOpen,setKonamiCelebrationOpen]=useState(false);
   const[konamiCelebrationKey,setKonamiCelebrationKey]=useState(0);
   const[viewportSize,setViewportSize]=useState(()=>({
@@ -1076,6 +1077,7 @@ export default function KaizenPoker(){
     setLiveGameId(null);
     setSoloIntroVisible(false);
     setGalleryHoverId(null);
+    setGalleryChippyDismissed(false);
     trackedRef.current=null;
     clearActiveTrackedGame();
     gameTransport.clear();
@@ -1284,7 +1286,7 @@ export default function KaizenPoker(){
   const buildPassiveModeState=mode=>({mode,phase:"browse",round:1,firstPlayer:"A",currentPlayer:"A",aDeck:[],bDeck:[],aHand:[],bHand:[],aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],log:[],_createdAt:new Date().toISOString()});
   const startGame=(mode="hotseat",{replaceUrl=false,soloDifficulty=null}={})=>{trackUmami("mode_started",{mode,entry:"local"});flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode,soloDifficulty?{soloDifficulty}:{});setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
   const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;trackUmami("mode_resumed",{mode:saved.mode||"hotseat"});flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
-  const startGallery=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"gallery",entry:"menu"});flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
+  const startGallery=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"gallery",entry:"menu"});flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);setGalleryChippyDismissed(false);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
   const startRules=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"rules",entry:"menu"});flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
   const setHomeRouteVariant=useCallback((variant="home",{replaceUrl=false}={})=>{
     trackUmami("home_variant_opened",{variant:variant||"home"});
@@ -2479,6 +2481,15 @@ export default function KaizenPoker(){
           </div>
         </div>
       </div>
+      {!galleryChippyDismissed&&<Chippy
+        title={CHIPPY_COPY.gallery.title}
+        message={CHIPPY_COPY.gallery.message}
+        visible
+        actionLabel="OK"
+        onAction={()=>setGalleryChippyDismissed(true)}
+        initialPos={{x:38,y:210}}
+        draggable={false}
+      />}
     </div>);
   }
 
