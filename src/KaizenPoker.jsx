@@ -2487,8 +2487,8 @@ export default function KaizenPoker(){
         visible
         actionLabel="OK"
         onAction={()=>setGalleryChippyDismissed(true)}
-        initialPos={{x:38,y:210}}
-        draggable={false}
+        initialPos={{x:760,y:240}}
+        draggable
       />}
     </div>);
   }
