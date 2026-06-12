@@ -104,15 +104,15 @@ export default function Chippy({
         style={{
           maxWidth: 360,
           padding: "12px 14px",
-          borderRadius: 16,
-          border: "1px solid #8fc5ff66",
-          background: "linear-gradient(180deg,#132333f0,#0d1824f4)",
-          color: "#dbeafe",
-          boxShadow: "0 18px 40px #00000050, inset 0 1px 0 #ffffff18",
+          borderRadius: 14,
+          border: "2px solid #34a3ff88",
+          background: "linear-gradient(180deg,#252a4af8,#1a1d38fa)",
+          color: "#e8e4f4",
+          boxShadow: "0 5px 0 rgba(0,0,0,.35), 0 18px 40px #00000050, inset 0 2px 0 rgba(255,255,255,.08)",
           position: "relative",
         }}
       >
-        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: "#8fd0ff", marginBottom: 6 }}>
+        <div style={{ fontSize: 12, fontFamily: "'Lilita One','Arial Black',sans-serif", letterSpacing: 1.2, textTransform: "uppercase", color: "#8fd0ff", marginBottom: 6, textShadow: "0 2px 0 rgba(0,0,0,.35)" }}>
           {title}
         </div>
         {tag && (
@@ -145,17 +145,12 @@ export default function Chippy({
                   e.stopPropagation();
                   button.onClick?.();
                 }}
+                className="kp-btn"
                 style={{
                   pointerEvents: "auto",
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border: "1px solid #8fc5ff66",
-                  background: button.background || "linear-gradient(180deg,#1f4d74,#173a59)",
-                  color: "#eaf6ff",
-                  fontSize: 11,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                  boxShadow: "inset 0 1px 0 #ffffff18",
+                  padding: "7px 14px",
+                  background: button.background || "#2173c2",
+                  fontSize: 12,
                 }}
               >
                 {button.label}
@@ -166,13 +161,13 @@ export default function Chippy({
         <div
           style={{
             position: "absolute",
-            right: -8,
+            right: -9,
             bottom: 20,
             width: 16,
             height: 16,
-            background: "#132333f0",
-            borderRight: "1px solid #8fc5ff66",
-            borderBottom: "1px solid #8fc5ff66",
+            background: "#1f2340",
+            borderRight: "2px solid #34a3ff88",
+            borderBottom: "2px solid #34a3ff88",
             transform: "rotate(-45deg)",
           }}
         />

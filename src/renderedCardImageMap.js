@@ -1,4 +1,6 @@
-const renderedCardModules = import.meta.glob("../rendered_kaizen_cards/*.{png,jpg,jpeg,webp}", {
+// Imports the web-optimized renditions, NOT the full-res sources in
+// rendered_kaizen_cards/. See CLAUDE.md ("Card art pipeline").
+const renderedCardModules = import.meta.glob("../web_art/rendered/*.webp", {
   eager: true,
   import: "default",
 });

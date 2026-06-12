@@ -1,4 +1,5 @@
-import { adjacentRanks, compareHands, evalHand, lowerRanks } from "./KaizenPoker.jsx";
+import { adjacentRanks, lowerRanks } from "./gameData.js";
+import { compareHands, evalHand } from "./engine.js";
 
 const TESTS=[
   {

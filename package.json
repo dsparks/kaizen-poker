@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "optimize-art": "node scripts/optimize-card-art.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "predev": "node scripts/optimize-card-art.mjs",
+    "prebuild": "node scripts/optimize-card-art.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
@@ -14,6 +18,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
+    "puppeteer-core": "^25.1.0",
+    "sharp": "^0.35.1",
     "vite": "^5.0.0"
   }
 }

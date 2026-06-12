@@ -1,4 +1,4 @@
-import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import { CHIPPY_COPY, renderChippyMessage } from "./chippyCopy.jsx";
@@ -33,16 +33,14 @@ import {
   TUTORIAL_TOTAL_ROUNDS,
 } from "./tutorialScript.js";
 import { trackUmami, trackUmamiScreen } from "./umami.js";
+import { RO, RV, FACE, CARDS, CM, SUITS, SC, SO, TC, SOLO_TARGET_CHIPS, SOLO_DIFFICULTIES, CHALLENGER_LOOKUP, CHALLENGER_ROWS, isSoloMode, lowerRanks, higherRanks, adjacentRanks } from "./gameData.js";
+import { evalHand, compareHands, shuf, sortC, drawCards, displayOrder, evalChallenger, isMatchOver, getMatchWinner, getRoundRequirements, initGame, cloneGs, tutorialRoundState } from "./engine.js";
+import { SFX_ENABLED_KEY, setGlobalSfxEnabled, getSfxEnabledDefault, playSfx } from "./sfx.js";
+import { FONT_DISPLAY, FONT_BODY, USE_ILLUSTRATED_CARDS, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
 
 // ============================================================
-// DATA (unchanged)
+// APP SHELL HELPERS (routing, local snapshots, misc)
 // ============================================================
-const SUITS={C:"♣",D:"♦",H:"♥",S:"♠"};
-const SC={C:"#2ecc71",D:"#f39c12",H:"#e74c3c",S:"#3498db"};
-const SO=["C","D","H","S"];
-export const RO=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
-export const RV=Object.fromEntries(RO.map((r,i)=>[r,i]));
-export const FACE=["J","Q","K"];
 const LOCAL_GAME_SNAPSHOT_KEY="kaizen-poker:last-local-game:v1";
 const PLAYTEST_QUERY_FLAG="playtest";
 const ROUTE_BY_MODE={
@@ -52,7 +50,7 @@ const ROUTE_BY_MODE={
   hotseat:"hotseat",
   tutorial:"tutorial",
   solo:"solo",
-  solo_art:"solo-art",
+  solo_art:"solo-artless",
   gallery:"gallery",
   rules:"rules",
 };
@@ -83,129 +81,6 @@ const updateHashForMode=(mode,{replace=false,preserveGameSearch=false}={})=>{
     window.history[replace?"replaceState":"pushState"]({},"",nextUrl);
   }catch{}
 };
-export function lowerRanks(rank){
-  if(rank==="A") return RO.filter(r=>r!=="A");
-  if(rank==="2") return ["A"];
-  return ["A", ...RO.filter(r=>r!=="A"&&RV[r]<RV[rank])];
-}
-const isSoloMode=mode=>mode==="solo"||mode==="solo_art";
-export function higherRanks(rank){return rank==="A"?RO.filter(r=>r!=="A"):RO.filter(r=>RV[r]>RV[rank])}
-export function adjacentRanks(rank){
-  if(rank==="2")return ["A","3"];
-  if(rank==="A")return ["K","2"];
-  const ci=RV[rank],opts=[];if(ci>0)opts.push(RO[ci-1]);if(ci<12)opts.push(RO[ci+1]);return opts;
-}
-const TI={Enact:{bg:"#f5efe1",bd:"#8d6e63",ink:"#2f241d",tagBg:"#ece1cd",lb:"Enact"},Modify:{bg:"#f7f0dc",bd:"#c89b3c",ink:"#302515",tagBg:"#efe0b7",lb:"Modify"},
-  React:{bg:"#e9f2ea",bd:"#4d8b6f",ink:"#1f3229",tagBg:"#d5e6d7",lb:"React"},Amend:{bg:"#f6e4df",bd:"#a85045",ink:"#351f1b",tagBg:"#ecd1ca",lb:"Amend"},
-  Remember:{bg:"#ece8f8",bd:"#6d5b9c",ink:"#251f39",tagBg:"#ddd5f0",lb:"Remember"}};
-const CARDS_BASE=[
-{id:"2C",rank:"2",suit:"C",name:"Prune",type:"Enact",text:"Scrap a Diamond or Heart.",scrapSuits:["D","H"]},
-{id:"2D",rank:"2",suit:"D",name:"Sculpt",type:"Enact",text:"Scrap a Heart or Spade.",scrapSuits:["H","S"]},
-{id:"2H",rank:"2",suit:"H",name:"Extract",type:"Enact",text:"Scrap a Spade or Club.",scrapSuits:["S","C"]},
-{id:"2S",rank:"2",suit:"S",name:"Trim",type:"Enact",text:"Scrap a Club or Diamond.",scrapSuits:["C","D"]},
-{id:"3C",rank:"3",suit:"C",name:"Defer",type:"Enact",text:"Look at the top card of your deck. You may put it on the bottom."},
-{id:"3D",rank:"3",suit:"D",name:"Loot",type:"Enact",text:"Draw a card, then discard a card."},
-{id:"3H",rank:"3",suit:"H",name:"Rummage",type:"Enact",text:"Target player Refreshes."},
-{id:"3S",rank:"3",suit:"S",name:"Consider",type:"Enact",text:"Look at the top card of your deck. You may discard it."},
-{id:"4C",rank:"4",suit:"C",name:"Entomb",type:"Enact",text:"Search your deck for a card, put it into your discard, then shuffle."},
-{id:"4D",rank:"4",suit:"D",name:"Gamble",type:"Enact",text:"Search your deck for a card and put it into your hand. Random discard, then shuffle."},
-{id:"4H",rank:"4",suit:"H",name:"Cultivate",type:"Enact",text:"Search your deck for a card, then shuffle and put that card on top."},
-{id:"4S",rank:"4",suit:"S",name:"Unearth",type:"Enact",text:"Return target card from your discard to your hand. If you do, discard a card."},
-{id:"5C",rank:"5",suit:"C",name:"Mill",type:"Enact",text:"Put the top three cards of your deck into your discard."},
-{id:"5D",rank:"5",suit:"D",name:"Forecast",type:"Modify",text:"At end of score phase, put a scoring card on top of your deck."},
-{id:"5H",rank:"5",suit:"H",name:"Recall",type:"Enact",text:"Return another Action you control from play to hand, then discard a card."},
-{id:"5S",rank:"5",suit:"S",name:"Reclaim",type:"Enact",text:"Put target card from your discard on top of your deck."},
-{id:"6C",rank:"6",suit:"C",name:"Curse",type:"Enact",text:"Move target card from scrap into opponent's discard."},
-{id:"6D",rank:"6",suit:"D",name:"Abduct",type:"Enact",text:"Steal opponent's Action into your discard, then scrap this card."},
-{id:"6H",rank:"6",suit:"H",name:"Exchange",type:"Enact",text:"Swap a card between your discard and opponent's discard."},
-{id:"6S",rank:"6",suit:"S",name:"Banish",type:"Enact",text:"Move a card from opponent's discard to scrap."},
-{id:"7C",rank:"7",suit:"C",name:"Freeze",type:"Amend",text:"Target opponent can't scrap cards this round."},
-{id:"7D",rank:"7",suit:"D",name:"Negate",type:"Amend",text:"Target opponent can't play Modify Actions this round."},
-{id:"7H",rank:"7",suit:"H",name:"Abdicate",type:"Enact",text:"Opponent discards a face card (or reveals none), then draws."},
-{id:"7S",rank:"7",suit:"S",name:"Nullify",type:"Enact",text:"Put target Modify from play into its owner's discard."},
-{id:"8C",rank:"8",suit:"C",name:"Capitulate",type:"React",text:"If you lose this round, you may scrap a card."},
-{id:"8D",rank:"8",suit:"D",name:"Vanish",type:"Modify",text:"At end of score phase, scrap a card sharing suit with your scoring hand."},
-{id:"8H",rank:"8",suit:"H",name:"Reject",type:"Enact",text:"Look at the top card of your deck. You may scrap it."},
-{id:"8S",rank:"8",suit:"S",name:"Capitalize",type:"React",text:"When you discard this from hand, you may scrap a card."},
-{id:"9C",rank:"9",suit:"C",name:"Terminate",type:"Enact",text:"Scrap a non-face card."},
-{id:"9D",rank:"9",suit:"D",name:"Impeach",type:"Enact",text:"Scrap a face card."},
-{id:"9H",rank:"9",suit:"H",name:"Accumulate",type:"Enact",text:"Scrap a card matching a scrapped card's suit or rank."},
-{id:"9S",rank:"9",suit:"S",name:"Reap",type:"Enact",text:"Scrap a card matching another card in your discard's suit or rank."},
-{id:"10C",rank:"10",suit:"C",name:"Nudge",type:"Modify",text:"Change a scoring card's rank by ±1."},
-{id:"10D",rank:"10",suit:"D",name:"Disguise",type:"Modify",text:"Change a scoring card's suit to any suit."},
-{id:"10H",rank:"10",suit:"H",name:"Buff",type:"Modify",text:"Change a scoring card's rank to any higher rank."},
-{id:"10S",rank:"10",suit:"S",name:"Nerf",type:"Modify",text:"Change a scoring card's rank to any lower rank."},
-{id:"JC",rank:"J",suit:"C",name:"Clone",type:"Modify",text:"One scoring card becomes a copy of another scoring card."},
-{id:"JD",rank:"J",suit:"D",name:"Duplicate",type:"Enact",text:"Enters play as a copy of another Action you control."},
-{id:"JH",rank:"J",suit:"H",name:"Reflect",type:"Enact",text:"Enters play as a copy of opponent's Action."},
-{id:"JS",rank:"J",suit:"S",name:"Reminisce",type:"Modify",text:"One scoring card becomes a copy of a card in your discard."},
-{id:"QC",rank:"Q",suit:"C",name:"Miscalculate",type:"Remember",text:"As long as this card is scrapped, players may change the rank of unmodified 2s in their scoring hand to any rank."},
-{id:"QD",rank:"Q",suit:"D",name:"Camouflage",type:"Remember",text:"As long as this card is scrapped, players may change the suit of unmodified 2s in their scoring hand to any suit."},
-{id:"QH",rank:"Q",suit:"H",name:"Sift",type:"Remember",text:"As long as this card is scrapped, whenever a player would Refresh, they may instead draw a card, then discard a card."},
-{id:"QS",rank:"Q",suit:"S",name:"Declutter",type:"Remember",text:"As long as this card is scrapped, whenever a player would Refresh, they may instead scrap a card."},
-{id:"KC",rank:"K",suit:"C",name:"Brainstorm",type:"Enact",text:"Draw 3, then put 3 from hand on top of deck."},
-{id:"KD",rank:"K",suit:"D",name:"Improvise",type:"Enact",text:"Mill 3, return a card from discard to hand, discard a card."},
-{id:"KH",rank:"K",suit:"H",name:"Rejuvenate",type:"Enact",text:"Discard up to 3, then draw that many."},
-{id:"KS",rank:"K",suit:"S",name:"Bury",type:"Enact",text:"Scrap up to 3 cards."},
-{id:"AC",rank:"A",suit:"C",name:"Salvage",type:"Enact",text:"Put target card from the scrap pile into your hand. If you do, play an additional Action this round."},
-{id:"AD",rank:"A",suit:"D",name:"Explore",type:"Enact",text:"Draw a card. If you do, bonus action."},
-{id:"AH",rank:"A",suit:"H",name:"Retrieve",type:"Enact",text:"Return your Action from play to hand. If you do, bonus action."},
-{id:"AS",rank:"A",suit:"S",name:"Reanimate",type:"Enact",text:"Return a card from discard to hand. If you do, bonus action."},
-];
-const VERBATIM_CARD_TEXT_BY_ID={
-  "2C":"Scrap a Diamond or Heart. (Move it from your discard to the scrap pile.)",
-  "2D":"Scrap a Heart or Spade. (Move it from your discard to the scrap pile.)",
-  "2H":"Scrap a Spade or Club. (Move it from your discard to the scrap pile.)",
-  "2S":"Scrap a Club or Diamond. (Move it from your discard to the scrap pile.)",
-  "3C":"Look at the top card of your deck. You may put it on the bottom.",
-  "3D":"Draw a card, then discard a card.",
-  "3H":"Target player Refreshes. (Discards a card, then draws a card.)",
-  "3S":"Look at the top card of your deck. You may discard it.",
-  "4C":"Search your deck for a card, put it into your discard, then shuffle.",
-  "4D":"Search your deck for a card and put it into your hand. If you do, discard a card at random, then shuffle.",
-  "4H":"Search your deck for a card, then shuffle and put that card on top.",
-  "4S":"Return target card from your discard to your hand. If you do, discard a card.",
-  "5C":"Put the top three cards of your deck into your discard.",
-  "5D":"At the end of the score phase, put a card from your scoring hand on top of your deck.",
-  "5H":"Return another target Action card you control from play to your hand, then discard a card.",
-  "5S":"Put target card from your discard on top of your deck.",
-  "6C":"Move target card from the scrap pile into target opponent's discard.",
-  "6D":"Move target Action card from play into your discard, then scrap this card.",
-  "6H":"Exchange target card in an opponent's discard with target card in your discard.",
-  "6S":"Move target card from an opponent's discard to the scrap pile.",
-  "7C":"Target opponent can't scrap cards this round.",
-  "7D":"Target opponent can't play Modify Actions this round.",
-  "7H":"Target opponent reveals a hand with no face cards or discards a face card, then draws a card.",
-  "7S":"Put target Modify card from play into its owner's discard.",
-  "8C":"If you have the worst hand this round, you may scrap a card.",
-  "8D":"At the end of the score phase, scrap a card that shares a suit with a card from your scoring hand.",
-  "8H":"Look at the top card of your deck. You may put it in the scrap pile.",
-  "8S":"When you discard this card from your hand, you may scrap a card.",
-  "9C":"Scrap a non-face card. (Move it from your discard to the scrap pile.)",
-  "9D":"Scrap a face card. (Move it from your discard to the scrap pile.)",
-  "9H":"Scrap a card that shares a suit or rank with a scrapped card.",
-  "9S":"Scrap a card that shares a suit or rank with another card in your discard.",
-  "10C":"Change the rank of a card in your scoring hand by one.",
-  "10D":"Change the suit of a card in your scoring hand to any suit.",
-  "10H":"Change the rank of a card in your scoring hand to any higher rank.",
-  "10S":"Change the rank of a card in your scoring hand to any lower rank.",
-  "JC":"One card in your scoring hand is a copy of another target card in your scoring hand.",
-  "JD":"This card enters play as a copy of another target Action you control in play.",
-  "JH":"This card enters play as a copy of target Action an opponent controls in play.",
-  "JS":"One card in your scoring hand is a copy of target card in your discard.",
-  "QC":"As long as this card is scrapped, players may change the rank of unmodified 2s in their scoring hand to any rank.",
-  "QD":"As long as this card is scrapped, players may change the suit of unmodified 2s in their scoring hand to any suit.",
-  "QH":"As long as this card is scrapped, whenever a player would Refresh, they may instead draw a card, then discard a card.",
-  "QS":"As long as this card is scrapped, whenever a player would Refresh, they may instead scrap a card.",
-  "KC":"Draw three cards, then put three cards from your hand on top of your deck in any order.",
-  "KD":"Put the top three cards of your deck into your discard. Return target card from your discard to your hand, then discard a card.",
-  "KH":"Discard up to three cards, then draw that many cards.",
-  "KS":"Scrap up to three cards. (Move them from your discard to the scrap pile.)",
-  "AC":"Put target card from the scrap pile into your hand. If you do, play an additional Action this round.",
-  "AD":"Draw a card. If you do, play an additional Action this round.",
-  "AH":"Return another target Action card you control from play to your hand. If you do, play an additional Action this round.",
-  "AS":"Return target card from your discard to your hand. If you do, play an additional Action this round.",
-};
 const LOCAL_RESUMABLE_MODES=new Set(["hotseat","solo","solo_art","tutorial"]);
 const canResumeLocally=gs=>!!(gs&&LOCAL_RESUMABLE_MODES.has(gs.mode));
 const loadLocalGameSnapshot=()=>{
@@ -227,743 +102,9 @@ const hasPlaytestFlag=()=>{
   if(typeof window==="undefined")return false;
   try{return new URLSearchParams(window.location.search).get(PLAYTEST_QUERY_FLAG)==="1";}catch{return false;}
 };
-export const CARDS=CARDS_BASE.map(card=>({
-  ...card,
-  shortText:card.text,
-  text:VERBATIM_CARD_TEXT_BY_ID[card.id]||card.text,
-}));
-export const CM=Object.fromEntries(CARDS.map(c=>[c.id,c]));
-const TC=["#718096","#48bb78","#38b2ac","#4299e1","#667eea","#9f7aea","#ed64a6","#f56565","#ed8936","#f6e05e","#fefcbf","#fc8181","#fbb6ce","#fff5f5"];
-const SOLO_TARGET_CHIPS=7;
-const SOLO_DIFFICULTIES={
-  easy:"easy",
-  difficult:"difficult",
-};
 const KONAMI_SEQUENCE=["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a","Enter"];
 const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
-const CardRenderContext=createContext("html");
-const CHALLENGER_LOOKUP={
-  "2":{handRank:0,handName:"High Card",description:"Highest single card, no other hand achieved"},
-  "3":{handRank:1,handName:"Pair",description:"Two cards of the same rank"},
-  "4":{handRank:2,handName:"Twins",description:"Two cards of the same rank and suit"},
-  "5":{handRank:3,handName:"Two Pair",description:"Two different pairs"},
-  "6":{handRank:4,handName:"Three of a Kind",description:"Three cards of the same rank"},
-  "7":{handRank:5,handName:"Straight",description:"Five sequentially ranked cards, suits irrelevant"},
-  "8":{handRank:6,handName:"Flush",description:"Five cards of the same suit, ranks irrelevant"},
-  "9":{handRank:7,handName:"Full House",description:"Three of a kind plus a pair"},
-  "10":{handRank:8,handName:"Four of a Kind",description:"Four cards of the same rank"},
-  "J":{handRank:9,handName:"Straight Flush",description:"Five sequentially ranked cards of the same suit"},
-  "Q":{handRank:10,handName:"Royal Flush",description:"A straight flush of 10, J, Q, K, A"},
-  "K":{handRank:11,handName:"Five of a Kind",description:"Five cards of the same rank"},
-  "A":{handRank:13,handName:"Flush Five",description:"Top-tier Challenger result: Flush House / Flush Five"},
-};
-const CHALLENGER_ROWS=["2","3","4","5","6","7","8","9","10","J","Q","K","A"].map(rank=>({rank,...CHALLENGER_LOOKUP[rank]}));
-const ART_SOURCE_WIDTH=1049;
-const ART_SOURCE_HEIGHT=1499;
-const ART_CROP_X=36;
-const ART_CROP_Y=36;
-const ART_CROP_WIDTH=ART_SOURCE_WIDTH-(ART_CROP_X*2);
-const ART_CROP_HEIGHT=ART_SOURCE_HEIGHT-(ART_CROP_Y*2);
-const ART_IMAGE_WIDTH_SCALE=ART_SOURCE_WIDTH/ART_CROP_WIDTH;
-const ART_IMAGE_HEIGHT_SCALE=ART_SOURCE_HEIGHT/ART_CROP_HEIGHT;
-const ART_IMAGE_OFFSET_X=`-${(ART_CROP_X/ART_CROP_WIDTH)*100}%`;
-const ART_IMAGE_OFFSET_Y=`-${(ART_CROP_Y/ART_CROP_HEIGHT)*100}%`;
 const RULES_PDF_PATH=rulesPdfUrl;
-const SFX_ENABLED_KEY="kaizenPoker.sfxEnabled";
-const SFX_URLS={
-  camera:"https://assets.mixkit.co/active_storage/sfx/1133/1133.wav",
-  confirm:"https://assets.mixkit.co/active_storage/sfx/1104/1104.wav",
-  error:"https://assets.mixkit.co/active_storage/sfx/1110/1110.wav",
-  chip:"https://assets.mixkit.co/active_storage/sfx/3187/3187.wav",
-  victory:"https://assets.mixkit.co/active_storage/sfx/2059/2059.wav",
-  chippy:"https://assets.mixkit.co/active_storage/sfx/269/269.wav",
-  shuffle:"https://cdn.pixabay.com/download/audio/2022/03/24/audio_2b254f7c73.mp3?filename=freesound_community-riffle-card-shuffle-104313.mp3",
-};
-let globalSfxEnabled=true;
-const sfxCache=new Map();
-const sfxStopTimers=new Map();
-const setGlobalSfxEnabled=value=>{globalSfxEnabled=value;};
-const getSfxEnabledDefault=()=>{
-  if(typeof window==="undefined")return true;
-  try{
-    const raw=window.localStorage.getItem(SFX_ENABLED_KEY);
-    return raw==null?true:raw==="true";
-  }catch{return true;}
-};
-function getSfxAudio(name){
-  if(!SFX_URLS[name]||typeof Audio==="undefined")return null;
-  if(!sfxCache.has(name)){
-    const audio=new Audio(SFX_URLS[name]);
-    audio.preload="auto";
-    sfxCache.set(name,audio);
-  }
-  return sfxCache.get(name);
-}
-function playSfx(name,{volume=1,reset=true}={}){
-  if(!globalSfxEnabled)return;
-  const audio=getSfxAudio(name);
-  if(!audio)return;
-  try{
-    const priorStopTimer=sfxStopTimers.get(name);
-    if(priorStopTimer){
-      clearTimeout(priorStopTimer);
-      sfxStopTimers.delete(name);
-    }
-    if(reset)audio.currentTime=0;
-    audio.volume=Math.max(0,Math.min(1,volume));
-    void audio.play().catch(()=>{});
-    if(name==="shuffle"){
-      const stopTimer=setTimeout(()=>{
-        try{
-          audio.pause();
-          audio.currentTime=0;
-        }catch{}
-        sfxStopTimers.delete(name);
-      },2500);
-      sfxStopTimers.set(name,stopTimer);
-    }
-  }catch{}
-}
-
-// ============================================================
-// ENGINE
-// ============================================================
-function shuf(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=0|Math.random()*(i+1);[r[i],r[j]]=[r[j],r[i]]}return r}
-function sortC(ids){return[...ids].sort((a,b)=>{const ca=CM[a],cb=CM[b];return(RV[ca.rank]-RV[cb.rank])||SO.indexOf(ca.suit)-SO.indexOf(cb.suit)})}
-function drawCards(gs,player,n){
-  const st={...gs};const dk=player==="A"?[...st.aDeck]:[...st.bDeck];
-  const dc=player==="A"?[...st.aDiscard]:[...st.bDiscard];
-  const hand=player==="A"?[...st.aHand]:[...st.bHand];const drawn=[];
-  let reshuffled=false;
-  for(let i=0;i<n;i++){if(!dk.length){if(!dc.length)return{...st,error:"DECK_EXHAUSTED"};dk.push(...shuf(dc));dc.length=0;reshuffled=true;}
-    drawn.push(dk.shift());hand.push(drawn[drawn.length-1]);}
-  if(player==="A"){st.aDeck=dk;st.aDiscard=dc;st.aHand=hand}else{st.bDeck=dk;st.bDiscard=dc;st.bHand=hand}
-  if(reshuffled)st._lastReshuffleAt=`${Date.now()}-${player}-${Math.random().toString(16).slice(2,8)}`;
-  return{...st,drawn};}
-export function evalHand(cardIds,mods=[]){
-  let eff=cardIds.map(id=>{const b=CM[id];const m=mods.find(x=>x.target===id);
-    return m?{...b,rank:m.rank||b.rank,suit:m.suit||b.suit,mod:true}:{...b,mod:false}});
-  const ranks=eff.map(c=>c.rank),suits=eff.map(c=>c.suit);
-  const rv=ranks.map(r=>RV[r]).sort((a,b)=>b-a);
-  const rc={};ranks.forEach(r=>{rc[r]=(rc[r]||0)+1});const sc={};suits.forEach(s=>{sc[s]=(sc[s]||0)+1});
-  const rsc={};eff.forEach(c=>{const k=c.rank+c.suit;rsc[k]=(rsc[k]||0)+1});
-  const maxId=Math.max(...Object.values(rsc));const isFlush=Object.values(sc).some(c=>c===5);
-  const sv=[...new Set(rv)].sort((a,b)=>a-b);
-  const isWheel=sv.join(",")==="0,1,2,3,12";
-  let isStr=sv.length===5&&(sv[4]-sv[0]===4||isWheel);
-  const straightHigh=isWheel?3:Math.max(...sv);
-  const byCountThenRank=Object.entries(rc).map(([r,c])=>({rank:r,count:c,val:RV[r]})).sort((a,b)=>(b.count-a.count)||(b.val-a.val));
-  const pairVals=byCountThenRank.filter(x=>x.count===2).map(x=>x.val).sort((a,b)=>b-a);
-  const singleVals=byCountThenRank.filter(x=>x.count===1).map(x=>x.val).sort((a,b)=>b-a);
-  const cnts=Object.values(rc).sort((a,b)=>b-a);let twins=Object.values(rsc).some(c=>c>=2);
-  let hr=0,hn="High Card";
-  if(maxId===5){hr=13;hn="Flush Five"}else if(cnts[0]===3&&cnts[1]===2&&isFlush){hr=12;hn="Flush House"}
-  else if(cnts[0]===5){hr=11;hn="Five of a Kind"}else if(isStr&&isFlush&&sv.includes(12)&&sv.includes(11)){hr=10;hn="Royal Flush"}
-  else if(isStr&&isFlush){hr=9;hn="Straight Flush"}else if(cnts[0]===4){hr=8;hn="Four of a Kind"}
-  else if(cnts[0]===3&&cnts[1]===2){hr=7;hn="Full House"}else if(isFlush){hr=6;hn="Flush"}
-  else if(isStr){hr=5;hn="Straight"}else if(cnts[0]===3){hr=4;hn="Three of a Kind"}
-  else if(cnts[0]===2&&cnts[1]===2){const pr=Object.entries(rc).filter(([,c])=>c===2);hr=twins&&pr.length===1?2:3;hn=hr===2?"Twins":"Two Pair"}
-  else if(cnts[0]===2){hr=twins?2:1;hn=hr===2?"Twins":"Pair"}
-  let rankVals=rv;
-  if(hr===13||hr===11)rankVals=[byCountThenRank[0]?.val??-1];
-  else if(hr===12||hr===7)rankVals=[byCountThenRank[0]?.val??-1,byCountThenRank[1]?.val??-1];
-  else if(hr===10||hr===9||hr===5)rankVals=[straightHigh];
-  else if(hr===8)rankVals=[byCountThenRank[0]?.val??-1,byCountThenRank[1]?.val??-1];
-  else if(hr===4)rankVals=[byCountThenRank[0]?.val??-1,...singleVals];
-  else if(hr===3)rankVals=[...pairVals,...singleVals];
-  else if(hr===2||hr===1)rankVals=[pairVals[0]??-1,...singleVals];
-  return{handRank:hr,handName:hn,rankVals,effective:eff};}
-export function compareHands(a,b,am=[],bm=[]){const ae=evalHand(a,am),be=evalHand(b,bm);
-  if(ae.handRank!==be.handRank)return ae.handRank>be.handRank?"A":"B";
-  for(let i=0;i<ae.rankVals.length;i++){if(ae.rankVals[i]>be.rankVals[i])return"A";if(ae.rankVals[i]<be.rankVals[i])return"B";}return"TIE";}
-function displayOrder(cardIds,mods=[]){
-  const scored=evalHand(cardIds,mods);
-  const effById=Object.fromEntries(scored.effective.map(c=>[c.id,c]));
-  if((scored.handRank===5||scored.handRank===9||scored.handRank===10)&&scored.rankVals[0]===3){
-    return [...cardIds].sort((a,b)=>{
-      const av=effById[a]?.rank==="A"?-1:RV[effById[a]?.rank??CM[a].rank];
-      const bv=effById[b]?.rank==="A"?-1:RV[effById[b]?.rank??CM[b].rank];
-      return av-bv||SO.indexOf((effById[a]?.suit??CM[a].suit))-SO.indexOf((effById[b]?.suit??CM[b].suit));
-    });
-  }
-  return sortC(cardIds);
-}
-function evalChallenger(cardId){
-  const card=CM[cardId];
-  const lookup=card?CHALLENGER_LOOKUP[card.rank]:null;
-  if(!card||!lookup)return {card:null,handRank:13,handName:"Flush Five",description:"No Challenger card available"};
-  return {card,rank:card.rank,...lookup};
-}
-function isMatchOver(gs){
-  if(gs.mode==="tutorial")return false;
-  return isSoloMode(gs.mode) ? (gs.aChips>=SOLO_TARGET_CHIPS||gs.bChips>=SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
-}
-function getMatchWinner(gs){
-  if(gs.mode==="tutorial")return gs.aChips>=gs.bChips?"A":"B";
-  return isSoloMode(gs.mode) ? (gs.aChips>=SOLO_TARGET_CHIPS?"A":"B") : (gs.aChips>=7?"A":"B");
-}
-function getRoundRequirements(gs){
-  if(isSoloMode(gs.mode)){
-    const aClose=gs.aChips===6,bClose=gs.bChips===6;
-    let aActions=2,bActions=2,aDraw=7,bDraw=0;
-    if(aClose&&!bClose){bActions=3;}
-    if(bClose&&!aClose){aDraw=8;aActions=3;}
-    return {aActions,bActions,aDraw,bDraw,suddenDeath:aClose||bClose};
-  }
-  const aClose=gs.aChips===6,bClose=gs.bChips===6;
-  let aActions=2,bActions=2,aDraw=7,bDraw=7;
-  if(aClose&&!bClose){bDraw=8;bActions=3;}
-  if(bClose&&!aClose){aDraw=8;aActions=3;}
-  return {aActions,bActions,aDraw,bDraw,suddenDeath:aClose||bClose};
-}
-function initGame(mode="hotseat",options={}){const all=shuf(CARDS.map(c=>c.id));
-  const startedAt=new Date().toISOString();
-  const gameId=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():`kp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const aInitialDeck=all.slice(0,26),bInitialDeck=all.slice(26),aInitialHand=aInitialDeck.slice(0,7),bInitialHand=isSoloMode(mode)?[]:bInitialDeck.slice(0,7);
-  const soloDifficulty=isSoloMode(mode)?(options.soloDifficulty||SOLO_DIFFICULTIES.difficult):null;
-  return{mode,aDeck:all.slice(7,26),bDeck:isSoloMode(mode)?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:isSoloMode(mode)?[]:sortC(all.slice(26,33)),
-    aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
-    phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
-    log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,_remotePrompt:null,
-    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_soloDifficulty:soloDifficulty,_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
-function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
-function tutorialRoundState(roundNumber,baseState=null){
-  const seed=baseState?cloneGs(baseState):initGame("tutorial");
-  return {
-    ...seed,
-    mode:"tutorial",
-    round:roundNumber,
-    firstPlayer:"A",
-    currentPlayer:"A",
-    phase:"action",
-    regularActionsPlayed:0,
-    actionsRequired:2,
-    bonusActions:0,
-    aHand:sortC([...TUTORIAL_INITIAL_DECKS.A.slice(0,7)]),
-    bHand:sortC([...TUTORIAL_INITIAL_DECKS.B.slice(0,7)]),
-    aDeck:[...TUTORIAL_INITIAL_DECKS.A.slice(7)],
-    bDeck:[...TUTORIAL_INITIAL_DECKS.B.slice(7)],
-    aDiscard:[],
-    bDiscard:[],
-    scrap:[],
-    aPlay:[],
-    bPlay:[],
-    aMods:[],
-    bMods:[],
-    aForecast:[],
-    bForecast:[],
-    newCards:[],
-    amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},
-    _aReq:2,
-    _bReq:2,
-    _remotePrompt:null,
-    _scoreFlow:null,
-    _revealAE:null,
-    _revealBE:null,
-    _revealWinner:null,
-    _soloReveal:null,
-    _tutorialRound:roundNumber,
-    _tutorialAck:null,
-    _tutorialComplete:false,
-    _aInitialDeck:[...TUTORIAL_INITIAL_DECKS.A],
-    _bInitialDeck:[...TUTORIAL_INITIAL_DECKS.B],
-    _aInitialHand:[...TUTORIAL_INITIAL_DECKS.A.slice(0,7)],
-    _bInitialHand:[...TUTORIAL_INITIAL_DECKS.B.slice(0,7)],
-  };
-}
-
-// ============================================================
-// SIMPLE UI COMPONENTS
-// ============================================================
-function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
-  const renderStyle=useContext(CardRenderContext);
-  const artMode=renderStyle==="image";
-  const w=artMode&&!small?180:(small?68:120),h=artMode&&!small?252:(small?95:168),ti=TI[c.type];
-  const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
-  const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
-  const artSrc=artMode?getCardIllustrationSrc(c.name):null;
-  const artCornerColor=c.suit==="S"||c.suit==="C"?"#05070a":"#ffffff";
-  const artCornerStroke=c.suit==="S"||c.suit==="C"?"#ffffff":"#05070a";
-  const artCornerShadow=c.suit==="S"||c.suit==="C"
-    ?[
-      `.75px 0 0 ${artCornerStroke}`,
-      `-.75px 0 0 ${artCornerStroke}`,
-      `0 .75px 0 ${artCornerStroke}`,
-      `0 -.75px 0 ${artCornerStroke}`,
-      ".5px .5px 0 #ffffffd8",
-      "-.5px .5px 0 #ffffffd8",
-      ".5px -.5px 0 #ffffffd8",
-      "-.5px -.5px 0 #ffffffd8",
-      "0 2px 4px rgba(0,0,0,.35)"
-    ].join(",")
-    :[
-      `1px 0 0 ${artCornerStroke}`,
-      `-1px 0 0 ${artCornerStroke}`,
-      `0 1px 0 ${artCornerStroke}`,
-      `0 -1px 0 ${artCornerStroke}`,
-      `1px 1px 0 ${artCornerStroke}`,
-      `-1px 1px 0 ${artCornerStroke}`,
-      `1px -1px 0 ${artCornerStroke}`,
-      `-1px -1px 0 ${artCornerStroke}`,
-      "0 2px 4px rgba(0,0,0,.5)"
-    ].join(",");
-  return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
-    onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
-    title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:8,flexShrink:0,position:"relative",
-    border:selected?`2px solid #f1c40f`:isNew?`2px solid #2ecc71`:glow?`2px solid ${glow}`:`1px solid ${ti.bd}44`,
-    background:paperBg,
-    boxShadow:selected?"0 0 12px #f1c40f44, 0 8px 18px #00000026":isNew?"0 0 14px #2ecc7155, 0 8px 18px #00000026":glow?`0 0 12px ${glow}44, 0 8px 18px #00000026`:"0 4px 12px #00000026",
-    cursor:onClick?"pointer":"default",display:"flex",flexDirection:"column",
-    padding:artMode?0:(small?"4px 5px":"7px 9px"),overflow:"hidden",opacity:dimmed?0.3:1,transition:"all 0.15s",
-    transform:baseTransform}}>
-    {artMode&&artSrc
-      ?<>
-        <img src={artSrc} alt="" draggable={false} style={{position:"absolute",left:ART_IMAGE_OFFSET_X,top:ART_IMAGE_OFFSET_Y,width:`${ART_IMAGE_WIDTH_SCALE*100}%`,height:`${ART_IMAGE_HEIGHT_SCALE*100}%`,objectFit:"cover",objectPosition:"50% 42%",borderRadius:"inherit",userSelect:"none",pointerEvents:"none",filter:"saturate(1.04) contrast(.98)"}}/>
-        <div style={{position:"absolute",inset:0,borderRadius:"inherit",background:"linear-gradient(90deg,rgba(0,0,0,.56) 0%,rgba(0,0,0,.26) 20%,rgba(0,0,0,0) 45%)",pointerEvents:"none"}}/>
-        <div style={{position:"absolute",top:small?5:8,left:small?5:7,zIndex:1,display:"flex",alignItems:"center",gap:small?1:2,textShadow:"0 1px 3px #000,0 0 2px #000"}}>
-          <span style={{fontSize:small?18:42,fontWeight:900,color:artCornerColor,lineHeight:1,fontFamily:"Georgia,serif",textShadow:artCornerShadow}}>{c.rank}</span>
-          <span style={{fontSize:small?12:26,color:artCornerColor,lineHeight:1,textShadow:artCornerShadow}}>{SUITS[c.suit]}</span>
-        </div>
-        <div style={{position:"absolute",left:small?3:7,top:small?32:70,bottom:small?8:12,zIndex:1,writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:small?9.5:20,fontWeight:900,color:artCornerColor,fontFamily:"Georgia,serif",letterSpacing:.2,lineHeight:1,textShadow:artCornerShadow,display:"flex",alignItems:"center",justifyContent:"flex-end",whiteSpace:"nowrap",overflow:"hidden"}}>
-          {c.name}
-        </div>
-        <div style={{position:"absolute",right:small?4:9,bottom:small?5:9,zIndex:1,fontSize:small?26:52,opacity:.18,color:SC[c.suit],fontFamily:"Georgia,serif",fontWeight:900,lineHeight:1,textShadow:"0 1px 0 #fff"}}>
-          {SUITS[c.suit]}
-        </div>
-        {!small&&<div style={{position:"absolute",left:36,right:9,bottom:9,zIndex:1,minHeight:62,borderRadius:8,background:"rgba(255,248,234,.9)",border:"1px solid rgba(84,60,33,.3)",boxShadow:"0 4px 13px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.72)",padding:"6px 7px",fontSize:10,color:"#2d251f",lineHeight:1.18,fontFamily:"Georgia,serif",textShadow:"0 1px 0 rgba(255,255,255,.45)"}}>
-          <span style={{fontWeight:900,color:ti.bd,textTransform:"uppercase",letterSpacing:.7}}>{ti.lb}</span>
-          <span>{" "}{c.text}</span>
-        </div>}
-        {small&&<div style={{position:"absolute",left:17,right:4,bottom:5,zIndex:1,borderRadius:5,background:"rgba(255,247,228,.86)",border:"1px solid rgba(84,60,33,.18)",padding:"2px 3px",fontSize:6,color:ti.bd,fontWeight:900,textTransform:"uppercase",letterSpacing:.7,textAlign:"center",lineHeight:1}}>
-          {ti.lb}
-        </div>}
-      </>
-      :<>
-        <div style={{position:"absolute",right:small?5:10,bottom:small?18:24,fontSize:small?28:54,opacity:small?0.08:0.09,color:SC[c.suit],fontFamily:"Georgia,serif",fontWeight:700,transform:"rotate(-8deg)",pointerEvents:"none"}}>
-          {SUITS[c.suit]}
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:1}}>
-          <span style={{fontSize:small?20:32,fontWeight:900,color:SC[c.suit],lineHeight:1,fontFamily:"Georgia,serif"}}>{c.rank}</span>
-          <span style={{fontSize:small?14:20,color:SC[c.suit],marginTop:small?1:3}}>{SUITS[c.suit]}</span></div>
-        <div style={{fontSize:small?8:14,fontWeight:700,color:ti.ink,marginTop:1,fontFamily:"Georgia,serif",lineHeight:1.1,textShadow:"0 1px 0 rgba(255,255,255,.35)"}}>{c.name}</div>
-        <div style={{fontSize:small?6:8,color:ti.bd,fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginTop:2,alignSelf:"flex-start",background:ti.tagBg,padding:small?"1px 4px":"2px 6px",borderRadius:999,border:`1px solid ${ti.bd}33`}}>{ti.lb}</div>
-        {!small&&<div style={{fontSize:9,color:"#3e3a35",marginTop:"auto",lineHeight:1.3,paddingTop:5,fontFamily:"Georgia,serif"}}>{c.text}</div>}
-      </>}
-    {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#2ecc71",background:"#2ecc7122",borderRadius:3,padding:"0 4px",zIndex:3}}>NEW</div>}
-    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
-      <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
-        <circle cx="5" cy="5" r="3.2" fill="none" stroke="#3b3228" strokeWidth="1.4"/>
-        <path d="M7.6 7.6L10.5 10.5" stroke="#3b3228" strokeWidth="1.4" strokeLinecap="round"/>
-      </svg>
-    </button>}
-    {copySticker&&<div style={{position:"absolute",top:small?18:22,right:small?1:4,transform:"rotate(8deg)",background:"linear-gradient(180deg,#fff4a8,#f6dd69)",color:"#5a4618",border:"1px solid #d4bb5a",borderRadius:small?3:4,padding:small?"4px 5px 5px":"6px 8px 7px",fontSize:small?7:8,fontWeight:900,letterSpacing:.3,boxShadow:"0 3px 8px #00000024, inset 0 1px 0 #fff9cc",zIndex:3,textTransform:"uppercase",lineHeight:1.05,minWidth:small?38:48,textAlign:"center"}}>
-      <div style={{position:"absolute",top:0,left:"18%",right:"18%",height:small?3:4,borderRadius:"0 0 3px 3px",background:"#fff8d0aa"}}/>
-      <div>COPY OF</div>
-      <div style={{marginTop:2,fontSize:small?6:7,letterSpacing:.05,textTransform:"none",fontWeight:800,lineHeight:1.05}}>{copySticker}</div>
-    </div>}
-    {rankSticker&&<div style={{position:"absolute",top:small?18:26,left:small?3:5,transform:"rotate(-7deg)",background:"linear-gradient(180deg,#fee089,#f7bf4f)",color:"#4a3412",border:"1px solid #bf8d30",borderRadius:small?6:8,padding:small?"1px 4px":"2px 8px",fontSize:small?9:14,fontWeight:900,fontFamily:"Georgia,serif",boxShadow:"0 2px 6px #00000022",zIndex:3,lineHeight:1}}>
-      {rankSticker}
-    </div>}
-    {suitSticker&&<div style={{position:"absolute",top:small?18:26,left:small?18:30,transform:"rotate(9deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?13:20,height:small?13:20,fontSize:small?9:14,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:3}}>
-      {SUITS[suitSticker]||suitSticker}
-    </div>}
-  </div>);}
-function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
-  const renderStyle=useContext(CardRenderContext);
-  const previewW=renderStyle==="image"?220:160;
-  const previewH=renderStyle==="image"?292:220;
-  const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(16,pos.x+20));
-  const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(16,pos.y-30));
-  return(<>
-    <Card {...props} small onInspect={()=>setPinned(true)}
-      onMouseEnter={e=>{setHover(true);setPos({x:e.clientX,y:e.clientY});}}
-      onMouseLeave={()=>setHover(false)}
-      onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
-      onDoubleClick={()=>setPinned(true)}/>
-    {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
-      <Card id={props.id} rankSticker={props.rankSticker} suitSticker={props.suitSticker} copySticker={props.copySticker}/>
-    </div>}
-    {pinned&&<Modal title={`${CM[props.id]?.rank||""}${SUITS[CM[props.id]?.suit]||""} ${CM[props.id]?.name||"Card"}`}>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-        <Card id={props.id} rankSticker={props.rankSticker} suitSticker={props.suitSticker} copySticker={props.copySticker}/>
-        <Btn label="Close" bg="#333" onClick={()=>setPinned(false)}/>
-      </div>
-    </Modal>}
-  </>);}
-function FaceDownActionSlot({id,canPeek=false,copySticker}){const[hover,setHover]=useState(false);const[pos,setPos]=useState({x:0,y:0});
-  const renderStyle=useContext(CardRenderContext);
-  const previewW=renderStyle==="image"?220:160;
-  const previewH=renderStyle==="image"?292:220;
-  const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(8,pos.x+14));
-  const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(8,pos.y-previewH-12));
-  return(<>
-    <div className="kp-action-slot"
-      onMouseEnter={canPeek?e=>{setPos({x:e.clientX,y:e.clientY});setHover(true);}:undefined}
-      onMouseLeave={canPeek?()=>setHover(false):undefined}
-      onMouseMove={canPeek?e=>setPos({x:e.clientX,y:e.clientY}):undefined}
-      style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10,boxShadow:"0 8px 18px #00000033",cursor:canPeek?"help":"default"}}>
-      <div style={{textAlign:"center",lineHeight:1.2}}>
-        <div style={{fontSize:9,fontWeight:800,letterSpacing:.5,textTransform:"uppercase"}}>Hidden</div>
-        <div style={{fontSize:8,color:"#516172"}}>{canPeek?"Hover to peek":"Face-down"}</div>
-      </div>
-    </div>
-    {canPeek&&hover&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
-      <Card id={id} copySticker={copySticker}/>
-    </div>}
-  </>);}
-function getCascadeCardPool(gs){
-  if(!gs)return [];
-  const playIds=zone=>(zone||[]).map(card=>typeof card==="string"?card:card?.id).filter(Boolean);
-  const ids=[
-    ...(gs.aHand||[]),
-    ...(gs.bHand||[]),
-    ...(gs.aDeck||[]),
-    ...(gs.bDeck||[]),
-    ...(gs.aDiscard||[]),
-    ...(gs.bDiscard||[]),
-    ...playIds(gs.aPlay),
-    ...playIds(gs.bPlay),
-    ...(gs.scrap||[]),
-    ...(gs._soloRevealedCards||[]),
-    gs._soloReveal?.cardId,
-  ].filter(Boolean);
-  return [...new Set(ids)];
-}
-function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")return null;
-  const rafRef=useRef(null);
-  const spriteRefs=useRef([]);
-  const spritesRef=useRef([]);
-  const cardsKey=(cards||[]).join("|");
-  const idsRef=useRef([]);
-  if(!idsRef.current.length||idsRef.current._key!==cardsKey){
-    const pool=(cards.length?cards:CARDS.map(c=>c.id)).filter(Boolean);
-    const shuffled=shuf(pool);
-    const fallback=CARDS.map(c=>c.id);
-    const targetCount=52;
-    const sampled=Array.from({length:targetCount},(_,i)=>shuffled[i%Math.max(1,shuffled.length)]||fallback[i%fallback.length]);
-    idsRef.current=sampled;
-    idsRef.current._key=cardsKey;
-  }
-  const spriteIds=idsRef.current;
-  useEffect(()=>{
-    if(!spriteIds.length)return;
-    const sprites=spriteIds.map((id,i)=>({
-      key:`${id}-${i}`,
-      id,
-      x:0,y:0,vx:0,vy:0,rot:0,vr:0,
-      width:68,height:95,
-      bounce:0.76,
-      restFor:0,
-      active:false,
-      queued:true,
-      hasDropped:false,
-    }));
-    spritesRef.current=sprites;
-    const spawnSprite=s=>{
-      s.x=Math.random()*Math.max(100,window.innerWidth-140);
-      s.y=-(Math.random()*220)-120;
-      s.vx=(Math.random()*180)-90;
-      s.vy=40+(Math.random()*120);
-      s.rot=((Math.random()*26)-13)*Math.PI/180;
-      s.vr=((Math.random()*1.5)-0.75);
-      s.bounce=0.72+(Math.random()*0.08);
-      s.restFor=0;
-      s.active=true;
-      s.queued=false;
-      s.hasDropped=true;
-    };
-    const syncNode=s=>{
-      const node=spriteRefs.current.find(entry=>entry?.dataset?.spriteKey===s.key);
-      if(!node)return;
-      node.style.transform=`translate3d(${s.x}px, ${s.y}px, 0) rotate(${s.rot}rad)`;
-      node.style.opacity=s.active?"1":"0";
-    };
-    sprites.forEach(syncNode);
-    let lastTs=0;
-    let spawnAccumulator=0;
-    const spawnInterval=0.2;
-    const floorPad=8;
-    const gravity=1180;
-    const step=ts=>{
-      if(!lastTs)lastTs=ts;
-      const dt=Math.min((ts-lastTs)/1000,0.033);
-      lastTs=ts;
-      spawnAccumulator+=dt;
-      while(spawnAccumulator>=spawnInterval){
-        spawnAccumulator-=spawnInterval;
-        const nextQueued=sprites.find(sprite=>sprite.queued);
-        if(nextQueued)spawnSprite(nextQueued);
-        else break;
-      }
-      for(const s of sprites){
-        if(s.active){
-          s.vy+=gravity*dt;
-          s.x+=s.vx*dt;
-          s.y+=s.vy*dt;
-          s.rot+=s.vr*dt;
-          s.vx*=0.999;
-          s.vr*=0.996;
-          if(s.x<=-10){
-            s.x=-10;
-            s.vx=Math.abs(s.vx)*0.9;
-            s.vr*=-0.92;
-          }else if(s.x+s.width>=window.innerWidth+10){
-            s.x=window.innerWidth-s.width+10;
-            s.vx=-Math.abs(s.vx)*0.9;
-            s.vr*=-0.92;
-          }
-          const floorY=window.innerHeight-s.height-floorPad;
-          if(s.y>=floorY){
-            s.y=floorY;
-            if(Math.abs(s.vy)>70){
-              s.vy=-Math.abs(s.vy)*s.bounce;
-              s.vx*=0.985;
-              s.vr*=0.94;
-            }else{
-              s.vy=0;
-              s.vx*=0.94;
-              s.vr*=0.9;
-              if(Math.abs(s.vx)<8&&Math.abs(s.vr)<0.08){
-                s.vx=0;
-                s.vr=0;
-                s.active=false;
-                s.restFor=0;
-              }
-            }
-          }
-        }else{
-          if(s.hasDropped){
-            s.restFor+=dt;
-            if(s.restFor>1.2){
-              s.queued=true;
-              s.hasDropped=false;
-              s.x=-220;
-              s.y=-220;
-              s.restFor=0;
-            }
-          }
-        }
-        syncNode(s);
-      }
-      rafRef.current=requestAnimationFrame(step);
-    };
-    rafRef.current=requestAnimationFrame(step);
-    return()=>{
-      if(rafRef.current)cancelAnimationFrame(rafRef.current);
-    };
-  },[cardsKey,winner,spriteIds.length]);
-  const glowColor=winner==="A"?"#e74c3c":"#3498db";
-  return <div aria-hidden="true" style={{position:"fixed",inset:0,zIndex:31,pointerEvents:"none",overflow:"hidden"}}>
-    {spriteIds.map((id,i)=><div
-      key={`${id}-${i}`}
-      data-sprite-key={`${id}-${i}`}
-      ref={node=>{if(node)spriteRefs.current[i]=node;}}
-      style={{position:"absolute",top:0,left:0,transform:"translate3d(-200px,-200px,0)",opacity:0,willChange:"transform, opacity",transition:"opacity 0.12s linear",filter:`drop-shadow(0 10px 18px #0008) drop-shadow(0 0 12px ${glowColor}66)`}}
-    >
-      <Card id={id} small glow={glowColor}/>
-    </div>)}
-  </div>;
-}
-function KonamiCelebrationOverlay({open,onClose,onReplay,cards=[]}) {
-  useEffect(()=>{
-    if(!open)return undefined;
-    const onKey=e=>{
-      if(e.key==="Escape")onClose?.();
-    };
-    window.addEventListener("keydown",onKey);
-    return()=>window.removeEventListener("keydown",onKey);
-  },[open,onClose]);
-  if(!open)return null;
-  return(
-    <div style={{position:"fixed",inset:0,zIndex:40,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.14) 0%,rgba(10,15,22,.84) 38%,rgba(5,8,12,.96) 100%)",backdropFilter:"blur(8px)"}}>
-      <VictorySolitaireCanvas winner="A" cards={cards}/>
-      <div style={{position:"relative",padding:"22px 24px",background:"linear-gradient(180deg,#17131ef4,#0a0f16f6)",borderRadius:24,border:"2px solid #f1c40f55",boxShadow:"0 40px 100px #00000055,inset 0 1px 0 #ffffff18",maxWidth:460,width:"min(460px,calc(100vw - 36px))",textAlign:"center",overflow:"hidden"}}>
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
-        <div style={{position:"relative",fontSize:11,fontWeight:800,color:"#7f93a8",letterSpacing:4,textTransform:"uppercase",marginBottom:8}}>Secret Unlocked</div>
-        <div style={{position:"relative",fontSize:34,fontWeight:900,color:"#f3d7a4",fontFamily:"Georgia,serif",lineHeight:1.05,marginBottom:10,textShadow:"0 0 24px #f1c40f44"}}>Victory Lap</div>
-        <div style={{position:"relative",fontSize:13,color:"#dbe5ee",lineHeight:1.55,marginBottom:16}}>
-          The old code still works. Enjoy the cardfall.
-        </div>
-        <div style={{position:"relative",display:"flex",justifyContent:"center",gap:10,flexWrap:"wrap"}}>
-          <Btn label="Again" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={onReplay}/>
-          <Btn label="Close" bg="#333" onClick={onClose}/>
-        </div>
-      </div>
-    </div>
-  );
-}
-function GalleryThumbCard({id,onHover,onLeave,active=false,scale=1}){return <div
-  onMouseEnter={onHover}
-  onMouseLeave={onLeave}
-  style={{
-    width:120*scale,
-    height:168*scale,
-    transform:`scale(${scale}) translateY(${active?-4:0}px)`,
-    transformOrigin:"top left",
-    transition:"transform .18s ease,filter .18s ease",
-    filter:active?"drop-shadow(0 12px 22px rgba(0,0,0,.34)) brightness(1.04)":"drop-shadow(0 8px 16px rgba(0,0,0,.22))"
-  }}>
-  <Card id={id}/>
-</div>;}
-function HandBadge({ids,mods}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
-  return <span style={{padding:"3px 10px",borderRadius:5,background:`${c}18`,border:`1px solid ${c}44`,color:c,fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{r.handName}</span>;}
-function Btn({label,bg="#333",onClick,disabled,silent=false}){return(<button onClick={e=>{if(disabled)return;if(!silent)playSfx("confirm",{volume:.28});onClick?.(e);}} disabled={disabled} style={{padding:"8px 16px",background:disabled?"#222":bg,color:bg==="#333"||disabled?"#94a3b8":"#081018",border:"1px solid "+(bg==="#333"?"#334155":"#ffffff22"),borderRadius:10,fontWeight:800,cursor:disabled?"default":"pointer",fontSize:12,opacity:disabled?0.5:1,boxShadow:disabled?"none":"0 8px 18px #00000033, inset 0 1px 0 #ffffff22",transform:"translateY(0)",transition:"transform 0.15s, box-shadow 0.15s, opacity 0.15s"}}>{label}</button>);}
-function SfxToggle({enabled,onToggle}){return(<button onClick={()=>{playSfx(enabled?"error":"confirm",{volume:.24});onToggle();}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:enabled?"#b9f3cf":"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:enabled?"#123023":"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>SFX {enabled?"On":"Off"}</button>);}
-function Chip({filled,color,label,active}){return <div style={{width:22,height:22,borderRadius:"50%",display:"grid",placeItems:"center",position:"relative",
-  background:filled?`radial-gradient(circle at 35% 30%,#fff8,${color} 25%,${color}dd 58%,#0008 100%)`:"radial-gradient(circle at 35% 30%,#32404d,#18202a 68%,#081018 100%)",
-  border:`2px solid ${filled?`${color}aa`:"#445262"}`,boxShadow:filled?`0 0 14px ${color}55, inset 0 1px 0 #fff8, 0 6px 12px #0005`:"inset 0 1px 0 #ffffff14, 0 4px 10px #0004",
-  transform:active?"translateY(-2px) scale(1.06)":"none",transition:"transform .18s, box-shadow .18s"}}>
-  <div style={{position:"absolute",inset:3,borderRadius:"50%",border:`2px dashed ${filled?"#fff8":"#73839655"}`}}/>
-  <span style={{fontSize:9,fontWeight:900,color:filled?"#fff7e8":"#8ea0b4",fontFamily:"Georgia,serif",textShadow:"0 1px 2px #0008"}}>{label}</span>
-</div>;}
-
-// Draggable Modal
-function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});
-  const onD=e=>{dr.current=true;off.current={x:e.clientX-pos.x,y:e.clientY-pos.y};
-    const mv=e2=>{if(dr.current)setPos({x:e2.clientX-off.current.x,y:e2.clientY-off.current.y})};
-    const up=()=>{dr.current=false;window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up)};
-    window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-    <div className="kp-modal-shell" style={{background:"#111827",border:"1px solid #333",borderRadius:12,padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",left:pos.x,top:pos.y,position:"relative"}}>
-      <div onMouseDown={onD} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,cursor:"grab",userSelect:"none",padding:"0 0 8px",borderBottom:"1px solid #222"}}>
-        <div style={{fontSize:15,fontWeight:700,color:"#f1c40f",fontFamily:"Georgia,serif"}}>{title}</div>
-        <span style={{fontSize:9,color:"#334"}}>drag to move</span></div>
-      {children}</div></div>);}
-
-// Multi-select modal (as proper component, not IIFE)
-function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm",statsPlayer,gs,viewerPlayer,hint}){const[pk,setPk]=useState([]);
-  return(<Modal title={title}><div style={{fontSize:11,color:"#667",marginBottom:6}}>{hint||`Select up to ${maxPick}`}</div>
-    {statsPlayer&&gs&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={statsPlayer} viewerPlayer={viewerPlayer}/></div>}
-    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-      {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
-        onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<maxPick?[...p,id]:p)}/>))}</div>
-    <Btn label={`${btnLabel} (${pk.length})`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
-
-// Brainstorm: pick 3 in order
-function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
-  const toggle=id=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  return(<Modal title="Brainstorm: Put 3 cards on top (tap in order, 1st = top)">
-    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-      {hand.map(id=>{const idx=pk.indexOf(id);return(<div key={id} style={{position:"relative"}}>
-        <PreviewCard id={id} selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
-        {idx>=0&&<div style={{position:"absolute",top:2,left:2,background:"#f1c40f",color:"#000",borderRadius:10,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{idx+1}</div>}
-      </div>);})}</div>
-    {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top to bottom: {pk.map(id=>CM[id].name).join(", ")}</div>}
-    <Btn label={`Put ${pk.length}/3 on top`} bg={pk.length===3?"#f1c40f":"#333"} disabled={pk.length!==3} onClick={()=>pk.length===3&&onPick(pk)}/></Modal>);}
-
-// Rejuvenate: pick up to 3 to discard
-function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
-  return(<Modal title="Rejuvenate: Discard up to 3, draw that many">
-    <div style={{fontSize:11,color:"#667",marginBottom:6}}>Choose any number from 0 to 3.</div>
-    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-      {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
-        onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
-    <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg="#f1c40f" onClick={()=>onPick(pk)}/></Modal>);}
-
-// Deck memory tracker — shows cards whose current location the player can reasonably know
-function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
-  const canView=player===viewerPlayer||(isSoloMode(gs.mode)&&player==="B");
-  if(!canView)return null;
-  const initialDeck=(player==="A"?gs._aInitialDeck:gs._bInitialDeck)||[];
-  const currentDeck=player==="A"?gs.aDeck:gs.bDeck;
-  const currentHand=player==="A"?gs.aHand:gs.bHand;
-  const currentPlay=player==="A"?gs.aPlay:gs.bPlay;
-  const currentDiscard=player==="A"?gs.aDiscard:gs.bDiscard;
-  const easySoloTopId=isSoloMode(gs.mode)&&player==="B"&&gs._soloDifficulty===SOLO_DIFFICULTIES.easy&&gs.phase==="action"
-    ?(gs.bDeck[0]||null)
-    :null;
-  const revealedSoloSet=isSoloMode(gs.mode)&&player==="B"
-    ?new Set(gs._soloRevealedCards||[])
-    :new Set();
-  const zoneMeta={
-    H:{label:"Hand",color:"#f5d38f",background:"#f5d38f24",border:"#f5d38f55"},
-    P:{label:"In Play",color:"#7ce7bc",background:"#7ce7bc1f",border:"#7ce7bc55"},
-    D:{label:"Deck",color:"#74b7ff",background:"#74b7ff22",border:"#74b7ff55"},
-    d:{label:"Discard",color:"#ff9f8d",background:"#ff9f8d20",border:"#ff9f8d55"},
-    S:{label:"Scrap",color:"#d4a6ff",background:"#d4a6ff22",border:"#d4a6ff55"},
-    R:{label:"Revealed",color:"#96e6ff",background:"#96e6ff1d",border:"#96e6ff55"},
-  };
-  const getMemoryZone=id=>{
-    if(currentHand.includes(id))return"H";
-    if(currentPlay.some(a=>a?.id===id))return"P";
-    if(currentDiscard.includes(id))return"d";
-    if(gs.scrap.includes(id))return"S";
-    if(easySoloTopId===id)return"D";
-    if(revealedSoloSet.has(id))return"R";
-    return null;
-  };
-  const knownCards=initialDeck.filter(id=>getMemoryZone(id));
-  const memoryCounts={
-    H:knownCards.filter(id=>getMemoryZone(id)==="H").length,
-    P:knownCards.filter(id=>getMemoryZone(id)==="P").length,
-    D:currentDeck.length,
-    d:knownCards.filter(id=>getMemoryZone(id)==="d").length,
-    S:knownCards.filter(id=>getMemoryZone(id)==="S").length,
-    R:knownCards.filter(id=>getMemoryZone(id)==="R").length,
-  };
-  const clr=player==="A"?"#e74c3c":"#3498db";
-  if(!show)return(<button onClick={()=>setShow(true)} style={{padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:700,
-    border:`1px solid ${clr}44`,background:"transparent",color:`${clr}99`,cursor:"pointer"}}>{player} Memory</button>);
-  return(<div style={{background:"linear-gradient(180deg,#091018f0,#060b12f3)",border:`1px solid ${clr}33`,borderRadius:8,padding:8,fontSize:9,boxShadow:"0 10px 24px #00000022,inset 0 1px 0 #ffffff08",maxWidth:"100%",overflowX:"auto"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:8}}>
-      <div style={{display:"grid",gap:2}}>
-        <span style={{color:clr,fontWeight:800,letterSpacing:.8,textTransform:"uppercase"}}>{player} Memory</span>
-        <span style={{fontSize:9,color:"#6f8193"}}>{knownCards.length} card{knownCards.length!==1?"s":""} currently tracked</span>
-      </div>
-      <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#556",cursor:"pointer",fontSize:12}}>x</button></div>
-    <div style={{display:"grid",gap:8}}>
-      <div style={{display:"grid",gridTemplateColumns:"18px repeat(13, minmax(18px, 1fr))",gap:3,alignItems:"center",minWidth:320}}>
-        <div/>
-        {RO.map(rank=><div key={`head-${rank}`} style={{fontSize:10,color:"#8ea0b4",textAlign:"center",fontWeight:700}}>{rank}</div>)}
-        {SO.map(suit=><Fragment key={`row-${suit}`}>
-          <div style={{fontSize:12,color:SC[suit],textAlign:"center",fontWeight:900,textShadow:`0 0 10px ${SC[suit]}44`}}>{SUITS[suit]}</div>
-          {RO.map(rank=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===suit);const inDeck=initialDeck.includes(card.id);const zone=inDeck?getMemoryZone(card.id):null;const meta=zone?zoneMeta[zone]:null;
-            return <div
-              key={card.id}
-              title={!inDeck
-                ?`${card.rank}${SUITS[card.suit]} is not part of ${player}'s deck`
-                :zone
-                  ?`${card.name} (${card.rank}${SUITS[card.suit]}) - ${meta.label}`
-                  :`${card.name} (${card.rank}${SUITS[card.suit]}) - Unknown`}
-              style={{
-                height:18,
-                borderRadius:4,
-                border:zone?`1px solid ${meta.border}`:"1px solid #1d2a37",
-                background:zone?meta.background:"linear-gradient(180deg,#0c1219,#0a0f15)",
-                display:"grid",
-                placeItems:"center",
-                color:zone?meta.color:"#223142",
-                fontSize:10,
-                fontWeight:800,
-                boxShadow:zone?`inset 0 1px 0 #ffffff10, 0 0 0 1px ${meta.border}22`:"inset 0 1px 0 #ffffff05",
-                opacity:inDeck?1:.18,
-                letterSpacing:.2,
-                userSelect:"none"
-              }}
-            >{zone||""}</div>;})}
-        </Fragment>)}
-      </div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-        {["H","P","D","d","S",...(memoryCounts.R?["R"]:[])].map(key=><div key={key} title={zoneMeta[key].label} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 7px",borderRadius:999,border:`1px solid ${zoneMeta[key].border}`,background:zoneMeta[key].background,boxShadow:"inset 0 1px 0 #ffffff10"}}>
-          <span style={{minWidth:12,textAlign:"center",fontSize:10,fontWeight:900,color:zoneMeta[key].color}}>{key}</span>
-          <span style={{fontSize:9,color:"#c2d0dc"}}>{zoneMeta[key].label}</span>
-          <span style={{fontSize:9,color:"#6f8193"}}>{memoryCounts[key]||0}</span>
-        </div>)}
-      </div>
-    </div></div>);}
-
-// Public zones
-function PublicZones({gs,extraControls,onToggleZone,canToggleZone,spotlightZone}){const[exp,setExp]=useState(null);
-  const zones=[{key:"scrap",label:"Scrap",cards:gs.scrap,color:"#9b59b6"},{key:"aDiscard",label:"A Discard",cards:gs.aDiscard,color:"#e74c3c"},{key:"bDiscard",label:"B Discard",cards:gs.bDiscard,color:"#3498db"}];
-  return(<div><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-    {zones.map(z=>{const enabled=canToggleZone?canToggleZone(z.key):true;const spotlight=spotlightZone===z.key;return(<button key={z.key} onClick={()=>{if(!enabled)return;const next=exp===z.key?null:z.key;setExp(next);if(next)onToggleZone?.(z.key);}} style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,cursor:enabled?"pointer":"default",
-      border:`1px solid ${exp===z.key||spotlight?z.color:z.color+"44"}`,background:exp===z.key?z.color+"1a":spotlight?z.color+"14":"transparent",color:exp===z.key||spotlight?z.color:z.color+"99",opacity:enabled?1:0.45,
-      boxShadow:spotlight?`0 0 0 1px ${z.color}55, 0 0 14px ${z.color}44`:"none",animation:spotlight?"pulse 1.4s infinite":"none"}}>{z.label} ({z.cards.length})</button>);})}
-    {extraControls}
-    <span style={{fontSize:10,color:"#334"}}>A deck:{gs.aDeck.length} · B deck:{gs.bDeck.length}</span></div>
-    {exp&&(()=>{const z=zones.find(x=>x.key===exp);if(!z||!z.cards.length)return <div style={{fontSize:10,color:"#445",marginTop:4,fontStyle:"italic"}}>Empty</div>;
-      return(<div style={{marginTop:6,padding:6,background:"#0a0d1188",borderRadius:6,border:`1px solid ${z.color}22`}}>
-        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{sortC(z.cards).map((id,i)=><PreviewCard key={id+i} id={id}/>)}</div></div>);})()}</div>);}
 
 // ============================================================
 // MAIN APP
@@ -1014,6 +155,88 @@ export default function KaizenPoker(){
   const initialRouteHandledRef=useRef(false);
   const lastUmamiScreenRef=useRef("");
   const konamiProgressRef=useRef(0);
+  // Warm the (web-optimized) card illustrations once the browser is idle so
+  // cards never pop in blank mid-game.
+  useEffect(()=>{
+    if(!USE_ILLUSTRATED_CARDS||typeof window==="undefined")return undefined;
+    const warm=()=>{CARDS.forEach(c=>{const src=getCardIllustrationSrc(c.name);if(src){const img=new Image();img.src=src;}});};
+    if(window.requestIdleCallback){
+      const handle=window.requestIdleCallback(warm,{timeout:4000});
+      return()=>window.cancelIdleCallback?.(handle);
+    }
+    const timer=setTimeout(warm,1500);
+    return()=>clearTimeout(timer);
+  },[]);
+  // Card flights: ghosts that fly when a card changes zones between commits.
+  const[flights,setFlights]=useState([]);
+  const flightKeyRef=useRef(0);
+  const flightRectsRef=useRef(new Map());
+  const flightPrevGsRef=useRef(null);
+  const removeFlight=useCallback(key=>setFlights(f=>f.filter(x=>x.key!==key)),[]);
+  useLayoutEffect(()=>{
+    const prev=flightPrevGsRef.current;
+    flightPrevGsRef.current=gs;
+    if(!prev||!gs||prev===gs)return;
+    if(prefersReducedMotion())return;
+    // Skip bulk transitions: new games, round boundaries, end-of-round sweeps.
+    if(prev._gameId!==gs._gameId||prev.mode!==gs.mode||prev.round!==gs.round||gs.phase==="gameOver")return;
+    const before=flightZoneMap(prev),after=flightZoneMap(gs);
+    const moved=[];
+    after.forEach((zone,id)=>{const prevZone=before.get(id);if(prevZone&&prevZone!==zone)moved.push({id,fromZone:prevZone,toZone:zone});});
+    if(!moved.length)return;
+    const snapshot=flightRectsRef.current;
+    const norm=r=>({left:r.left,top:r.top,width:r.width,height:r.height});
+    const tabRect=zone=>{
+      const sel=zone==="scrap"?'[data-zone="scrap"]'
+        :zone==="aDiscard"?'[data-zone="aDiscard"]'
+        :zone==="bDiscard"?'[data-zone="bDiscard"]'
+        :(zone==="aDeck"||zone==="bDeck")?'[data-zone="deck"]'
+        :null;
+      if(!sel)return null;
+      const el=document.querySelector(sel);
+      if(!el)return null;
+      const r=el.getBoundingClientRect();
+      // Shrink toward the tab's center so cards read as "tucked into" the pile.
+      return {left:r.left+r.width/2-17,top:r.top+r.height/2-24,width:34,height:48};
+    };
+    const findCardEl=id=>{
+      const nodes=document.querySelectorAll(`[data-card-id="${id}"]`);
+      for(const el of nodes){if(!el.closest("[data-flight-ghost]"))return el;}
+      return null;
+    };
+    const spawns=[];
+    for(const mv of moved){
+      if(spawns.length>=6)break;
+      const snap=snapshot.get(mv.id);
+      const destEl=findCardEl(mv.id);
+      const to=destEl?norm(destEl.getBoundingClientRect()):tabRect(mv.toZone);
+      const from=snap?snap.rect:tabRect(mv.fromZone);
+      if(!from||!to)continue;
+      if(Math.abs(from.left-to.left)<4&&Math.abs(from.top-to.top)<4)continue;
+      const back=!!(snap&&snap.faceDown)||destEl?.getAttribute("data-facedown")==="1";
+      spawns.push({key:`fl${flightKeyRef.current++}`,id:mv.id,from,to,back,fadeOut:!destEl});
+      if(destEl){
+        destEl.style.visibility="hidden";
+        setTimeout(()=>{try{destEl.style.visibility="";}catch{}},FLIGHT_MS+40);
+      }
+    }
+    if(spawns.length)setFlights(f=>[...f,...spawns]);
+  },[gs]);
+  useLayoutEffect(()=>{
+    // Snapshot card positions after every commit (runs after the flight effect
+    // above has consumed the previous snapshot).
+    if(typeof document==="undefined")return;
+    const map=new Map();
+    document.querySelectorAll("[data-card-id]").forEach(el=>{
+      if(el.closest("[data-flight-ghost]"))return;
+      const id=el.getAttribute("data-card-id");
+      if(!id||map.has(id))return;
+      const r=el.getBoundingClientRect();
+      if(!r.width||!r.height)return;
+      map.set(id,{rect:{left:r.left,top:r.top,width:r.width,height:r.height},faceDown:el.getAttribute("data-facedown")==="1"});
+    });
+    flightRectsRef.current=map;
+  });
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(canResumeLocally(nextGs)){
@@ -1373,9 +596,9 @@ export default function KaizenPoker(){
     acknowledgeTutorial(`zone:${key}`);
   };
   const tutorialTagStyles={
-    aDiscard:{label:"A Discard",color:"#e74c3c",background:"transparent",glow:"#e74c3c55"},
-    bDiscard:{label:"B Discard",color:"#3498db",background:"transparent",glow:"#3498db55"},
-    scrap:{label:"Scrap",color:"#9b59b6",background:"transparent",glow:"#9b59b655"},
+    aDiscard:{label:"A Discard",color:"#ff5a4e",background:"transparent",glow:"#ff5a4e55"},
+    bDiscard:{label:"B Discard",color:"#34a3ff",background:"transparent",glow:"#34a3ff55"},
+    scrap:{label:"Scrap",color:"#a86ef0",background:"transparent",glow:"#a86ef055"},
   };
   const tutorialTag=tutorialPrompt?.tagKey?tutorialTagStyles[tutorialPrompt.tagKey]||null:null;
 
@@ -2315,49 +1538,46 @@ export default function KaizenPoker(){
       onReplay={()=>{setKonamiCelebrationKey(v=>v+1);playSfx("victory",{volume:.34});}}
       onClose={()=>setKonamiCelebrationOpen(false)}
     />
-    <div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -10%,#2d6a4f 0%,#174a38 38%,#0f2b22 70%,#07120f 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
-    <div style={{position:"absolute",inset:20,borderRadius:34,border:"2px solid #b8965b33",boxShadow:"inset 0 0 0 1px #f8e7b11a"}}/>
-    <div style={{position:"absolute",width:520,height:520,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,#f1c40f08 35%,transparent 70%)",top:-220,left:"50%",transform:"translateX(-50%)"}}/>
-    <div style={{position:"absolute",width:420,height:420,borderRadius:"50%",background:"radial-gradient(circle,#c49a5a14 0%,transparent 68%)",bottom:-180,left:-120}}/>
-    <div style={{position:"absolute",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#2ecc7114 0%,transparent 72%)",top:120,right:-80}}/>
-    <div style={{position:"relative",padding:"28px 30px",borderRadius:24,background:"linear-gradient(180deg,#133328ee,#0c241dee)",border:"1px solid #8c6a3a66",boxShadow:"0 30px 80px #00000066,inset 0 1px 0 #f6e3b51f, inset 0 0 0 1px #ffffff08",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,maxWidth:560,width:"min(560px,calc(100vw - 48px))"}}>
+    <div style={{minHeight:"100vh",fontFamily:FONT_BODY,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
+    <FeltBackdrop/>
+    <div className="kp-panel" style={{position:"relative",padding:"26px 30px 30px",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,maxWidth:580,width:"min(580px,calc(100vw - 48px))"}}>
       <div style={{width:"100%",display:"flex",justifyContent:"flex-end"}}><SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/></div>
-      <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#6b7f92",fontWeight:800}}>Deckbuilding Duel Prototype</div>
-      <h1 style={{fontSize:40,fontWeight:900,fontFamily:"Georgia,serif",background:"linear-gradient(135deg,#f8de7e,#f39c12 45%,#f7f1c8)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:5,margin:0,textAlign:"center"}}>KAIZEN POKER</h1>
-        <p style={{color:"#7f93a8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
+      <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#8d89a8",fontWeight:800}}>Deckbuilding Duel Prototype</div>
+      <h1 className="kp-wordmark" style={{fontSize:54,fontWeight:400,letterSpacing:2,margin:0,textAlign:"center",lineHeight:1}}>KAIZEN POKER</h1>
+        <p style={{color:"#c8c4d8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
         <div style={{width:"100%",display:"grid",gap:14}}>
           <div style={{display:"grid",gap:8}}>
-            <div style={{fontSize:10,fontWeight:800,color:"#cbb58a",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Learn</div>
+            <div className="kp-section-label" style={{color:"#f5b942",textAlign:"center"}}>Learn</div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-              <Btn label="Tutorial" bg="linear-gradient(135deg,#f8d77a,#f2a93b)" onClick={()=>startGame("tutorial")}/>
-              <Btn label="Rules" bg="linear-gradient(135deg,#ffe3a3,#ffc857)" onClick={startRules}/>
+              <Btn label="Tutorial" bg="#f5b942" onClick={()=>startGame("tutorial")}/>
+              <Btn label="Rules" bg="#ff9d2e" onClick={startRules}/>
             </div>
           </div>
           <div style={{display:"grid",gap:8}}>
-            <div style={{fontSize:10,fontWeight:800,color:"#8fd0c8",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center"}}>Play Locally</div>
+            <div className="kp-section-label" style={{color:"#3bbf7c",textAlign:"center"}}>Play Locally</div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-              <Btn label="Hotseat Game" bg="linear-gradient(135deg,#63d488,#2db56b)" onClick={()=>startGame("hotseat")}/>
-              <Btn label="Solo Mode" bg="linear-gradient(135deg,#4ade80,#22c55e)" onClick={()=>startGame("solo")}/>
-              {resumeAvailable&&<Btn label="Resume Last Local Game" bg="linear-gradient(135deg,#7dd3fc,#3b82f6)" onClick={resumeLocalGame}/>}
+              <Btn label="Hotseat Game" bg="#3bbf7c" onClick={()=>startGame("hotseat")}/>
+              <Btn label="Solo Mode" bg="#2aa86a" onClick={()=>startGame("solo")}/>
+              {resumeAvailable&&<Btn label="Resume Last Local Game" bg="#34a3ff" onClick={resumeLocalGame}/>}
             </div>
           </div>
           <div style={{display:"grid",gap:8}}>
-            <div style={{fontSize:10,fontWeight:800,color:homeRoute==="remote"?"#d9e7ff":"#9fbdf2",letterSpacing:1.4,textTransform:"uppercase",textAlign:"center",textShadow:homeRoute==="remote"?"0 0 14px rgba(96,165,250,.45)":"none"}}>Play Remotely</div>
+            <div className="kp-section-label" style={{color:homeRoute==="remote"?"#aedbff":"#34a3ff",textAlign:"center",textShadow:homeRoute==="remote"?"0 0 14px rgba(52,163,255,.55)":"none"}}>Play Remotely</div>
             <div style={{display:"flex",justifyContent:"center"}}>
-              <Btn label="Create Online Game" bg="linear-gradient(135deg,#67a8ff,#2563eb)" onClick={startOnlineGame}/>
+              <Btn label="Create Online Game" bg="#34a3ff" onClick={startOnlineGame}/>
             </div>
           </div>
         </div>
-      <div style={{width:"100%",display:"grid",gap:8,paddingTop:2,paddingBottom:homeRoute==="remote"?6:0,borderRadius:18,background:homeRoute==="remote"?"linear-gradient(180deg,#12304a55,#0f172a00)":"transparent",boxShadow:homeRoute==="remote"?"inset 0 0 0 1px #60a5fa33, 0 0 28px #60a5fa18":"none",transition:"all .2s ease"}}>
-        <div style={{fontSize:10,fontWeight:800,color:homeRoute==="remote"?"#dbeafe":"#9fb0c2",letterSpacing:1.3,textTransform:"uppercase",textAlign:"center"}}>Join Remote Game</div>
+      <div style={{width:"100%",display:"grid",gap:8,paddingTop:2,paddingBottom:homeRoute==="remote"?6:0,borderRadius:14,background:homeRoute==="remote"?"#34a3ff14":"transparent",boxShadow:homeRoute==="remote"?"inset 0 0 0 2px #34a3ff44, 0 0 28px #34a3ff22":"none",transition:"all .2s ease"}}>
+        <div className="kp-section-label" style={{color:homeRoute==="remote"?"#dbeafe":"#8d89a8",textAlign:"center"}}>Join Remote Game</div>
         <input
           value={joinCode}
           onChange={e=>setJoinCode(e.target.value)}
           placeholder="Paste game link or game ID"
-          style={{width:"100%",padding:"10px 12px",borderRadius:12,border:`1px solid ${homeRoute==="remote"?"#60a5fa":"#334155"}`,background:"#0f172a",color:"#dbe5ee",fontSize:13,boxShadow:homeRoute==="remote"?"0 0 0 1px #60a5fa33 inset, 0 0 18px #60a5fa14":"none"}}
+          style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`2px solid ${homeRoute==="remote"?"#34a3ff":"#3d4470"}`,background:"#12142a",color:"#f5f1e8",fontSize:13,fontFamily:FONT_BODY,fontWeight:600,boxShadow:"inset 0 3px 8px rgba(0,0,0,.4)"}}
         />
         <div style={{display:"flex",justifyContent:"center"}}>
-          <Btn label="Join Game" bg="linear-gradient(135deg,#60a5fa,#2563eb)" onClick={()=>joinOnlineGame(joinCode)}/>
+          <Btn label="Join Game" bg="#2173c2" onClick={()=>joinOnlineGame(joinCode)}/>
         </div>
       </div>
         {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
@@ -2374,32 +1594,27 @@ export default function KaizenPoker(){
   </>);
 
   if(gs.mode==="rules"){
-    return(<div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-        <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
-        <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)"}}/>
-        <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)"}}/>
-        <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)"}}/>
-      </div>
-      <div style={{padding:"10px 16px",borderBottom:"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
-        <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
-        <span style={{color:"#445"}}>Rules</span>
-        <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Rules</span>
+    return(<div style={{height:"100vh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+      <FeltBackdrop/>
+      <div style={{padding:"10px 16px",borderBottom:"2px solid #00000055",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
+        <span className="kp-wordmark" style={{fontSize:20,letterSpacing:1}}>KAIZEN POKER</span>
+        <span style={{color:"#8d89a8",fontWeight:800}}>Rules</span>
+        <span className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>Rules</span>
         <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
-        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
-        <a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",textDecoration:"none",boxShadow:"inset 0 1px 0 #ffffff10"}}>Open PDF</a>
+        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>MENU</button>
+        <a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" className="kp-pill" style={{padding:"4px 12px",fontSize:10,textDecoration:"none"}}>Open PDF</a>
       </div>
       <div style={{padding:18,position:"relative",zIndex:1,height:"calc(100vh - 59px)",overflow:"hidden"}}>
-        <div style={{height:"100%",minWidth:0,padding:"12px 14px 14px",borderRadius:28,background:"linear-gradient(180deg,#133328d8,#0c241ddd)",border:"1px solid #8c6a3a44",boxShadow:"0 30px 80px #00000033,inset 0 1px 0 #f6e3b51a",display:"flex",flexDirection:"column",gap:8}}>
-          <div style={{fontSize:11,color:"#8ea0b4",lineHeight:1.45}}>The current rules PDF is framed right here in the app. Use <span style={{color:"#d8c08d"}}>Open PDF</span> if you want it in a separate tab.</div>
-          <div style={{flex:"1 1 auto",height:0,minHeight:0,padding:8,borderRadius:24,background:"linear-gradient(180deg,#0d1620f5,#091119f8)",border:"1px solid #38506a66",boxShadow:"inset 0 1px 0 #ffffff0d,0 18px 48px #0000002a"}}>
-            <div style={{height:"100%",borderRadius:18,overflow:"hidden",border:"1px solid #8c6a3a55",background:"#0b1016",boxShadow:"inset 0 0 0 1px #ffffff07"}}>
+        <div className="kp-panel" style={{height:"100%",minWidth:0,padding:"12px 14px 14px",borderRadius:18,display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:11,color:"#a8a4c0",lineHeight:1.45}}>The current rules PDF is framed right here in the app. Use <span style={{color:"#f5b942"}}>Open PDF</span> if you want it in a separate tab.</div>
+          <div className="kp-panel-inset" style={{flex:"1 1 auto",height:0,minHeight:0,padding:8,borderRadius:14}}>
+            <div style={{height:"100%",borderRadius:10,overflow:"hidden",border:"2px solid #00000055",background:"#12142a"}}>
               <object data={RULES_PDF_PATH} type="application/pdf" width="100%" height="100%">
                 <div style={{height:"100%",display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#cbd5e1"}}>
                   <div style={{display:"grid",gap:12,maxWidth:520}}>
-                    <div style={{fontSize:20,fontWeight:900,color:"#f3d7a4",fontFamily:"Georgia,serif"}}>Rules PDF Not Found</div>
-                    <div style={{fontSize:13,lineHeight:1.6,color:"#9fb0c2"}}>This viewer is looking for <span style={{color:"#f8de7e"}}>`{RULES_PDF_PATH}`</span>. If the embedded viewer stays blank, try opening the PDF in a separate tab.</div>
-                    <div><a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" style={{display:"inline-block",padding:"8px 14px",borderRadius:999,border:"1px solid #334155",color:"#dbe5ee",textDecoration:"none",background:"#101923",fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:1}}>Open PDF</a></div>
+                    <div style={{fontSize:20,fontWeight:900,color:"#f3d7a4",fontFamily:FONT_DISPLAY}}>Rules PDF Not Found</div>
+                    <div style={{fontSize:13,lineHeight:1.6,color:"#b4b0c8"}}>This viewer is looking for <span style={{color:"#f8de7e"}}>`{RULES_PDF_PATH}`</span>. If the embedded viewer stays blank, try opening the PDF in a separate tab.</div>
+                    <div><a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" className="kp-pill" style={{display:"inline-block",padding:"8px 16px",fontSize:11,textDecoration:"none"}}>Open PDF</a></div>
                   </div>
                 </div>
               </object>
@@ -2435,23 +1650,18 @@ export default function KaizenPoker(){
       :Array.from({length:14},(_,idx)=>idx===previewInsertIndex?`${galleryPreviewFrameWidth}px`:`${galleryThumbWidth}px`).join(" ");
     const displayColumnIndex=originalIndex=>previewInsertIndex===-1?originalIndex:(originalIndex>=previewInsertIndex?originalIndex+1:originalIndex);
     const hoveredSrc=hoveredCard?getRenderedCardSrc(hoveredCard.name):null;
-    return(<div style={{minHeight:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-        <div style={{position:"absolute",inset:18,borderRadius:30,border:"2px solid #b7965b22",boxShadow:"inset 0 0 0 1px #f3dfa81a"}}/>
-        <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)"}}/>
-        <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)"}}/>
-        <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)"}}/>
-      </div>
-      <div style={{padding:"10px 16px",borderBottom:"1px solid #6e573122",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
-        <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
-        <span style={{color:"#445"}}>Card Image Gallery</span>
-        <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923"}}>Card Image Gallery</span>
+    return(<div style={{minHeight:"100vh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+      <FeltBackdrop/>
+      <div style={{padding:"10px 16px",borderBottom:"2px solid #00000055",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
+        <span className="kp-wordmark" style={{fontSize:20,letterSpacing:1}}>KAIZEN POKER</span>
+        <span style={{color:"#8d89a8",fontWeight:800}}>Card Image Gallery</span>
+        <span className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>Card Image Gallery</span>
         <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
-        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
+        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>MENU</button>
       </div>
       <div style={{padding:18,position:"relative",zIndex:1,flex:1,minHeight:0,overflow:"auto"}}>
-        <div style={{minWidth:0,padding:"16px 18px 18px",borderRadius:28,background:"linear-gradient(180deg,#133328d8,#0c241ddd)",border:"1px solid #8c6a3a44",boxShadow:"0 30px 80px #00000033,inset 0 1px 0 #f6e3b51a"}}>
-          <div style={{fontSize:11,color:"#8ea0b4",lineHeight:1.45,marginBottom:14}}>Hover over a thumbnail to see what the prototype print version of the card looks like.</div>
+        <div className="kp-panel" style={{minWidth:0,padding:"16px 18px 18px",borderRadius:18}}>
+          <div style={{fontSize:11,color:"#a8a4c0",lineHeight:1.45,marginBottom:14}}>Hover over a thumbnail to see what the prototype print version of the card looks like.</div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:12,alignItems:"start"}}>
             <div style={{overflowX:"auto",overflowY:"hidden",paddingBottom:8}}>
               <div style={{position:"relative",width:hoveredRankIndex===-1?(galleryThumbWidth*13)+(12*6):(galleryThumbWidth*13)+(12*6)+galleryPreviewFrameWidth+6,minHeight:galleryPreviewFrameHeight}}>
@@ -2497,7 +1707,12 @@ export default function KaizenPoker(){
   const actingPlayer=gs.currentPlayer;
   const seatPlayer=isOnlineMode?(liveSeat||onlineRef.current.seat||null):null;
   const viewerPlayer=gs.mode==="tutorial"?"A":isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
-  const cardRenderStyle=gs.mode==="solo_art"?"image":"html";
+  // The solo test mode always renders the opposite of the default card style:
+  // with illustrations as the default it is the "Solo Artless Test" (HTML cards),
+  // and if USE_ILLUSTRATED_CARDS is rolled back it becomes the art test again.
+  const cardRenderStyle=gs.mode==="solo_art"
+    ?(USE_ILLUSTRATED_CARDS?"html":"image")
+    :(USE_ILLUSTRATED_CARDS?"image":"html");
   const soloDifficulty=gs._soloDifficulty||SOLO_DIFFICULTIES.difficult;
   const easySoloMode=isSoloMode(gs.mode)&&soloDifficulty===SOLO_DIFFICULTIES.easy;
   const showingRevealedChallengerCard=easySoloMode&&!!gs._soloReveal?.cardId&&gs.phase!=="action";
@@ -2548,9 +1763,9 @@ export default function KaizenPoker(){
   const actionAreaMinHeight=isMobileLandscape?78:95;
   const publicAreaGap=isMobileLandscape?10:16;
 
-  const pClr=viewerPlayer==="A"?"#e74c3c":"#3498db";
+  const pClr=viewerPlayer==="A"?"#ff5a4e":"#34a3ff";
   const chipGoal=7;
-  const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#1f2937",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#334155"}`}}/>);
+  const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#12142a",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#3d4470"}`,animation:i===count-1?"chipBounce .45s cubic-bezier(.26,1.5,.42,1)":"none"}}/>);
   const visibleLog=gs.log.map(msg=>{
     if(!isOnlineMode) return msg;
     const hiddenPlayers=seatPlayer?["A","B"].filter(pl=>pl!==seatPlayer):["A","B"];
@@ -2582,7 +1797,7 @@ export default function KaizenPoker(){
   const renderShowdown=(isFinal=false)=>{
     const w=gs._revealWinner,aE=gs._revealAE,bE=gs._revealBE;
     const aH=getH(gs,"A"),bH=getH(gs,"B");
-    const wClr=w==="A"?"#e74c3c":w==="B"?"#3498db":"#718096";
+    const wClr=w==="A"?"#ff5a4e":w==="B"?"#34a3ff":"#718096";
     const winnerPlayer=w==="A"?"A":w==="B"?"B":null;
     const cascadeCards=getCascadeCardPool(gs);
     const wText=isSoloMode(gs.mode)
@@ -2595,25 +1810,25 @@ export default function KaizenPoker(){
     const postQueue=revealPostQueue(gs);
     const soloRow=isSoloMode(gs.mode)&&gs._soloReveal?.cardId?CHALLENGER_LOOKUP[CM[gs._soloReveal.cardId].rank]:null;
     const shell=(
-      <div style={{padding:isFinal?24:16,background:`linear-gradient(180deg,${w==="A"?"#241311f2":w==="B"?"#101a27f2":"#101722ee"},#0a0f16f4)`,borderRadius:isFinal?28:22,border:`2px solid ${wClr}55`,boxShadow:isFinal?`0 40px 100px ${wClr}33,inset 0 1px 0 #ffffff18,0 0 0 1px #ffffff08`:`0 24px 60px ${wClr}22,inset 0 1px 0 #ffffff12`,animation:"revealRise 0.35s ease-out",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%"}}>
+      <div style={{padding:isFinal?24:16,background:"linear-gradient(180deg,#262b4cf6,#191c36fa)",borderRadius:isFinal?24:18,border:`3px solid ${wClr}`,boxShadow:isFinal?`0 8px 0 rgba(0,0,0,.4), 0 40px 100px ${wClr}44, inset 0 2px 0 rgba(255,255,255,.08)`:`0 6px 0 rgba(0,0,0,.4), 0 24px 60px ${wClr}33, inset 0 2px 0 rgba(255,255,255,.08)`,animation:"revealRise 0.4s cubic-bezier(.26,1.36,.42,1)",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%"}}>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
         {isFinal&&<>
           <div style={{position:"absolute",top:-110,left:-80,width:260,height:260,borderRadius:"50%",background:`radial-gradient(circle,${wClr}33 0%,transparent 68%)`,pointerEvents:"none"}}/>
-          <div style={{position:"absolute",bottom:-120,right:-60,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f22 0%,transparent 72%)",pointerEvents:"none"}}/>
+          <div style={{position:"absolute",bottom:-120,right:-60,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#f5b94222 0%,transparent 72%)",pointerEvents:"none"}}/>
         </>}
         <div style={{textAlign:"center",marginBottom:isFinal?16:12,position:"relative"}}>
-          <div style={{fontSize:isFinal?11:10,fontWeight:800,color:"#7f93a8",letterSpacing:isFinal?4:3,textTransform:"uppercase",marginBottom:6}}>{isFinal?"Final Showdown":"Showdown"}</div>
+          <div style={{fontSize:isFinal?11:10,fontWeight:800,color:"#9b97b2",letterSpacing:isFinal?4:3,textTransform:"uppercase",marginBottom:6}}>{isFinal?"Final Showdown":"Showdown"}</div>
           <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:isFinal?14:10,marginBottom:4}}>
-            {w!=="TIE"&&<Chip filled color={w==="A"?"#d85745":"#338bd2"} label={isFinal?"*":"*"} active/>}
-            <div style={{fontSize:isFinal?42:24,fontWeight:900,color:wClr,fontFamily:"Georgia,serif",textShadow:`0 0 ${isFinal?28:18}px ${wClr}55`,lineHeight:1.08}}>{wText}</div>
-            {w!=="TIE"&&<Chip filled color={w==="A"?"#d85745":"#338bd2"} label={isFinal?"*":"*"} active/>}
+            {w!=="TIE"&&<Chip filled color={w==="A"?"#ff5a4e":"#34a3ff"} label={isFinal?"*":"*"} active/>}
+            <div style={{fontSize:isFinal?44:26,color:wClr,fontFamily:FONT_DISPLAY,textShadow:`0 3px 0 rgba(0,0,0,.45), 0 0 ${isFinal?30:20}px ${wClr}66`,lineHeight:1.08,animation:"scorePunch .5s cubic-bezier(.26,1.5,.42,1) .42s backwards"}}>{wText}</div>
+            {w!=="TIE"&&<Chip filled color={w==="A"?"#ff5a4e":"#34a3ff"} label={isFinal?"*":"*"} active/>}
           </div>
-          <div style={{fontSize:isFinal?18:13,color:isFinal?"#dce7f2":"#90a4b8",fontWeight:isFinal?700:400}}>{gs.aChips} - {gs.bChips}</div>
-          {isFinal&&winnerPlayer&&<div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:999,background:"#0b1219dd",border:`1px solid ${wClr}55`,boxShadow:`0 12px 28px ${wClr}22`}}>
+          <div style={{fontSize:isFinal?18:13,color:isFinal?"#dce7f2":"#a8a4c0",fontWeight:isFinal?700:400,animation:"chipBounce .4s cubic-bezier(.26,1.5,.42,1) .55s backwards"}}>{gs.aChips} - {gs.bChips}</div>
+          {isFinal&&winnerPlayer&&<div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:999,background:"#12142add",border:`1px solid ${wClr}55`,boxShadow:`0 12px 28px ${wClr}22`}}>
             <span style={{fontSize:10,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#f3d7a4"}}>Champion</span>
             <span style={{fontSize:13,color:"#e8f1f9"}}>{isSoloMode(gs.mode)?(winnerPlayer==="A"?"You beat the Challenger":"The Challenger shuts the door"):`Player ${winnerPlayer} closes it out`}</span>
           </div>}
-          {!isFinal&&postQueue.length>0&&<div style={{marginTop:10,display:"inline-flex",gap:8,flexWrap:"wrap",justifyContent:"center",padding:"7px 12px",borderRadius:999,background:"#0b1219cc",border:"1px solid #425160",boxShadow:"0 10px 24px #00000024"}}>
+          {!isFinal&&postQueue.length>0&&<div style={{marginTop:10,display:"inline-flex",gap:8,flexWrap:"wrap",justifyContent:"center",padding:"7px 12px",borderRadius:999,background:"#12142acc",border:"2px solid #3d4470",boxShadow:"0 10px 24px #00000024"}}>
             <span style={{fontSize:9,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#d8c08d"}}>Up Next</span>
             <span style={{fontSize:11,color:"#dbe5ee"}}>{postQueue.join(" / ")}</span>
           </div>}
@@ -2621,65 +1836,65 @@ export default function KaizenPoker(){
         {isSoloMode(gs.mode)
           ?<div style={{display:"grid",gap:isFinal?18:14}}>
             <div style={{display:"flex",gap:isFinal?20:16,justifyContent:"center",flexWrap:"wrap",alignItems:"stretch"}}>
-              <div style={{minWidth:300,maxWidth:420,opacity:w==="B"?0.55:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:w==="A"?"#e74c3c14":"transparent",border:w==="A"?"1px solid #e74c3c44":"1px solid transparent",boxShadow:w==="A"&&isFinal?"0 18px 42px #e74c3c22":"none"}}>
-                <div style={{fontSize:isFinal?13:12,fontWeight:700,color:"#e74c3c",marginBottom:6,textAlign:"center",letterSpacing:1}}>
+              <div style={{minWidth:300,maxWidth:420,opacity:w==="B"?0.55:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:w==="A"?"#ff5a4e14":"transparent",border:w==="A"?"1px solid #ff5a4e44":"1px solid transparent",boxShadow:w==="A"&&isFinal?"0 18px 42px #ff5a4e22":"none"}}>
+                <div style={{fontSize:isFinal?13:12,fontWeight:700,color:"#ff5a4e",marginBottom:6,textAlign:"center",letterSpacing:1}}>
                   YOU {w==="A"&&"*"}
                 </div>
                 <div style={{display:"flex",gap:5,justifyContent:"center",marginBottom:6,flexWrap:"wrap"}}>
-                  {displayOrder(aH,getAppliedMods(gs,"A")).map(id=>{
+                  {displayOrder(aH,getAppliedMods(gs,"A")).map((id,i)=>{
                     const mod=getAppliedMods(gs,"A").find(m=>m.target===id);
-                    return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
-                      <PreviewCard id={id} glow={w==="A"?"#e74c3c":undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
+                    return(<div key={id} className="kp-reveal-card" style={{position:"relative",animationDelay:`${i*0.06}s`,animationFillMode:"backwards"}}>
+                      <PreviewCard id={id} glow={w==="A"?"#ff5a4e":undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
                     </div>);
                   })}
                 </div>
-                <div style={{textAlign:"center"}}><HandBadge ids={aH} mods={getAppliedMods(gs,"A")}/></div>
-                <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:w==="A"?"#f3d7a4":"#7f93a8",letterSpacing:.4}}>
+                <div style={{textAlign:"center"}}><HandBadge ids={aH} mods={getAppliedMods(gs,"A")} delay=".38s"/></div>
+                <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:w==="A"?"#f3d7a4":"#9b97b2",letterSpacing:.4}}>
                   {aE.handName} {isFinal?(w==="A"?"wins the run":"makes the final hand"):(w==="A"?"beats the Challenger":"faces the Challenger")}
                 </div>
               </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",fontSize:isFinal?28:20,fontWeight:900,color:"#f3d7a4",fontFamily:"Georgia,serif",letterSpacing:2,padding:"0 6px"}}>VS</div>
-              <div style={{minWidth:300,maxWidth:420,opacity:w==="A"?0.55:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:w==="B"?"#3498db14":"transparent",border:w==="B"?"1px solid #3498db44":"1px solid transparent",boxShadow:w==="B"&&isFinal?"0 18px 42px #3498db22":"none"}}>
-                <div style={{fontSize:isFinal?13:12,fontWeight:700,color:"#3498db",marginBottom:6,textAlign:"center",letterSpacing:1}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",fontSize:isFinal?28:20,fontWeight:900,color:"#f3d7a4",fontFamily:FONT_DISPLAY,letterSpacing:2,padding:"0 6px"}}>VS</div>
+              <div style={{minWidth:300,maxWidth:420,opacity:w==="A"?0.55:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:w==="B"?"#34a3ff14":"transparent",border:w==="B"?"1px solid #34a3ff44":"1px solid transparent",boxShadow:w==="B"&&isFinal?"0 18px 42px #34a3ff22":"none"}}>
+                <div style={{fontSize:isFinal?13:12,fontWeight:700,color:"#34a3ff",marginBottom:6,textAlign:"center",letterSpacing:1}}>
                   CHALLENGER {w==="B"&&"*"}
                 </div>
                 <div style={{display:"flex",justifyContent:"center",marginBottom:8}}>
                   {gs._soloReveal?.cardId
-                    ?<div className="kp-reveal-card" style={{position:"relative"}}><PreviewCard id={gs._soloReveal.cardId} glow={w==="B"?"#3498db":undefined}/></div>
-                    :<div style={{width:68,height:95,borderRadius:8,border:"1px dashed #516172",display:"flex",alignItems:"center",justifyContent:"center",color:"#7f93a8",fontSize:10}}>No card</div>}
+                    ?<div className="kp-reveal-card" style={{position:"relative",animationDelay:".3s",animationFillMode:"backwards"}}><PreviewCard id={gs._soloReveal.cardId} glow={w==="B"?"#34a3ff":undefined}/></div>
+                    :<div style={{width:68,height:95,borderRadius:8,border:"1px dashed #516172",display:"flex",alignItems:"center",justifyContent:"center",color:"#9b97b2",fontSize:10}}>No card</div>}
                 </div>
-                <div style={{textAlign:"center",marginBottom:6}}><span style={{padding:"3px 10px",borderRadius:5,background:"#3498db18",border:"1px solid #3498db44",color:"#7ec3ff",fontWeight:700,fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{bE.handName}</span></div>
-                <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:w==="B"?"#f3d7a4":"#7f93a8",letterSpacing:.25,lineHeight:1.4}}>
+                <div style={{textAlign:"center",marginBottom:6}}><span style={{display:"inline-block",padding:"4px 14px",borderRadius:9,background:"#12142a",border:"2px solid #34a3ff",color:"#7ec3ff",fontWeight:400,fontSize:13,fontFamily:FONT_DISPLAY,letterSpacing:.6,whiteSpace:"nowrap",boxShadow:"0 3px 0 rgba(0,0,0,.4), 0 0 14px #34a3ff33",animation:"scorePunch .42s cubic-bezier(.26,1.5,.42,1) .38s backwards"}}>{bE.handName}</span></div>
+                <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:w==="B"?"#f3d7a4":"#9b97b2",letterSpacing:.25,lineHeight:1.4}}>
                   {soloRow?.rankLabel?`${soloRow.rankLabel} maps to ${bE.handName}. `:""}{gs._soloReveal?.description||bE.description}
                 </div>
               </div>
             </div>
           </div>
           :<div style={{display:"flex",gap:isFinal?20:16,justifyContent:"center",flexWrap:"wrap"}}>
-            {[{pl:"A",hand:aH,ev:aE,clr:"#e74c3c",mods:getAppliedMods(gs,"A")},{pl:"B",hand:bH,ev:bE,clr:"#3498db",mods:getAppliedMods(gs,"B")}].map(({pl,hand:h,ev,clr,mods})=>{
+            {[{pl:"A",hand:aH,ev:aE,clr:"#ff5a4e",mods:getAppliedMods(gs,"A")},{pl:"B",hand:bH,ev:bE,clr:"#34a3ff",mods:getAppliedMods(gs,"B")}].map(({pl,hand:h,ev,clr,mods})=>{
               const isWinner=w===pl;const isTie=w==="TIE";
               return(<div key={pl} style={{opacity:!isWinner&&!isTie?0.5:1,transition:"all 0.3s",padding:isFinal?"12px 14px 14px":"8px 10px 10px",borderRadius:18,background:isWinner?`${clr}14`:"transparent",border:isWinner?`1px solid ${clr}44`:"1px solid transparent",boxShadow:isWinner&&isFinal?`0 18px 42px ${clr}22`:"none"}}>
                 <div style={{fontSize:isFinal?13:12,fontWeight:700,color:clr,marginBottom:6,textAlign:"center",letterSpacing:1}}>
                   PLAYER {pl} {isWinner&&"*"}</div>
                 <div style={{display:"flex",gap:5,marginBottom:6}}>
-                  {displayOrder(h,mods).map(id=>{
+                  {displayOrder(h,mods).map((id,i)=>{
                     const mod=mods.find(m=>m.target===id);
-                    return(<div key={id} className="kp-reveal-card" style={{position:"relative"}}>
+                    return(<div key={id} className="kp-reveal-card" style={{position:"relative",animationDelay:`${i*0.06}s`,animationFillMode:"backwards"}}>
                       <PreviewCard id={id} glow={isWinner?clr:undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
                     </div>);})}
                 </div>
-                <div style={{textAlign:"center"}}><HandBadge ids={h} mods={mods}/></div>
-                <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:isWinner?"#f3d7a4":"#7f93a8",letterSpacing:.4}}>
+                <div style={{textAlign:"center"}}><HandBadge ids={h} mods={mods} delay=".38s"/></div>
+                <div style={{textAlign:"center",marginTop:6,fontSize:isFinal?11:10,color:isWinner?"#f3d7a4":"#9b97b2",letterSpacing:.4}}>
                   {ev.handName} {isFinal?(isWinner&&w!=="TIE"?"wins the game":"makes the final hand"):(isWinner&&w!=="TIE"?"claims the chip":"holds")}
                 </div>
               </div>);})}
           </div>}
         <div style={{display:"flex",justifyContent:"center",marginTop:18}}>
           {isFinal
-            ?<Btn label="New Game" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={()=>clearGameState()}/>
+            ?<Btn label="New Game" bg="linear-gradient(135deg,#f5b942,#ff9d2e)" onClick={()=>clearGameState()}/>
             :(isMatchOver(gs)
               ?<Btn label="New Game" bg="#333" onClick={()=>clearGameState()} disabled={!canUseOnlineControls}/>
-              :<Btn label={gs.mode==="tutorial"&&gs._tutorialRound===TUTORIAL_TOTAL_ROUNDS?"Finish Tutorial":"Next Round ->"} bg="#f1c40f" onClick={advanceFromReveal} disabled={!canUseOnlineControls||!tutorialAllows("next")}/>)}
+              :<Btn label={gs.mode==="tutorial"&&gs._tutorialRound===TUTORIAL_TOTAL_ROUNDS?"Finish Tutorial":"Next Round ->"} bg="#f5b942" onClick={advanceFromReveal} disabled={!canUseOnlineControls||!tutorialAllows("next")}/>)}
         </div>
       </div>
     );
@@ -2688,6 +1903,7 @@ export default function KaizenPoker(){
   };
 
   return(<CardRenderContext.Provider value={cardRenderStyle}>
+    {flights.map(f=><FlightGhost key={f.key} flight={f} onDone={removeFlight}/>)}
     <KonamiCelebrationOverlay
       key={`konami-live-${konamiCelebrationKey}`}
       open={konamiCelebrationOpen}
@@ -2695,18 +1911,12 @@ export default function KaizenPoker(){
       onReplay={()=>{setKonamiCelebrationKey(v=>v+1);playSfx("victory",{volume:.34});}}
       onClose={()=>setKonamiCelebrationOpen(false)}
     />
-    <div style={{height:"100vh",background:"radial-gradient(circle at 50% -5%,#2c6a50 0%,#194c39 35%,#0f2e24 68%,#081510 100%)",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-    <style>{`@keyframes floatGlow{0%{transform:translateY(0px)}50%{transform:translateY(-12px)}100%{transform:translateY(0px)}}@keyframes pulseGold{0%,100%{box-shadow:0 0 0 rgba(241,196,15,0)}50%{box-shadow:0 0 18px rgba(241,196,15,.28)}}@keyframes revealRise{0%{opacity:0;transform:translateY(14px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes cardDeal{0%{opacity:0;transform:translateY(20px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes inspectPop{0%{opacity:0;transform:translateY(8px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes toastPop{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes brassShine{0%{background-position:-220px 0}100%{background-position:220px 0}}.kp-card{animation:cardDeal .24s ease-out;transform-origin:center bottom}.kp-card-clickable:hover{transform:none!important;filter:brightness(1.06);box-shadow:0 10px 20px #0005,0 0 0 1px rgba(92,66,33,.18)!important}.kp-card-small.kp-card-clickable:hover{transform:none!important}.kp-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 28%,transparent 72%,rgba(86,60,28,.06));opacity:.9;pointer-events:none}.kp-card::before{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(126,90,43,.16);pointer-events:none}.kp-card-small::before{content:"";position:absolute;inset:2px;border-radius:6px;border:1px solid rgba(126,90,43,.18);pointer-events:none}.kp-action-slot{animation:cardDeal .28s ease-out}.kp-reveal-card{animation:revealRise .28s ease-out}.kp-modal-shell .kp-card-clickable:hover{transform:none!important;filter:brightness(1.04);box-shadow:0 8px 18px #0005,0 0 0 1px rgba(92,66,33,.14)!important}.kp-modal-shell .kp-card-small.kp-card-clickable:hover{transform:none!important}@media (max-width:900px){.kp-table-frame{display:none}.kp-main-column{padding-left:20px!important;padding-right:12px!important}}`}</style>
-    <style>{`.kp-log-scroll{scrollbar-width:thin;scrollbar-color:#7d6a44 #0c131a}.kp-log-scroll::-webkit-scrollbar{width:12px}.kp-log-scroll::-webkit-scrollbar-track{background:linear-gradient(180deg,#0d151d,#0a1118);border-left:1px solid #223141;box-shadow:inset 1px 0 0 #ffffff08}.kp-log-scroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#b89252,#6d5632);border-radius:999px;border:2px solid #0c131a;box-shadow:inset 0 1px 0 #f7dfac66,0 0 0 1px #4c3920}.kp-log-scroll::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#d5af67,#80653b)}`}</style>
-    <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-      <div style={{position:"absolute",top:-120,left:"50%",transform:"translateX(-50%)",width:620,height:620,borderRadius:"50%",background:"radial-gradient(circle,#f1c40f12 0%,transparent 62%)",animation:"floatGlow 9s ease-in-out infinite"}}/>
-      <div style={{position:"absolute",left:-140,top:260,width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,#d4af6a14 0%,transparent 68%)",animation:"floatGlow 12s ease-in-out infinite"}}/>
-      <div style={{position:"absolute",right:-120,top:180,width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,#7ed3a812 0%,transparent 68%)",animation:"floatGlow 10s ease-in-out infinite"}}/>
-    </div>
-    <div style={{padding:headerPad,borderBottom:isSuddenDeath?"2px solid #d27d5c":"1px solid #6e573122",display:"flex",alignItems:"center",gap:headerGap,background:isSuddenDeath?"linear-gradient(180deg,#4b1f18dd,#1c120ddd)":"linear-gradient(180deg,#143126dd,#0d2019ee)",fontSize:headerFontSize,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 10px 30px #00000026"}}>
-      <span style={{fontFamily:"Georgia,serif",fontWeight:900,color:"#f1c40f",letterSpacing:2}}>KAIZEN POKER</span>
-      <span style={{color:"#445"}}>Round {gs.round}</span>
-      <span style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,background:"#101923",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
+    <div style={{height:"100vh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+    <FeltBackdrop/>
+    <div style={{padding:headerPad,borderBottom:isSuddenDeath?"3px solid #ff5a4e":"2px solid #00000055",display:"flex",alignItems:"center",gap:headerGap,background:isSuddenDeath?"linear-gradient(180deg,#5c1626f2,#3a0f1af6)":"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:headerFontSize,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
+      <span className="kp-wordmark" style={{fontSize:isMobileLandscape?16:20,letterSpacing:1}}>KAIZEN POKER</span>
+      <span style={{color:"#8d89a8",fontWeight:800}}>Round {gs.round}</span>
+      <span className="kp-pill" style={{padding:"4px 12px",fontSize:10,color:"#f5b942",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
         {gs.phase==="action"
           ?(isSoloMode(gs.mode)?"Action - Solo Player":gs.mode==="tutorial"?(actingPlayer==="A"?"Action - Learner":"Action - Tutorial Opponent"):`Action - Player ${actingPlayer}`)
           :gs.phase==="score"
@@ -2717,29 +1927,30 @@ export default function KaizenPoker(){
           ?"Tutorial Complete"
           :"Game Over"}
       </span>
-      {isSuddenDeath&&<span style={{color:"#e74c3c",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>SUDDEN DEATH</span>}
+      {isSuddenDeath&&<span style={{color:"#ff5a4e",fontWeight:700,fontSize:10,animation:"pulse 1.5s infinite",letterSpacing:1}}>SUDDEN DEATH</span>}
       <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
-      <button onClick={()=>{playSfx("confirm",{volume:.28});setModal({type:"mainMenu"});}} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>MENU</button>
-      {isMobileLandscape&&<button onClick={()=>setMobileLogOpen(true)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>LOG</button>}
+      <button onClick={()=>{playSfx("confirm",{volume:.28});setModal({type:"mainMenu"});}} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>MENU</button>
+      {isMobileLandscape&&<button onClick={()=>setMobileLogOpen(true)} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>LOG</button>}
       <div style={{marginLeft:"auto",display:"flex",gap:isMobileLandscape?6:10,flexWrap:"wrap"}}>
-        <div style={{padding:isMobileLandscape?"5px 8px":"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
-          <span style={{color:"#e74c3c",fontWeight:800}}>{isSoloMode(gs.mode)?"YOU":"A"} {gs.aChips}</span>
-          <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#e74c3c")}</span>
+        <div className="kp-panel-inset" style={{padding:isMobileLandscape?"5px 10px":"6px 12px",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
+          <span style={{color:"#ff5a4e",fontFamily:FONT_DISPLAY,fontSize:13,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{isSoloMode(gs.mode)?"YOU":"A"} {gs.aChips}</span>
+          <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#ff5a4e")}</span>
         </div>
-        <div style={{padding:isMobileLandscape?"5px 8px":"6px 10px",borderRadius:12,background:"#0c141dcc",border:"1px solid #2a3644",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
-          <span style={{color:"#3498db",fontWeight:800}}>{isSoloMode(gs.mode)?"CHALLENGER":"B"} {gs.bChips}</span>
-          <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#3498db")}</span>
+        <div className="kp-panel-inset" style={{padding:isMobileLandscape?"5px 10px":"6px 12px",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
+          <span style={{color:"#34a3ff",fontFamily:FONT_DISPLAY,fontSize:13,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{isSoloMode(gs.mode)?"CHALLENGER":"B"} {gs.bChips}</span>
+          <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#34a3ff")}</span>
         </div>
       </div></div>
     <div style={{display:"flex",flex:1,overflow:"hidden",height:0,position:"relative",zIndex:1}}>
       <div className="kp-main-column" style={{flex:1,minWidth:0,minHeight:0,padding:mainPad,display:"flex",flexDirection:"column",gap:mainGap,overflowY:"auto",overflowX:"hidden"}}>
         {toast&&<div key={toast.key} style={{position:"sticky",top:6,zIndex:5,display:"flex",justifyContent:"center",pointerEvents:"none",marginBottom:-2}}>
           <div style={{
-            padding:"8px 14px",
+            padding:"8px 16px",
             borderRadius:999,
-            fontSize:12,
-            fontWeight:800,
-            letterSpacing:.2,
+            fontSize:13,
+            fontFamily:FONT_DISPLAY,
+            letterSpacing:.5,
+            textShadow:"0 2px 0 rgba(0,0,0,.35)",
             color:toast.tone==="frozen"?"#d8f0ff":toast.tone==="cancel"?"#e6dfd2":"#fff0cf",
             background:toast.tone==="frozen"
               ?"linear-gradient(180deg,#21455ddf,#143041f2)"
@@ -2751,48 +1962,37 @@ export default function KaizenPoker(){
               :toast.tone==="cancel"
               ?"1px solid #b49c7a55"
               :"1px solid #f0a35a66",
-            boxShadow:"0 12px 28px #00000044, inset 0 1px 0 #ffffff18",
-            animation:"toastPop 0.18s ease-out"
+            boxShadow:"0 4px 0 rgba(0,0,0,.4), 0 12px 28px #00000044, inset 0 1px 0 #ffffff18",
+            animation:"toastPop 0.22s cubic-bezier(.26,1.36,.42,1)"
           }}>{toast.msg}</div>
         </div>}
-        {isOnlineMode&&<div style={{background:"linear-gradient(180deg,#132333dd,#0d1824f2)",border:"1px solid #3b82f655",borderRadius:12,padding:isMobileLandscape?"7px 10px":"8px 12px",display:"flex",gap:isMobileLandscape?8:10,alignItems:"center",flexWrap:"wrap",boxShadow:"inset 0 1px 0 #ffffff10"}}>
-          <span style={{fontSize:10,fontWeight:800,color:"#93c5fd",letterSpacing:1.2,textTransform:"uppercase"}}>Online Game</span>
+        {isOnlineMode&&<div style={{background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:"2px solid #34a3ff55",borderRadius:12,padding:isMobileLandscape?"7px 10px":"8px 12px",display:"flex",gap:isMobileLandscape?8:10,alignItems:"center",flexWrap:"wrap",boxShadow:"0 4px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.06)"}}>
+          <span className="kp-section-label" style={{fontSize:10,color:"#8fc5ff"}}>Online Game</span>
           {seatPlayer
             ?<span style={{fontSize:11,color:"#dbeafe"}}>You are Player {seatPlayer}</span>
             :<span style={{fontSize:11,color:"#cbd5e1"}}>Spectating</span>}
           <span style={{fontSize:11,color:"#94a3b8"}}>{onlineStatus}</span>
           {liveGameId&&<span style={{fontSize:10,color:"#64748b"}}>{liveGameId}</span>}
-          {shareLink&&seatPlayer==="A"&&<button onClick={()=>navigator.clipboard?.writeText(shareLink)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",background:"#101923",color:"#c7d2de",fontSize:10,textTransform:"uppercase",letterSpacing:1,cursor:"pointer"}}>Copy Invite Link</button>}
+          {shareLink&&seatPlayer==="A"&&<button onClick={()=>navigator.clipboard?.writeText(shareLink)} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>Copy Invite Link</button>}
           {isOnlineMode&&onlineStatus==="waiting"&&seatPlayer==="A"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player B to join</span>}
           {isOnlineMode&&!canControlSeat&&gs.phase==="action"&&<span style={{fontSize:11,color:"#fcd34d"}}>Waiting for Player {actingPlayer}</span>}
           {onlineError&&<span style={{fontSize:11,color:"#fca5a5"}}>{onlineError}</span>}
         </div>}
         {/* Remember */}
         {(()=>{const aq=gs.scrap.filter(id=>CM[id].type==="Remember");if(!aq.length)return null;
-          return(<div style={{background:"linear-gradient(180deg,#18372bdd,#11271fff)",border:"1px solid #8f744333",borderRadius:8,padding:isMobileLandscape?"5px 8px":"6px 10px",display:"flex",flexWrap:"wrap",gap:isMobileLandscape?6:8,alignItems:"center",boxShadow:"inset 0 1px 0 #f0e0b10d"}}>
-            <span style={{fontSize:8,fontWeight:700,color:"#6c5ce7",letterSpacing:1,textTransform:"uppercase"}}>Active</span>
-            {aq.map(id=>(<span key={id} style={{fontSize:10,color:"#b8b0f0"}}><strong style={{color:"#6c5ce7"}}>{CM[id].name}</strong>{" - "}{CM[id].text.replace("As long as this card is scrapped, ","")}</span>))}</div>)})()}
+          return(<div style={{background:"linear-gradient(180deg,#332658f2,#241c40f6)",border:"2px solid #a86ef0",borderRadius:12,padding:isMobileLandscape?"7px 10px":"8px 12px",display:"flex",flexWrap:"wrap",gap:isMobileLandscape?"6px 10px":"8px 14px",alignItems:"center",boxShadow:"0 4px 0 rgba(0,0,0,.32), 0 0 22px #a86ef02e, inset 0 2px 0 rgba(255,255,255,.08)"}}>
+            <span className="kp-section-label" style={{fontSize:11,color:"#dcc4ff",textShadow:"0 2px 0 rgba(0,0,0,.35)"}}>Active Effects</span>
+            {aq.map(id=><RememberChip key={id} id={id}/>)}</div>)})()}
         {/* Play areas */}
         {isSoloMode(gs.mode)
           ?<div style={{display:"flex",gap:publicAreaGap,flexWrap:"wrap",minWidth:0}}>
-            <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#11293ad8,#0b1c28dc)",border:"1px solid #658dbb55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
+            <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:"2px solid #34a3ff55",boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.28), inset 0 2px 0 rgba(255,255,255,.06)",overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
-                <div style={{fontSize:9,color:"#89b8ff",fontWeight:800,letterSpacing:1}}>CHALLENGER DECK</div>
+                <div className="kp-section-label" style={{color:"#8fc5ff"}}>CHALLENGER DECK</div>
                 <button
                   onClick={()=>setModal({type:"soloLookup",activeRank:gs._soloReveal?.cardId?CM[gs._soloReveal.cardId].rank:null})}
-                  style={{
-                    padding:"4px 10px",
-                    borderRadius:999,
-                    border:"1px solid #334155",
-                    color:"#c7d2de",
-                    fontSize:10,
-                    textTransform:"uppercase",
-                    letterSpacing:1,
-                    background:"#101923",
-                    cursor:"pointer",
-                    fontWeight:700,
-                    boxShadow:"inset 0 1px 0 #ffffff12"
-                  }}
+                  className="kp-pill"
+                  style={{padding:"4px 12px",fontSize:10}}
                 >
                   Challenger Lookup
                 </button>
@@ -2804,7 +2004,7 @@ export default function KaizenPoker(){
                       const isLatest=i===((gs._soloRevealedCards||[]).length-1);
                       return(
                         <div key={`${id}-${i}`} style={{marginLeft:i===0?0:-42,position:"relative",zIndex:i+1}}>
-                          <PreviewCard id={id} glow={isLatest?"#3498db":undefined}/>
+                          <PreviewCard id={id} glow={isLatest?"#34a3ff":undefined}/>
                         </div>
                       );
                     })}
@@ -2814,7 +2014,7 @@ export default function KaizenPoker(){
                       {gs.bDeck.length} card{gs.bDeck.length!==1?"s":""} remain
                       {(gs._soloRevealedCards?.length||0)>0&&<span style={{color:"#89b8ff",fontWeight:600}}> | {(gs._soloRevealedCards||[]).length} revealed</span>}
                     </div>
-                    <div style={{fontSize:10,color:"#8ca0b3",lineHeight:1.4,whiteSpace:"normal"}}>
+                    <div style={{fontSize:10,color:"#a8a4c0",lineHeight:1.4,whiteSpace:"normal"}}>
                       {easySoloMode
                         ?(showingRevealedChallengerCard
                           ?"Easy mode is showing the Challenger card that was just revealed for this round."
@@ -2826,18 +2026,18 @@ export default function KaizenPoker(){
                 <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
                   {easySoloMode&&challengerDisplayCardId
                     ?<div style={{position:"relative"}}>
-                      <PreviewCard id={challengerDisplayCardId} glow="#3498db"/>
+                      <PreviewCard id={challengerDisplayCardId} glow="#34a3ff"/>
                       {challengerDisplayLookup&&<div style={{position:"absolute",left:6,right:6,bottom:6,padding:"4px 6px",borderRadius:8,background:"linear-gradient(180deg,#0f2435f0,#09131df4)",border:"1px solid #5ca9ff66",boxShadow:"0 10px 18px #00000033,inset 0 1px 0 #ffffff10",textAlign:"center"}}>
                         <div style={{fontSize:10,color:"#eaf6ff",fontWeight:800,lineHeight:1.2}}>{challengerDisplayLookup.handName}</div>
                       </div>}
                     </div>
-                    :Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><div key={i} style={{width:68,height:95,borderRadius:6,background:"linear-gradient(160deg,#17192b,#0b0f18)",border:"1px solid #2a3240",boxShadow:"0 8px 18px #00000033",transform:`translateX(${i*-46}px)`}}/>)
+                    :Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><CardBack key={i} style={{transform:`translateX(${i*-46}px)`}}/>)
                   }
                 </div>
               </div>
             </div>
-            <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:"1px solid #b96d5a55",boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
-              <div style={{fontSize:9,color:"#e48b8b",fontWeight:800,letterSpacing:1,marginBottom:6}}>YOUR ACTIONS</div>
+            <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:"2px solid #ff5a4e55",boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.28), inset 0 2px 0 rgba(255,255,255,.06)",overflow:"hidden"}}>
+              <div className="kp-section-label" style={{color:"#ff9a93",marginBottom:6}}>YOUR ACTIONS</div>
               <div style={{display:"flex",gap:4,minHeight:actionAreaMinHeight,flexWrap:"wrap"}}>
                 {getP(gs,"A").map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                   :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
@@ -2846,29 +2046,29 @@ export default function KaizenPoker(){
               </div>
             </div>
           </div>
-          :<div style={{display:"flex",gap:publicAreaGap,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#143327d8,#0d241cdc)",border:`1px solid ${pl==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 10px 28px #0000001f,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05",overflow:"hidden"}}>
-            <div style={{fontSize:9,color:pl==="A"?"#e48b8b":"#89b8ff",fontWeight:800,letterSpacing:1,marginBottom:6}}>{pl}'s ACTIONS</div>
+          :<div style={{display:"flex",gap:publicAreaGap,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:`2px solid ${pl==="A"?"#ff5a4e55":"#34a3ff55"}`,boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.28), inset 0 2px 0 rgba(255,255,255,.06)",overflow:"hidden"}}>
+            <div className="kp-section-label" style={{color:pl==="A"?"#ff9a93":"#8fc5ff",marginBottom:6}}>{pl}'s ACTIONS</div>
             <div style={{display:"flex",gap:4,minHeight:actionAreaMinHeight,flexWrap:"wrap"}}>
               {getP(gs,pl).map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek={pl===viewerPlayer} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                   <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 </div>)}</div></div>))}</div>}
         <PublicZones gs={gs} extraControls={<><DeckStats gs={gs} player="A" viewerPlayer={viewerPlayer}/><DeckStats gs={gs} player="B" viewerPlayer={viewerPlayer}/></>} onToggleZone={handleTutorialZoneToggle} canToggleZone={tutorialCanToggleZone} spotlightZone={tutorialZoneTarget}/>
-        {actionSummaryRows.length>0&&<div style={{padding:isMobileLandscape?"8px 10px":"10px 12px",borderRadius:14,background:"linear-gradient(180deg,#11212fdd,#0b1620e6)",border:"1px solid #39526a55",boxShadow:"0 10px 24px #00000018,inset 0 1px 0 #ffffff08",display:"grid",gap:6}}>
-          <div style={{fontSize:9,color:"#8ea0b4",fontWeight:800,letterSpacing:1.1,textTransform:"uppercase"}}>Action Summary</div>
+        {actionSummaryRows.length>0&&<div style={{padding:isMobileLandscape?"8px 10px":"10px 12px",borderRadius:12,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:"2px solid #3d4470",boxShadow:"0 4px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.06)",display:"grid",gap:6}}>
+          <div className="kp-section-label" style={{fontSize:10,color:"#f5b942"}}>Action Summary</div>
           {actionSummaryRows.map(row=><div key={row.pl} style={{fontSize:11,lineHeight:1.45,color:"#cbd5e1"}}>
             <span style={{color:row.pl==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800}}>{row.label}:</span>{" "}
             <span>{row.text}</span>
           </div>)}
         </div>}
         {/* Hand */}
-        <div style={{padding:handPad,borderRadius:isMobileLandscape?16:20,background:"linear-gradient(180deg,#14372adf,#0d241cdd)",border:`1px solid ${viewerPlayer==="A"?"#b96d5a55":"#658dbb55"}`,boxShadow:"0 18px 36px #00000022,inset 0 1px 0 #f5e3bc12,inset 0 0 0 1px #ffffff05"}}>
-          <div style={{fontSize:11,color:viewerPlayer==="A"?"#ff9a9a":"#8fc5ff",fontWeight:800,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <div style={{padding:handPad,borderRadius:isMobileLandscape?14:16,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:`2px solid ${viewerPlayer==="A"?"#ff5a4e88":"#34a3ff88"}`,boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 14px 30px rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.06)"}}>
+          <div className="kp-section-label" style={{fontSize:12,color:viewerPlayer==="A"?"#ff9a93":"#8fc5ff",marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             YOUR HAND (Player {viewerPlayer})
             {canAct&&<span style={{color:pClr,fontSize:10}}>- {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
             {canAct&&!fdMode&&<Btn label="Play Face-Down v" bg="#555" onClick={()=>setFdMode(true)} disabled={!tutorialAllows("faceDownToggle")}/>}
             {canAct&&fdMode&&<><span style={{color:"#aaa",fontSize:10}}>Pick a card</span><Btn label="Cancel" bg="#333" onClick={()=>setFdMode(false)}/></>}
-            {canAct&&undoState&&!isOnlineMode&&<Btn label="<- Undo" bg="#e67e22" onClick={doUndo}/>}
+            {canAct&&undoState&&!isOnlineMode&&<Btn label="<- Undo" bg="#ff9d2e" onClick={doUndo}/>}
             {gs.phase==="score"&&<HandBadge ids={hand} mods={getAppliedMods(gs,viewerPlayer)}/>}</div>
           <div style={isMobileLandscape?{overflowX:"auto",overflowY:"hidden",paddingBottom:4}:{}}>
             <div style={{display:"flex",gap:handGap,flexWrap:isMobileLandscape?"nowrap":"wrap",alignItems:"flex-start",minWidth:isMobileLandscape?"max-content":"0"}}>
@@ -2880,11 +2080,11 @@ export default function KaizenPoker(){
               })}
             </div>
           </div></div>
-        {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f1c40f,#e67e22)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
+        {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f5b942,#ff9d2e)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20,position:"relative"}}>
-          <VictoryCascade winner={getMatchWinner(gs)} cards={getMatchWinner(gs)==="A"?getH(gs,"A"):(isSoloMode(gs.mode)&&gs._soloReveal?.cardId?[gs._soloReveal.cardId]:getH(gs,"B"))}/>
-          <div style={{fontSize:24,fontWeight:900,color:"#f1c40f",fontFamily:"Georgia,serif",position:"relative",zIndex:32}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
+          <VictorySolitaireCanvas winner={getMatchWinner(gs)} cards={getMatchWinner(gs)==="A"?getH(gs,"A"):(isSoloMode(gs.mode)&&gs._soloReveal?.cardId?[gs._soloReveal.cardId]:getH(gs,"B"))}/>
+          <div style={{fontSize:24,fontWeight:900,color:"#f5b942",fontFamily:FONT_DISPLAY,position:"relative",zIndex:32}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
           <div style={{position:"relative",zIndex:32}}><Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div></div>}
         {gs.mode!=="tutorial"&&playtestEnabled&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel
@@ -2899,19 +2099,19 @@ export default function KaizenPoker(){
         </div>}
       </div>
       {/* Log */}
-      {!isMobileLandscape&&<div style={{width:260,minHeight:0,height:"100%",overflow:"hidden",borderLeft:"1px solid #1c2733",background:"linear-gradient(180deg,#0b1016ee,#091018ee)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 1px 0 0 #ffffff05"}}>
-        <div style={{fontSize:9,fontWeight:800,color:"#607385",letterSpacing:2,padding:"12px 12px 6px",position:"sticky",top:0,zIndex:1,background:"linear-gradient(180deg,#0b1016 0%,#0b1016f2 78%,#0b101600 100%)"}}>GAME LOG</div>
-        <div ref={logRef} className="kp-log-scroll" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"0 12px 12px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
-        {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("WINNER:")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>}
+      {!isMobileLandscape&&<div style={{width:260,minHeight:0,height:"100%",overflow:"hidden",borderLeft:"2px solid #00000066",background:"linear-gradient(180deg,#16182ef2,#101226f6)",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"inset 2px 0 0 rgba(255,255,255,.04)"}}>
+        <div className="kp-section-label" style={{fontSize:10,color:"#f5b942",padding:"12px 12px 6px",position:"sticky",top:0,zIndex:1,background:"linear-gradient(180deg,#16182e 0%,#16182ef2 78%,#16182e00 100%)"}}>GAME LOG</div>
+        <div ref={logRef} className="kp-log-scroll" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"0 12px 12px",fontSize:10,color:"#a8a4c0",lineHeight:1.6}}>
+        {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f5b942":m.startsWith("WINNER:")?"#3bbf7c":m.includes("wins")?"#ff9d2e":m.includes("Fizzle")||m.includes("Frozen")?"#ff5a4e":"#8d89a8",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}</div></div>}
     </div>
     {isMobileLandscape&&mobileLogOpen&&<div style={{position:"fixed",inset:0,zIndex:24,display:"flex",justifyContent:"flex-end",background:"rgba(3,7,12,.56)",backdropFilter:"blur(4px)"}} onClick={()=>setMobileLogOpen(false)}>
-      <div style={{width:"min(86vw,360px)",height:"100%",overflow:"hidden",borderLeft:"1px solid #2a3644",background:"linear-gradient(180deg,#0b1016,#091018)",display:"flex",flexDirection:"column",boxShadow:"-24px 0 60px #00000055"}} onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,borderBottom:"1px solid #1c2733",background:"linear-gradient(180deg,#101721,#0c131c)"}}>
-          <div style={{fontSize:10,fontWeight:800,color:"#8ea0b4",letterSpacing:1.6,textTransform:"uppercase"}}>Game Log</div>
-          <button onClick={()=>setMobileLogOpen(false)} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #334155",color:"#c7d2de",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,background:"#101923",cursor:"pointer",boxShadow:"inset 0 1px 0 #ffffff10"}}>Close</button>
+      <div style={{width:"min(86vw,360px)",height:"100%",overflow:"hidden",borderLeft:"2px solid #00000066",background:"linear-gradient(180deg,#16182e,#101226)",display:"flex",flexDirection:"column",boxShadow:"-24px 0 60px #00000055"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,borderBottom:"2px solid #00000044",background:"linear-gradient(180deg,#252a4a,#1a1d38)"}}>
+          <div className="kp-section-label" style={{fontSize:10,color:"#f5b942"}}>Game Log</div>
+          <button onClick={()=>setMobileLogOpen(false)} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>Close</button>
         </div>
-        <div ref={logRef} className="kp-log-scroll" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"10px 12px 14px",fontSize:10,color:"#8ca0b3",lineHeight:1.6}}>
-          {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f1c40f":m.startsWith("WINNER:")?"#2ecc71":m.includes("wins")?"#e67e22":m.includes("Fizzle")||m.includes("Frozen")?"#e74c3c":"#667",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}
+        <div ref={logRef} className="kp-log-scroll" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",padding:"10px 12px 14px",fontSize:10,color:"#a8a4c0",lineHeight:1.6}}>
+          {visibleLog.map((m,i)=>(<div key={i} style={{color:m.startsWith("===")?"#f5b942":m.startsWith("WINNER:")?"#3bbf7c":m.includes("wins")?"#ff9d2e":m.includes("Fizzle")||m.includes("Frozen")?"#ff5a4e":"#8d89a8",fontWeight:m.startsWith("===")?700:400}}>{m}</div>))}
         </div>
       </div>
     </div>}
@@ -2921,21 +2121,21 @@ export default function KaizenPoker(){
     {modal?.type==="refreshOpts"&&<Modal title="Face-Down Options">
       <p style={{color:"#aaa",fontSize:12,marginBottom:10}}>Choose:</p>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
-        {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#3498db":o.key==="sift"?"#2ecc71":"#6c5ce7"} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
+        {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#34a3ff":o.key==="sift"?"#3bbf7c":"#a86ef0"} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
     {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"}>
-      {modal.hint&&<div style={{fontSize:11,color:"#9fb0c2",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
+      {modal.hint&&<div style={{fontSize:11,color:"#b4b0c8",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
-          return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#e74c3c":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
+          return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#ff5a4e":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
     {modal?.type==="pickFromList"&&<Modal title={modal.title}>
-      {modal.hint&&<div style={{fontSize:11,color:"#9fb0c2",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
+      {modal.hint&&<div style={{fontSize:11,color:"#b4b0c8",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
       {modal.showHand&&<div style={{marginBottom:8}}>
-        <div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+        <div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       {modal.statsPlayer&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={modal.statsPlayer} viewerPlayer={viewerPlayer}/></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
-          return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f1c40f":undefined}/>;})}</div>
+          return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f5b942":undefined}/>;})}</div>
       {modal.canCancel&&<Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
     {modal?.type==="soloLookup"&&<Modal title="Challenger Lookup">
       <div style={{display:"grid",gap:6}}>
@@ -2947,7 +2147,7 @@ export default function KaizenPoker(){
         {CHALLENGER_ROWS.map(row=>{
           const active=modal.activeRank===row.rank;
           return(
-            <div key={row.rank} style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"6px 8px",borderRadius:10,background:active?"linear-gradient(90deg,#245b811f,#0f2234cc)":"#0a1118aa",border:active?"1px solid #3498db66":"1px solid #24313f"}}>
+            <div key={row.rank} style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"6px 8px",borderRadius:10,background:active?"#34a3ff1f":"#12142acc",border:active?"2px solid #34a3ff88":"2px solid #2c3152"}}>
               <div style={{fontSize:12,fontWeight:900,color:active?"#8fd0ff":"#dfe8ef"}}>{row.rank} {"->"}</div>
               <div style={{fontSize:12,fontWeight:700,color:active?"#f5fbff":"#c8d6e2"}}>{row.handName}</div>
               <div style={{fontSize:11,color:active?"#dceaf6":"#92a4b5",lineHeight:1.35}}>{row.description}</div>
@@ -2969,44 +2169,44 @@ export default function KaizenPoker(){
         </div>}
         <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
           <Btn label="Return to Game" bg="#333" onClick={()=>setModal(null)}/>
-          <Btn label="Quit to Home" bg="#e67e22" onClick={()=>{setModal(null);clearGameState();}}/>
+          <Btn label="Quit to Home" bg="#ff9d2e" onClick={()=>{setModal(null);clearGameState();}}/>
         </div>
       </div>
     </Modal>}
     {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick} statsPlayer={modal.statsPlayer} gs={gs} viewerPlayer={viewerPlayer} hint={modal.hint}/>}
     {modal?.type==="twoChoice"&&<Modal title={modal.title}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Card id={modal.card}/></div>
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#3498db" onClick={modal.on1}/><Btn label={modal.opt2} bg="#e67e22" onClick={modal.on2}/></div></Modal>}
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#34a3ff" onClick={modal.on1}/><Btn label={modal.opt2} bg="#ff9d2e" onClick={modal.on2}/></div></Modal>}
     {modal?.type==="twoOptChoice"&&<Modal title={modal.title}>
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#3498db" onClick={modal.on1}/><Btn label={modal.opt2} bg="#e74c3c" onClick={modal.on2}/></div></Modal>}
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#34a3ff" onClick={modal.on1}/><Btn label={modal.opt2} bg="#ff5a4e" onClick={modal.on2}/></div></Modal>}
     {modal?.type==="brainstorm"&&<BrainstormModal hand={modal.hand} newCards={modal.newCards} onPick={modal.onPick}/>}
     {modal?.type==="rejuvenate"&&<RejuvenateModal hand={modal.hand} onPick={modal.onPick}/>}
     {modal?.type==="confirm"&&<Modal title={modal.title}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Card id={modal.card}/></div>
       <p style={{color:"#aaa",fontSize:12,marginBottom:10,textAlign:"center"}}>{modal.msg}</p>
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label="Play It" bg="#2ecc71" onClick={modal.onYes}/><Btn label="Cancel" bg="#333" onClick={modal.onNo}/></div></Modal>}
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label="Play It" bg="#3bbf7c" onClick={modal.onYes}/><Btn label="Cancel" bg="#333" onClick={modal.onNo}/></div></Modal>}
     {modal?.type==="pickRank"&&<Modal title={modal.title}>
-      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
-        {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} disabled={!tutorialAllows("modalRank",r)} style={{width:44,height:44,borderRadius:6,background:"#1a1a2e",border:"1px solid #f1c40f44",color:tutorialAllows("modalRank",r)?"#f1c40f":"#6b7280",fontSize:18,fontWeight:900,cursor:tutorialAllows("modalRank",r)?"pointer":"default",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalRank",r)?1:0.45}}>{r}</button>))}</div>
+        {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} disabled={!tutorialAllows("modalRank",r)} style={{width:44,height:44,borderRadius:9,background:"#12142a",border:"2px solid #f5b94266",color:tutorialAllows("modalRank",r)?"#f5b942":"#6b7280",fontSize:18,cursor:tutorialAllows("modalRank",r)?"pointer":"default",fontFamily:FONT_DISPLAY,display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalRank",r)?1:0.45,boxShadow:"0 3px 0 rgba(0,0,0,.4)"}}>{r}</button>))}</div>
       {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalRank"}/></div>}</Modal>}
     {modal?.type==="pickSuit"&&<Modal title={modal.title}>
-      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-        {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} disabled={!tutorialAllows("modalSuit",s)} style={{width:56,height:56,borderRadius:8,background:"#1a1a2e",border:`2px solid ${SC[s]}44`,color:tutorialAllows("modalSuit",s)?SC[s]:"#6b7280",fontSize:28,cursor:tutorialAllows("modalSuit",s)?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalSuit",s)?1:0.45}}>{SUITS[s]}</button>))}</div>
+        {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} disabled={!tutorialAllows("modalSuit",s)} style={{width:56,height:56,borderRadius:10,background:"#12142a",border:`2px solid ${SC[s]}88`,color:tutorialAllows("modalSuit",s)?SC[s]:"#6b7280",fontSize:28,cursor:tutorialAllows("modalSuit",s)?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalSuit",s)?1:0.45,boxShadow:"0 3px 0 rgba(0,0,0,.4)"}}>{SUITS[s]}</button>))}</div>
       {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalSuit"}/></div>}</Modal>}
     {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}${modal.queenSourceLabel?` (${modal.queenSourceLabel})`:""}`}>
-      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#556",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Card id={modal.cardId}/></div>
       <p style={{color:"#d8c08d",fontSize:11,textAlign:"center",marginBottom:6}}>Remember: {modal.queenSourceLabel||"Remember effects"}</p>
       <p style={{color:"#aaa",fontSize:11,textAlign:"center",marginBottom:10}}>Unmodified 2 - Queen effects available:</p>
       <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
-        {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg="#9b59b6" onClick={modal.onBoth} disabled={!tutorialAllows("queenChoice","both")}/>}
-        {modal.misc&&<Btn label="Rank Only" bg="#e67e22" onClick={modal.onRank} disabled={!tutorialAllows("queenChoice","rank")}/>}
-        {modal.camo&&<Btn label="Suit Only" bg="#3498db" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
+        {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg="#a86ef0" onClick={modal.onBoth} disabled={!tutorialAllows("queenChoice","both")}/>}
+        {modal.misc&&<Btn label="Rank Only" bg="#ff9d2e" onClick={modal.onRank} disabled={!tutorialAllows("queenChoice","rank")}/>}
+        {modal.camo&&<Btn label="Suit Only" bg="#34a3ff" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
         <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
     {soloIntroVisible&&isSoloMode(gs.mode)&&<Chippy
@@ -3014,7 +2214,7 @@ export default function KaizenPoker(){
       message={soloIntroMessage}
       visible
       actionButtons={[
-        {label:"Easy",onClick:()=>setSoloDifficulty(SOLO_DIFFICULTIES.easy),background:"linear-gradient(180deg,#2e7d5a,#1f5c41)"},
+        {label:"Easy",onClick:()=>setSoloDifficulty(SOLO_DIFFICULTIES.easy),background:"#3bbf7c"},
         {label:"Difficult",onClick:()=>setSoloDifficulty(SOLO_DIFFICULTIES.difficult)}
       ]}
     />}

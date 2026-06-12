@@ -1,0 +1,304 @@
+/* ============================================================
+   KAIZEN POKER — "Balatro Juice" design system
+   Deep crimson/indigo felt, chunky stamped UI, painterly cards.
+   ============================================================ */
+
+:root {
+  /* Felt */
+  --felt-deep: #2a0d18;
+  --felt-mid: #5c1626;
+  --felt-hot: #8d2433;
+  --felt-indigo: #1b1c38;
+
+  /* Panels */
+  --panel: #252a4a;
+  --panel-deep: #1a1d38;
+  --panel-darkest: #12142a;
+  --panel-edge: #3d4470;
+  --panel-edge-soft: #343a61;
+
+  /* Accents */
+  --gold: #f5b942;
+  --gold-deep: #c98a18;
+  --cream: #f4e9d8;
+  --ink: #11132b;
+
+  /* Player + verbs (Balatro-saturated) */
+  --p-red: #ff5a4e;
+  --p-red-deep: #b32a22;
+  --p-blue: #34a3ff;
+  --p-blue-deep: #1565b3;
+  --green: #3bbf7c;
+  --green-deep: #1f7d4d;
+  --orange: #ff9d2e;
+  --orange-deep: #c46a0a;
+  --purple: #a86ef0;
+  --purple-deep: #6f3cb3;
+
+  /* Text */
+  --text-bright: #f5f1e8;
+  --text-soft: #c8c4d8;
+  --text-dim: #8d89a8;
+
+  --font-display: "Lilita One", "Arial Black", sans-serif;
+  --font-body: "Nunito", "Segoe UI", sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+/* ---------------- Animated felt backdrop ---------------- */
+.kp-felt {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% -20%, var(--felt-hot) 0%, var(--felt-mid) 38%, var(--felt-deep) 75%, #1c0810 100%);
+}
+.kp-felt::before,
+.kp-felt::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 180vmax;
+  height: 180vmax;
+  margin: -90vmax 0 0 -90vmax;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(255, 120, 90, 0.10) 40deg,
+    transparent 95deg,
+    rgba(38, 40, 92, 0.22) 150deg,
+    transparent 210deg,
+    rgba(255, 150, 80, 0.07) 265deg,
+    transparent 330deg
+  );
+  animation: feltSwirl 70s linear infinite;
+  filter: blur(40px);
+}
+.kp-felt::after {
+  background: conic-gradient(
+    from 180deg,
+    transparent 0deg,
+    rgba(120, 30, 60, 0.30) 60deg,
+    transparent 130deg,
+    rgba(20, 22, 60, 0.30) 200deg,
+    transparent 290deg
+  );
+  animation: feltSwirl 110s linear infinite reverse;
+  filter: blur(60px);
+}
+.kp-felt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 45%, rgba(10, 4, 12, 0.55) 100%);
+}
+@keyframes feltSwirl {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------- Display type ---------------- */
+.kp-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+.kp-wordmark {
+  font-family: var(--font-display);
+  color: var(--gold);
+  -webkit-text-stroke: 0;
+  text-shadow:
+    0 1px 0 #7a4a08,
+    0 2px 0 #6b3f06,
+    0 3px 0 #5c3505,
+    0 4px 0 #4d2b04,
+    0 6px 0 rgba(0, 0, 0, 0.45),
+    0 10px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------- Stamped buttons ---------------- */
+.kp-btn {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.6px;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.42),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.22),
+    inset 0 2px 0 rgba(255, 255, 255, 0.22);
+  transform: translateY(0);
+  transition: transform 0.07s ease-out, box-shadow 0.07s ease-out, filter 0.12s;
+}
+.kp-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.kp-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.42),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.22),
+    inset 0 2px 0 rgba(255, 255, 255, 0.18);
+}
+.kp-btn:disabled {
+  cursor: default;
+  color: var(--text-dim);
+  text-shadow: none;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Small pill controls (header chips, toggles) */
+.kp-pill {
+  font-family: var(--font-body);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-radius: 999px;
+  border: 2px solid var(--panel-edge);
+  background: var(--panel-deep);
+  color: var(--text-soft);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+button.kp-pill { cursor: pointer; transition: transform 0.07s, box-shadow 0.07s, filter 0.1s; }
+button.kp-pill:hover { filter: brightness(1.18); }
+button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+
+/* ---------------- Panels ---------------- */
+.kp-panel {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+  border: 2px solid var(--panel-edge-soft);
+  border-radius: 14px;
+  box-shadow:
+    0 6px 0 rgba(0, 0, 0, 0.32),
+    0 14px 34px rgba(0, 0, 0, 0.3),
+    inset 0 2px 0 rgba(255, 255, 255, 0.07);
+}
+.kp-panel-inset {
+  background: var(--panel-darkest);
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+.kp-section-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+/* ---------------- Cards ---------------- */
+.kp-card {
+  animation: cardDeal 0.32s cubic-bezier(0.26, 1.36, 0.42, 1);
+  transform-origin: center bottom;
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s, filter 0.16s, opacity 0.15s;
+}
+.kp-card-clickable:hover {
+  transform: translateY(-9px) rotate(-1.6deg) scale(1.05) !important;
+  filter: brightness(1.07);
+  box-shadow:
+    0 16px 26px rgba(0, 0, 0, 0.45),
+    0 0 0 3px rgba(255, 255, 255, 0.55) !important;
+  z-index: 5;
+}
+.kp-card-small.kp-card-clickable:hover {
+  transform: translateY(-6px) rotate(-1.8deg) scale(1.07) !important;
+}
+.kp-card-selected {
+  animation: cardWiggle 1.6s ease-in-out infinite;
+}
+/* keep modal grids calm-ish: lift but no rotation */
+.kp-modal-shell .kp-card-clickable:hover {
+  transform: translateY(-5px) scale(1.05) !important;
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(255, 255, 255, 0.5) !important;
+}
+.kp-action-slot { animation: cardDeal 0.32s cubic-bezier(0.26, 1.36, 0.42, 1); }
+.kp-flight .kp-card { animation: none !important; transition: none !important; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3) !important; }
+.kp-reveal-card { animation: revealPunch 0.42s cubic-bezier(0.26, 1.5, 0.42, 1); }
+
+@keyframes cardDeal {
+  0% { opacity: 0; transform: translateY(30px) rotate(3deg) scale(0.85); }
+  65% { opacity: 1; transform: translateY(-5px) rotate(-0.6deg) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+@keyframes cardWiggle {
+  0%, 100% { transform: translateY(-6px) rotate(-1.1deg); }
+  50% { transform: translateY(-8px) rotate(1.1deg); }
+}
+@keyframes revealPunch {
+  0% { opacity: 0; transform: scale(0.5) rotate(-4deg); }
+  60% { opacity: 1; transform: scale(1.1) rotate(1.4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* ---------------- Shared keyframes ---------------- */
+@keyframes floatGlow {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+  100% { transform: translateY(0px); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes pulseGold {
+  0%, 100% { box-shadow: 0 0 0 rgba(245, 185, 66, 0); }
+  50% { box-shadow: 0 0 20px rgba(245, 185, 66, 0.45); }
+}
+@keyframes revealRise {
+  0% { opacity: 0; transform: translateY(18px) scale(0.94); }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.015); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes inspectPop {
+  0% { opacity: 0; transform: translateY(10px) scale(0.92); }
+  70% { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastPop {
+  0% { opacity: 0; transform: translateY(-12px) scale(0.9); }
+  65% { opacity: 1; transform: translateY(2px) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes brassShine {
+  0% { background-position: -220px 0; }
+  100% { background-position: 220px 0; }
+}
+@keyframes scorePunch {
+  0% { opacity: 0; transform: scale(0.3) rotate(-5deg); }
+  55% { opacity: 1; transform: scale(1.18) rotate(2deg); }
+  75% { transform: scale(0.96) rotate(-0.6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes chipBounce {
+  0% { transform: scale(0); }
+  55% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+/* ---------------- Log scrollbar ---------------- */
+.kp-log-scroll { scrollbar-width: thin; scrollbar-color: var(--panel-edge) var(--panel-darkest); }
+.kp-log-scroll::-webkit-scrollbar { width: 12px; }
+.kp-log-scroll::-webkit-scrollbar-track {
+  background: var(--panel-darkest);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+.kp-log-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border-radius: 999px;
+  border: 3px solid var(--panel-darkest);
+}
+.kp-log-scroll::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #ffd067, var(--gold-deep)); }
+
+@media (max-width: 900px) {
+  .kp-table-frame { display: none; }
+  .kp-main-column { padding-left: 20px !important; padding-right: 12px !important; }
+}

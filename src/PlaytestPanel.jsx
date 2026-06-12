@@ -157,7 +157,7 @@ export default function PlaytestPanel({gs,onReplaceGameState,makeFreshGame,cards
         <span style={{fontSize:10,color:"#64748b"}}>Sandbox tools and hidden prototype links</span>
         {open&&<>
           {onOpenGallery&&<button onClick={onOpenGallery} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #ec5da866",background:"#f8b4d922",color:"#f8b4d9",cursor:"pointer",fontSize:10,fontWeight:700}}>Card Image Gallery</button>}
-          {onOpenSoloArt&&<button onClick={onOpenSoloArt} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #60a5fa66",background:"#60a5fa22",color:"#93c5fd",cursor:"pointer",fontSize:10,fontWeight:700}}>Solo Art Test</button>}
+          {onOpenSoloArt&&<button onClick={onOpenSoloArt} style={{padding:"4px 10px",borderRadius:999,border:"1px solid #60a5fa66",background:"#60a5fa22",color:"#93c5fd",cursor:"pointer",fontSize:10,fontWeight:700}}>Solo Artless Test</button>}
         </>}
       </div>
       {open&&<div style={{marginTop:10,display:"grid",gap:12}}>

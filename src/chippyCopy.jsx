@@ -8,157 +8,157 @@ export const CHIPPY_COPY = {
   demo: {
     title: "Kaizen Poker Demo",
     message:
-      "Welcome to the Kaizen Poker demo! In lieu of a demo video, I've put together a playable web version of the game. Feel free to peruse the [rules](#/rules), try an introductory [tutorial](#/tutorial), or play the full game: [two-player hotseat](#/hotseat), [solo versus a Challenger deck](#/solo), or even [two-player remote](#/remote).\n\nYou can contact the designer [here](mailto:dsparks@gmail.com). Have fun!",
+      "Welcome! This is a playable web version of Kaizen Poker. Start with the [rules](#/rules) or the short [tutorial](#/tutorial), or jump straight into a game: [two-player hotseat](#/hotseat), [solo against the Challenger deck](#/solo), or [two-player remote](#/remote).\n\nQuestions or feedback? Contact the designer [here](mailto:dsparks@gmail.com). Have fun!",
   },
   gallery: {
     title: "Card Image Gallery",
     message:
-      "This gallery shows the current print prototype. The illustrations are generative AI, and I do not plan to publish the game with this artwork. They are included here to reinforce the names and abilities of the cards, and to suggest the visual language and UX the game has been developed around.",
+      "This gallery shows the current print prototype. The illustrations are AI-generated placeholders — the published game won't use this artwork. They're here to help the card names and abilities stick, and to show the visual direction the game is being designed around.",
   },
   soloIntro: {
     title: "Solo Mode",
     message:
-      "Solo Mode is a race to seven chips against the \"Challenger Deck.\" You still take two Actions, then score the best five-card poker hand you can make. The Challenger never builds a normal hand; at showdown, reveal the top Challenger card and use the lookup table to see what it scores. Beat that result to win the chip. If the hands tie, the Challenger takes it.\n\nYou can play with the Challenger deck face-up (Easy), or face-down (Difficult). Which would you prefer?",
+      "Solo Mode is a race to seven chips against the Challenger deck. You play normally: take two Actions, then score your best five-card poker hand. The Challenger doesn't build a hand — at showdown it reveals its top card, and the Challenger Lookup table tells you which poker hand that card counts as. Beat it and you win the chip. Ties go to the Challenger.\n\nWant the Challenger deck face-up (Easy) or face-down (Difficult)?",
   },
   tutorial: {
     complete: {
       title: "Tutorial Complete",
       message:
-        "Nice work. Now that you've seen how the game works, you're ready to play. Press MENU whenever you want to start a fresh game.",
+        "That's the tutorial! You know enough to play a real game now. Press MENU whenever you're ready to start one.",
     },
     fallback: {
       title: "Tutorial",
-      message: "Follow along. I'll keep pointing out what matters as you go.",
+      message: "Keep going — I'll chime in whenever something new comes up.",
     },
     round1: {
       firstAction: {
         title: "First Action",
         message:
-          "Hi! I'm Chippy. Welcome to Kaizen Poker.\nEach round starts with two Actions for each player, then both hands score. Go ahead and start by clicking Loot, to play it as an Action.",
+          "Hi, I'm Chippy! I'll walk you through your first three rounds.\nEach round, both players take two Actions, then both hands are scored. Let's start simple: click Loot to play it as your first Action.",
       },
       drawThenDiscard: {
-        title: "Draw Then Discard",
+        title: "Draw, Then Discard",
         message:
-          "Click Prune to discard it. Loot gives you the opportunity to see an additional card, so the question is which card helps this hand less right now.",
+          "Loot let you draw an extra card — now you discard one back. The real question is which card helps this hand least. Click Prune to discard it.",
       },
       secondAction: {
         title: "Second Action",
         message:
-          "Now play Buff. Buff is a Modify action, so it waits in play for now and you'll assign it to one of your scoring cards later.",
+          "Now play Buff. It's a Modify Action: it sits in play for now, and when the round scores you'll point it at one of your scoring cards.",
       },
       opponentTurn: {
-        title: "Opponent Turn",
+        title: "Opponent's Turn",
         message:
-          "Your Action phase is done. Your opponent plays Mill to put some cards into their discard, then Trim to scrap one of those discarded cards.",
+          "Your Actions are done. Your opponent plays Mill to put three cards into their discard, then Trim to scrap one of them. Click OK and watch.",
       },
       scorePhase: {
         title: "Score Phase",
         message:
-          "The Action phase is over; time for the Score phase. Because Buff is still in play, you'll choose how it changes your scoring hand.",
+          "Actions are over — time to score. Click REVEAL & SCORE. Since Buff is still in play, you'll get to choose how it improves your hand first.",
       },
       chooseTarget: {
-        title: "Choose The Target",
+        title: "Choose the Target",
         message: "Pick the 6. We're about to turn it into a King.",
       },
       chooseRank: {
-        title: "Choose The New Rank",
-        message: "Choose K. That gives you three Kings and a pair of Nines: a Full House.",
+        title: "Choose the New Rank",
+        message: "Choose K. That gives you three Kings and a pair of Nines — a Full House.",
       },
       roundComplete: {
         title: "Round One Complete",
         message:
-          "Strong start. Buff turned two pair into a Full House. Press Next Round and I'll show you the default face-down action.",
+          "A Full House in round one — strong start. Buff turned two pair into something much bigger. Press Next Round and I'll show you face-down plays.",
       },
     },
     round2: {
       defaultFaceDownReward: {
-        title: "Default Face-Down Reward",
+        title: "Face-Down Effects",
         message:
-          "If you don't have any Actions you want to play, you can always play a card facedown. The default face-down ability is Refresh. You discard a card, then draw a replacement. Click Refresh.",
+          "A face-down card ignores its printed ability — instead, you choose a simple utility effect. The default is Refresh: discard a card, then draw a replacement. Click Refresh.",
       },
       refresh: {
         title: "Refresh",
         message:
-          "Discard Recall. The face-down card is already spent, so Refresh lets you trade away a card you don't want and keep the rest.",
+          "Discard Recall — it isn't helping this hand. Refresh is how you trade away your least useful card.",
       },
       firstAction: {
         title: "A Simple First Action",
         message:
-          "Play Freeze. Freeze is an Amend Action, so it changes the rules of the round instead of changing a scoring card.",
+          "Play Freeze. It's an Amend Action: instead of touching any cards, it changes the rules for the rest of the round.",
       },
       faceDownPlay: {
         title: "Face-Down Play",
         message:
-          "For your second Action, play a card face-down. Click Play Face-Down. Any card can become a simple utility action this way.",
+          "For your second Action, let's try playing a card face-down. Click the Play Face-Down button.",
       },
       pickCardToHide: {
-        title: "Pick A Card To Hide",
-        message: "Now play Exchange. We don't want its ability here; we'll use the face-down effect instead.",
+        title: "Pick a Card to Hide",
+        message: "Now click Exchange. We don't need its printed ability this round, so we'll spend it face-down instead.",
       },
       opponentTurn: {
-        title: "Opponent Turn",
+        title: "Opponent's Turn",
         message:
-          "Good. Now watch the other side: they'll check the top of the deck with Reject, then use another card face-down for a plain Refresh. Click OK to continue.",
+          "Nice. Now watch the other side: your opponent checks the top of their deck with Reject, then plays a card face-down for a plain Refresh. Click OK to continue.",
       },
       revealAgain: {
         title: "Reveal Again",
-        message: "Reveal and score. Now you've seen how face-down play gives you a flexible fallback.",
+        message: "Click REVEAL & SCORE and let's see how this round shakes out.",
       },
       faceDownBasics: {
         title: "Face-Down Basics",
         message:
-          "When you don't love any of the actions your cards offer, face-down play gives you a nice fallback option. Press Next Round.",
+          "That's the takeaway: when none of your cards' abilities appeal, a face-down play is always a solid fallback. Press Next Round.",
       },
     },
     round3: {
       discardCamouflage: {
         title: "Discard Camouflage",
-        message: "Choose only Camouflage. We want it in your discard first, you'll scrap it soon.",
+        message: "Select only Camouflage, then confirm. We want it in your discard — you'll scrap it from there in a moment.",
       },
       scrapCamouflage: {
         title: "Scrap Camouflage",
-        message: "Pick Camouflage. Impeach scraps a face card, moving it from your discard to the scrap pile.",
+        message: "Pick Camouflage. Impeach moves a face card from your discard to the scrap pile.",
       },
       buildLessonYourself: {
-        title: "Build The Lesson Yourself",
-        message: "Play Rejuvenate. (We're going to use it to move Camouflage into your discard, then scrap it.)",
+        title: "Set Up the Combo",
+        message: "Play Rejuvenate. Here's the plan: use it to get Camouflage into your discard, then scrap Camouflage from there.",
       },
       inspectDiscard: {
         title: "Inspect Your Discard",
         message:
-          "Click the A Discard to see what's in your own discard pile. It's often useful to know what's in your own or your opponent's discard pile. You should see Camouflage sitting there now.",
+          "Click the A Discard button to look through your discard pile. Checking discards — yours and your opponent's — pays off constantly. Camouflage should be sitting there now.",
       },
       moveItToScrap: {
-        title: "Move It To Scrap",
-        message: "Now play Impeach. It scraps a face card from your discard, which is exactly what we want here.",
+        title: "Move It to Scrap",
+        message: "Now play Impeach. It scraps a face card from your discard — exactly what we need.",
       },
       inspectScrap: {
-        title: "Inspect Scrap",
+        title: "Inspect the Scrap Pile",
         message:
-          "Open Scrap. Cards there are much harder to get back, and Remember cards can keep affecting the game from that pile.",
+          "Now click Scrap. Cards there are very hard to get back — but Remember cards, like Camouflage, stay active from the scrap pile.",
       },
       continuityMatters: {
-        title: "Continuity Matters",
+        title: "The Payoff Is Coming",
         message:
-          "Your opponent will take two quiet Actions, and then you'll see Camouflage pay off during scoring. Click OK when you're ready.",
+          "Your opponent takes two quiet Actions, and then Camouflage pays off during scoring. Click OK when you're ready.",
       },
       rememberPayoff: {
         title: "Remember Payoff",
         message:
-          "Reveal and score. Because Camouflage is in scrap, Sculpt is about to get an extra suit-changing option.",
+          "Click REVEAL & SCORE. Because Camouflage is in the scrap pile, your 2 — Sculpt — is about to get a bonus option.",
       },
       thisComesFromScrap: {
-        title: "This Comes From Scrap",
-        message: "Choose Suit Only. That extra option is coming from Camouflage in the scrap pile.",
+        title: "Courtesy of the Scrap Pile",
+        message: "Choose Suit Only. That extra option comes from Camouflage sitting in scrap.",
       },
       completeFlush: {
-        title: "Complete The Flush",
-        message: "Pick Clubs. That turns Sculpt into a Club and finishes the Flush.",
+        title: "Complete the Flush",
+        message: "Pick Clubs. Sculpt becomes a Club, and that finishes your Flush.",
       },
       wrapUp: {
         title: "Tutorial Wrap-Up",
         message:
-          "There is a lot more to explore in Kaizen Poker, but now you know some of the basics. Press Finish Tutorial when you're ready.",
+          "And that's the basics! There's a lot more to discover, but you're ready for a real game. Press Finish Tutorial.",
       },
     },
   },

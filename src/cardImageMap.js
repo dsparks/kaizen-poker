@@ -1,4 +1,7 @@
-const cardIllustrationModules = import.meta.glob("../kaizen_illustrations/*.{png,jpg,jpeg,webp}", {
+// Imports the web-optimized renditions, NOT the full-res sources in
+// kaizen_illustrations/. Run `npm run optimize-art` after changing source art
+// (the predev/prebuild hooks also do this automatically). See CLAUDE.md.
+const cardIllustrationModules = import.meta.glob("../web_art/illustrations/*.webp", {
   eager: true,
   import: "default",
 });
