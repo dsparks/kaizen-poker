@@ -1,4 +1,4 @@
-import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import { CHIPPY_COPY, renderChippyMessage } from "./chippyCopy.jsx";
@@ -29,11 +29,10 @@ import { getAnalyticsDebugInfo, syncTrackedGame } from "./supabaseAnalytics.js";
 import {
   getTutorialPrompt,
   getTutorialRoundSetup,
-  TUTORIAL_INITIAL_DECKS,
   TUTORIAL_TOTAL_ROUNDS,
 } from "./tutorialScript.js";
 import { trackUmami, trackUmamiScreen } from "./umami.js";
-import { RO, RV, FACE, CARDS, CM, SUITS, SC, SO, TC, SOLO_TARGET_CHIPS, SOLO_DIFFICULTIES, CHALLENGER_LOOKUP, CHALLENGER_ROWS, isSoloMode, lowerRanks, higherRanks, adjacentRanks } from "./gameData.js";
+import { RO, FACE, CARDS, CM, SUITS, SC, SO, SOLO_DIFFICULTIES, CHALLENGER_LOOKUP, CHALLENGER_ROWS, isSoloMode, lowerRanks, higherRanks, adjacentRanks } from "./gameData.js";
 import { evalHand, compareHands, shuf, sortC, drawCards, displayOrder, evalChallenger, isMatchOver, getMatchWinner, getRoundRequirements, initGame, cloneGs, tutorialRoundState } from "./engine.js";
 import { SFX_ENABLED_KEY, setGlobalSfxEnabled, getSfxEnabledDefault, playSfx } from "./sfx.js";
 import { FONT_DISPLAY, FONT_BODY, USE_ILLUSTRATED_CARDS, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
@@ -608,6 +607,15 @@ export default function KaizenPoker(){
       try{window.localStorage.setItem(SFX_ENABLED_KEY,String(sfxEnabled));}catch{}
     }
   },[sfxEnabled]);
+
+  // Test bridge for headless card-effect tests (scripts/card-tests.mjs): lets a
+  // test inject a full game state and read it back. Only present under the
+  // ?playtest=1 flag, so it never exists in the deployed build.
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    if(!playtestEnabled){try{delete window.__kp;}catch{}return;}
+    window.__kp={getState:()=>gs,setState:next=>replaceSandboxState(next)};
+  });
 
   useEffect(()=>{
     if(!gs||gs.phase!=="score"||modal)return;

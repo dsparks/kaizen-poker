@@ -19,12 +19,13 @@ export async function launchBrowser() {
   const bin = BROWSER_CANDIDATES.find(p => fs.existsSync(p));
   if (!bin) throw new Error("No Edge/Chrome binary found in standard locations");
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "kp-edge-smoke-"));
+  // KP_HEADED=1 opens a visible window (for watching a run); default headless.
+  const headed = process.env.KP_HEADED === "1";
   const child = spawn(bin, [
-    "--headless=new",
+    ...(headed ? ["--start-maximized"] : ["--headless=new", "--disable-gpu"]),
     "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
     "--no-first-run",
-    "--disable-gpu",
     "about:blank",
   ], { stdio: "ignore" });
 

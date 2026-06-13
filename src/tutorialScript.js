@@ -16,7 +16,7 @@ export const TUTORIAL_INITIAL_DECKS = {
   ],
 };
 
-export const TUTORIAL_ROUNDS = {
+const TUTORIAL_ROUNDS = {
   1: {
     computerActions: [
       { cardId: "5C" },
