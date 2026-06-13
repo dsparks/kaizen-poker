@@ -63,6 +63,21 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
       `-1px -1px 0 ${artCornerStroke}`,
       "0 2px 4px rgba(0,0,0,.5)"
     ].join(",");
+  // Heavier outline for the vertical card name so it stays legible over busy
+  // art. Halo is suit-aware (white behind black text, dark behind white text),
+  // matching the corner rank's coloring; corner rank keeps its thinner stroke.
+  const stroke=small?1:1.5;
+  const artNameShadow=[
+    `${stroke}px 0 0 ${artCornerStroke}`,
+    `-${stroke}px 0 0 ${artCornerStroke}`,
+    `0 ${stroke}px 0 ${artCornerStroke}`,
+    `0 -${stroke}px 0 ${artCornerStroke}`,
+    `${stroke}px ${stroke}px 0 ${artCornerStroke}`,
+    `-${stroke}px ${stroke}px 0 ${artCornerStroke}`,
+    `${stroke}px -${stroke}px 0 ${artCornerStroke}`,
+    `-${stroke}px -${stroke}px 0 ${artCornerStroke}`,
+    "0 2px 5px rgba(0,0,0,.5)"
+  ].join(",");
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     data-card-id={id}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
@@ -76,12 +91,12 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     {artMode&&artSrc
       ?<>
         <img src={artSrc} alt="" draggable={false} style={{position:"absolute",left:ART_IMAGE_OFFSET_X,top:ART_IMAGE_OFFSET_Y,width:`${ART_IMAGE_WIDTH_SCALE*100}%`,height:`${ART_IMAGE_HEIGHT_SCALE*100}%`,objectFit:"cover",objectPosition:"50% 42%",borderRadius:"inherit",userSelect:"none",pointerEvents:"none",filter:"saturate(1.04) contrast(.98)"}}/>
-        <div style={{position:"absolute",inset:0,borderRadius:"inherit",background:"linear-gradient(90deg,rgba(0,0,0,.56) 0%,rgba(0,0,0,.26) 20%,rgba(0,0,0,0) 45%)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",inset:0,borderRadius:"inherit",background:"linear-gradient(90deg,rgba(0,0,0,.68) 0%,rgba(0,0,0,.34) 22%,rgba(0,0,0,0) 48%)",pointerEvents:"none"}}/>
         <div style={{position:"absolute",top:small?5:8,left:small?5:7,zIndex:1,display:"flex",alignItems:"center",gap:small?1:2,textShadow:"0 1px 3px #000,0 0 2px #000"}}>
           <span style={{fontSize:small?18:42,fontWeight:900,color:artCornerColor,lineHeight:1,fontFamily:FONT_DISPLAY,textShadow:artCornerShadow}}>{c.rank}</span>
           <span style={{fontSize:small?12:26,color:artCornerColor,lineHeight:1,textShadow:artCornerShadow}}>{SUITS[c.suit]}</span>
         </div>
-        <div style={{position:"absolute",left:small?3:7,top:small?32:70,bottom:small?8:12,zIndex:1,writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:small?9.5:20,fontWeight:900,color:artCornerColor,fontFamily:FONT_DISPLAY,letterSpacing:.2,lineHeight:1,textShadow:artCornerShadow,display:"flex",alignItems:"center",justifyContent:"flex-end",whiteSpace:"nowrap",overflow:"hidden"}}>
+        <div style={{position:"absolute",left:small?3:7,top:small?32:70,bottom:small?8:12,zIndex:1,writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:small?10:21,fontWeight:900,color:artCornerColor,fontFamily:FONT_DISPLAY,letterSpacing:small?.3:.6,lineHeight:1,textShadow:artNameShadow,display:"flex",alignItems:"center",justifyContent:"flex-end",whiteSpace:"nowrap",overflow:"hidden"}}>
           {c.name}
         </div>
         <div style={{position:"absolute",right:small?4:9,bottom:small?5:9,zIndex:1,fontSize:small?26:52,opacity:.18,color:SC[c.suit],fontFamily:FONT_DISPLAY,fontWeight:900,lineHeight:1,textShadow:"0 1px 0 #fff"}}>

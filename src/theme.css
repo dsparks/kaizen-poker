@@ -1,13 +1,13 @@
 /* ============================================================
    KAIZEN POKER — "Balatro Juice" design system
-   Deep crimson/indigo felt, chunky stamped UI, painterly cards.
+   Green poker-table felt, chunky stamped UI, painterly cards.
    ============================================================ */
 
 :root {
   /* Felt */
-  --felt-deep: #2a0d18;
-  --felt-mid: #5c1626;
-  --felt-hot: #8d2433;
+  --felt-deep: #0c331d;
+  --felt-mid: #1c6b3e;
+  --felt-hot: #2f9c5c;
   --felt-indigo: #1b1c38;
 
   /* Panels */
@@ -55,7 +55,7 @@ body {
   overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(ellipse at 50% -20%, var(--felt-hot) 0%, var(--felt-mid) 38%, var(--felt-deep) 75%, #1c0810 100%);
+    radial-gradient(ellipse at 50% -20%, var(--felt-hot) 0%, var(--felt-mid) 38%, var(--felt-deep) 75%, #06180e 100%);
 }
 .kp-felt::before,
 .kp-felt::after {
@@ -70,11 +70,11 @@ body {
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    rgba(255, 120, 90, 0.10) 40deg,
+    rgba(255, 214, 120, 0.10) 40deg,
     transparent 95deg,
-    rgba(38, 40, 92, 0.22) 150deg,
+    rgba(12, 46, 58, 0.25) 150deg,
     transparent 210deg,
-    rgba(255, 150, 80, 0.07) 265deg,
+    rgba(255, 200, 110, 0.07) 265deg,
     transparent 330deg
   );
   animation: feltSwirl 70s linear infinite;
@@ -84,9 +84,9 @@ body {
   background: conic-gradient(
     from 180deg,
     transparent 0deg,
-    rgba(120, 30, 60, 0.30) 60deg,
+    rgba(16, 90, 52, 0.30) 60deg,
     transparent 130deg,
-    rgba(20, 22, 60, 0.30) 200deg,
+    rgba(10, 40, 34, 0.30) 200deg,
     transparent 290deg
   );
   animation: feltSwirl 110s linear infinite reverse;
@@ -96,7 +96,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 55%, transparent 45%, rgba(10, 4, 12, 0.55) 100%);
+  background: radial-gradient(ellipse at 50% 55%, transparent 45%, rgba(4, 14, 9, 0.55) 100%);
 }
 @keyframes feltSwirl {
   from { transform: rotate(0deg); }
