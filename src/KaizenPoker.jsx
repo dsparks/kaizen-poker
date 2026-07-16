@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Chippy from "./Chippy.jsx";
 import PlaytestPanel from "./PlaytestPanel.jsx";
 import { CHIPPY_COPY, renderChippyMessage } from "./chippyCopy.jsx";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
-import { getRenderedCardSrc } from "./renderedCardImageMap.js";
-import rulesPdfUrl from "../Kaizen Poker rules.pdf";
 import {
   clearActiveTrackedGame,
   archiveCompletedTrackedGame,
@@ -17,13 +15,13 @@ import {
   upsertTrackedRound,
 } from "./analytics.js";
 import { createGameTransport } from "./gameTransport.js";
+import { useLiveGameSession } from "./useLiveGameSession.js";
 import {
   claimSeat,
   createLiveGame,
   fetchLiveGame,
   makeSeatToken,
   multiplayerEnabled,
-  updateLiveGame,
 } from "./liveGameClient.js";
 import { getAnalyticsDebugInfo, syncTrackedGame } from "./supabaseAnalytics.js";
 import {
@@ -35,7 +33,7 @@ import { trackUmami, trackUmamiScreen } from "./umami.js";
 import { RO, FACE, CARDS, CM, SUITS, SC, SO, SOLO_DIFFICULTIES, CHALLENGER_LOOKUP, CHALLENGER_ROWS, isSoloMode, lowerRanks, higherRanks, adjacentRanks } from "./gameData.js";
 import { evalHand, compareHands, shuf, sortC, drawCards, displayOrder, evalChallenger, isMatchOver, getMatchWinner, getRoundRequirements, initGame, cloneGs, tutorialRoundState } from "./engine.js";
 import { SFX_ENABLED_KEY, setGlobalSfxEnabled, getSfxEnabledDefault, playSfx } from "./sfx.js";
-import { FONT_DISPLAY, FONT_BODY, USE_ILLUSTRATED_CARDS, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
+import { FONT_DISPLAY, FONT_BODY, USE_ILLUSTRATED_CARDS, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
 
 // ============================================================
 // APP SHELL HELPERS (routing, local snapshots, misc)
@@ -103,7 +101,7 @@ const hasPlaytestFlag=()=>{
 };
 const KONAMI_SEQUENCE=["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a","Enter"];
 const LIVE_SEAT_PREFIX="kaizenPoker.liveSeat.";
-const RULES_PDF_PATH=rulesPdfUrl;
+const PassiveScreens=lazy(()=>import("./PassiveScreens.jsx"));
 
 // ============================================================
 // MAIN APP
@@ -115,10 +113,6 @@ export default function KaizenPoker(){
   const[sfxEnabled,setSfxEnabled]=useState(()=>getSfxEnabledDefault());
   const[joinCode,setJoinCode]=useState("");
   const[shareLink,setShareLink]=useState("");
-  const[onlineError,setOnlineError]=useState("");
-  const[onlineStatus,setOnlineStatus]=useState("offline");
-  const[liveSeat,setLiveSeat]=useState(null);
-  const[liveGameId,setLiveGameId]=useState(null);
   const[soloIntroVisible,setSoloIntroVisible]=useState(false);
   const[galleryHoverId,setGalleryHoverId]=useState(null);
   const[resumeAvailable,setResumeAvailable]=useState(()=>!!loadLocalGameSnapshot());
@@ -142,8 +136,8 @@ export default function KaizenPoker(){
     lastGameId:null,
   }));
   const gameTransport=createGameTransport({setGs});
-  const onlineRef=useRef({active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()});
-  const pollRef=useRef(null);
+  const liveSession=useLiveGameSession({gameTransport,onTrackedState:tracked=>setTracked(tracked)});
+  const {sessionRef:onlineRef,onlineError,setOnlineError,onlineStatus,setOnlineStatus,liveSeat,liveGameId}=liveSession;
   const analyticsAuthorityRef=useRef(true);
   const prevPhaseRef=useRef(null);
   const prevChipsRef=useRef({a:0,b:0});
@@ -242,61 +236,18 @@ export default function KaizenPoker(){
       saveLocalGameSnapshot(nextGs);
       setResumeAvailable(true);
     }
-    if(onlineRef.current.active&&onlineRef.current.gameId&&onlineRef.current.seat){
-      const status=nextGs.phase==="gameOver"?"finished":"active";
-      const expectedVersion=onlineRef.current.version||1;
-      onlineRef.current.version=expectedVersion+1;
-      onlineRef.current.pendingWrites=(onlineRef.current.pendingWrites||0)+1;
-      setOnlineStatus(status==="finished"?"finished":"syncing");
-      onlineRef.current.writeChain=(onlineRef.current.writeChain||Promise.resolve())
-        .then(()=>updateLiveGame({
-          gameId:onlineRef.current.gameId,
-          state:nextGs,
-          tracked:trackedRef.current,
-          expectedVersion,
-          seat:onlineRef.current.seat,
-          token:onlineRef.current.token,
-          status,
-        }))
-        .then(row=>{
-          onlineRef.current.pendingWrites=Math.max(0,(onlineRef.current.pendingWrites||1)-1);
-          if(!row)return;
-          onlineRef.current.version=Math.max(onlineRef.current.version||1,row.version||1);
-          if(onlineRef.current.pendingWrites===0)setOnlineStatus(row.status||"active");
-        })
-        .catch(async err=>{
-          onlineRef.current.pendingWrites=0;
-          console.error("Live game update failed",err);
-          setOnlineError(err.message||"Live update failed.");
-          try{
-            const fresh=await fetchLiveGame(onlineRef.current.gameId);
-            if(fresh?.state){
-              onlineRef.current.version=fresh.version||onlineRef.current.version;
-              gameTransport.commit(fresh.state);
-              if(fresh.tracked&&analyticsAuthorityRef.current)setTracked(fresh.tracked);
-              setOnlineStatus(fresh.status||"active");
-            }
-          }catch(innerErr){
-            console.error("Live game resync failed",innerErr);
-          }
-        });
-    }
+    liveSession.queueUpdate(nextGs,{tracked:trackedRef.current,authority:analyticsAuthorityRef.current});
     return nextGs;
   };
   const patchGameState=updater=>gameTransport.patch(updater);
   const clearGameState=()=>{
     trackUmami("return_to_menu",{from_mode:gs?.mode||"home",home_route:isHomeRouteVariant(homeRoute)?homeRoute:"home"});
     flushTrackedSession(gs,"left_mode");
-    if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;}
     updateHashForMode(isHomeRouteVariant(homeRoute)?homeRoute:"home",{replace:true});
-    onlineRef.current={active:false,gameId:null,seat:null,token:null,version:1,pendingWrites:0,writeChain:Promise.resolve()};
+    liveSession.reset();
     analyticsAuthorityRef.current=true;
     setJoinCode("");
     setShareLink("");
-    setOnlineError("");
-    setOnlineStatus("offline");
-    setLiveSeat(null);
-    setLiveGameId(null);
     setSoloIntroVisible(false);
     setGalleryHoverId(null);
     setGalleryChippyDismissed(false);
@@ -540,42 +491,17 @@ export default function KaizenPoker(){
       const nextUrl=`${window.location.pathname}?game=${row.id}`;
       window.history.replaceState({}, "", nextUrl);
     }
-    onlineRef.current={active:true,gameId:row.id,seat,token,version:row.version||1,pendingWrites:0,writeChain:Promise.resolve()};
+    liveSession.activate(row,{seat,token});
     analyticsAuthorityRef.current=authority;
-    setLiveGameId(row.id);
-    setLiveSeat(seat);
-    setOnlineStatus(row.status||"active");
     setJoinCode(row.id);
     setShareLink(typeof window!=="undefined"?`${window.location.origin}${window.location.pathname}?game=${row.id}`:"");
-    setOnlineError("");
     if(row.tracked) setTracked(row.tracked);
     else if(authority) setTracked(buildTrackedGame(row.state));
     else trackedRef.current=null;
     gameTransport.commit(row.state);
   };
 
-  const startLivePolling=(gameId,authority=false)=>{
-    if(pollRef.current)clearInterval(pollRef.current);
-    pollRef.current=setInterval(async()=>{
-      try{
-        const row=await fetchLiveGame(gameId);
-        if(!row?.state)return;
-        const rowVersion=row.version||1;
-        const localVersion=onlineRef.current.version||1;
-        const pendingWrites=onlineRef.current.pendingWrites||0;
-        if(pendingWrites>0&&rowVersion<localVersion) return;
-        if(rowVersion!==localVersion){
-          onlineRef.current.version=rowVersion;
-          gameTransport.commit(row.state);
-          if(row.tracked&&authority)setTracked(row.tracked);
-          setOnlineError("");
-        }
-        setOnlineStatus(row.status||"active");
-      }catch(err){
-        console.error("Live poll failed",err);
-      }
-    },1200);
-  };
+  const startLivePolling=(gameId,authority=false)=>liveSession.startPolling(gameId,{authority});
 
   const tutorialPrompt=gs?.mode==="tutorial"?getTutorialPrompt(gs,modal,fdMode):null;
   const tutorialAckReady=gs?.mode==="tutorial" && gs.phase==="action" && gs.currentPlayer==="B" && gs._tutorialAck==="opp-turn";
@@ -832,7 +758,6 @@ export default function KaizenPoker(){
       const requestedMode=getRequestedModeFromHash();
       if(requestedMode)launchModeFromHash(requestedMode,{replaceUrl:true});
     }
-    return()=>{if(pollRef.current)clearInterval(pollRef.current);};
   },[joinOnlineGame,launchModeFromHash]);
 
   useEffect(()=>{
@@ -883,7 +808,7 @@ export default function KaizenPoker(){
     });
   },[gs?.mode,homeRoute,liveGameId]);
 
-  const isMobileLandscape=viewportSize.width>viewportSize.height&&viewportSize.width<=960&&viewportSize.height<=560;
+  const isMobileLandscape=viewportSize.width<=600||(viewportSize.width>viewportSize.height&&viewportSize.width<=960&&viewportSize.height<=560);
 
   useEffect(()=>{
     if(!isMobileLandscape&&mobileLogOpen)setMobileLogOpen(false);
@@ -1601,115 +1526,11 @@ export default function KaizenPoker(){
     />}
   </>);
 
-  if(gs.mode==="rules"){
-    return(<div style={{height:"100vh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-      <FeltBackdrop/>
-      <div style={{padding:"10px 16px",borderBottom:"2px solid #00000055",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
-        <span className="kp-wordmark" style={{fontSize:20,letterSpacing:1}}>KAIZEN POKER</span>
-        <span style={{color:"#8d89a8",fontWeight:800}}>Rules</span>
-        <span className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>Rules</span>
-        <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
-        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>MENU</button>
-        <a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" className="kp-pill" style={{padding:"4px 12px",fontSize:10,textDecoration:"none"}}>Open PDF</a>
-      </div>
-      <div style={{padding:18,position:"relative",zIndex:1,height:"calc(100vh - 59px)",overflow:"hidden"}}>
-        <div className="kp-panel" style={{height:"100%",minWidth:0,padding:"12px 14px 14px",borderRadius:18,display:"flex",flexDirection:"column",gap:8}}>
-          <div style={{fontSize:11,color:"#a8a4c0",lineHeight:1.45}}>The current rules PDF is framed right here in the app. Use <span style={{color:"#f5b942"}}>Open PDF</span> if you want it in a separate tab.</div>
-          <div className="kp-panel-inset" style={{flex:"1 1 auto",height:0,minHeight:0,padding:8,borderRadius:14}}>
-            <div style={{height:"100%",borderRadius:10,overflow:"hidden",border:"2px solid #00000055",background:"#12142a"}}>
-              <object data={RULES_PDF_PATH} type="application/pdf" width="100%" height="100%">
-                <div style={{height:"100%",display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#cbd5e1"}}>
-                  <div style={{display:"grid",gap:12,maxWidth:520}}>
-                    <div style={{fontSize:20,fontWeight:900,color:"#f3d7a4",fontFamily:FONT_DISPLAY}}>Rules PDF Not Found</div>
-                    <div style={{fontSize:13,lineHeight:1.6,color:"#b4b0c8"}}>This viewer is looking for <span style={{color:"#f8de7e"}}>`{RULES_PDF_PATH}`</span>. If the embedded viewer stays blank, try opening the PDF in a separate tab.</div>
-                    <div><a href={RULES_PDF_PATH} target="_blank" rel="noreferrer" className="kp-pill" style={{display:"inline-block",padding:"8px 16px",fontSize:11,textDecoration:"none"}}>Open PDF</a></div>
-                  </div>
-                </div>
-              </object>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>);
-  }
-
-  if(gs.mode==="gallery"){
-    const suitRows=[{suit:"C",label:"Clubs",color:"#dfe6eb"},{suit:"D",label:"Diamonds",color:"#ffd1d1"},{suit:"H",label:"Hearts",color:"#ffe0e0"},{suit:"S",label:"Spades",color:"#dde7f7"}];
-    const galleryPreviewScale=.5;
-    const galleryPreviewSourceWidth=816;
-    const galleryPreviewSourceHeight=1110;
-    const galleryPreviewCropX=36;
-    const galleryPreviewCropY=36;
-    const galleryPreviewWidth=galleryPreviewSourceWidth*galleryPreviewScale;
-    const galleryPreviewHeight=galleryPreviewSourceHeight*galleryPreviewScale;
-    const galleryPreviewInsetX=galleryPreviewCropX*galleryPreviewScale;
-    const galleryPreviewInsetY=galleryPreviewCropY*galleryPreviewScale;
-    const galleryPreviewFrameWidth=(galleryPreviewSourceWidth-(galleryPreviewCropX*2))*galleryPreviewScale;
-    const galleryPreviewFrameHeight=(galleryPreviewSourceHeight-(galleryPreviewCropY*2))*galleryPreviewScale;
-    const galleryPreviewRadius=14;
-    const galleryRowGap=8;
-    const galleryThumbScale=(galleryPreviewFrameHeight-(galleryRowGap*3))/4/180;
-    const galleryThumbWidth=Math.round(120*galleryThumbScale);
-    const hoveredCard=galleryHoverId?CM[galleryHoverId]:null;
-    const hoveredRankIndex=hoveredCard?RO.indexOf(hoveredCard.rank):-1;
-    const previewInsertIndex=hoveredRankIndex>=0?hoveredRankIndex+1:-1;
-    const gridColumns=hoveredRankIndex===-1
-      ?Array.from({length:13},()=>`${galleryThumbWidth}px`).join(" ")
-      :Array.from({length:14},(_,idx)=>idx===previewInsertIndex?`${galleryPreviewFrameWidth}px`:`${galleryThumbWidth}px`).join(" ");
-    const displayColumnIndex=originalIndex=>previewInsertIndex===-1?originalIndex:(originalIndex>=previewInsertIndex?originalIndex+1:originalIndex);
-    const hoveredSrc=hoveredCard?getRenderedCardSrc(hoveredCard.name):null;
-    return(<div style={{minHeight:"100vh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
-      <FeltBackdrop/>
-      <div style={{padding:"10px 16px",borderBottom:"2px solid #00000055",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:12,flexWrap:"wrap",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
-        <span className="kp-wordmark" style={{fontSize:20,letterSpacing:1}}>KAIZEN POKER</span>
-        <span style={{color:"#8d89a8",fontWeight:800}}>Card Image Gallery</span>
-        <span className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>Card Image Gallery</span>
-        <SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/>
-        <button onClick={()=>{playSfx("confirm",{volume:.28});clearGameState();}} className="kp-pill" style={{padding:"4px 12px",fontSize:10}}>MENU</button>
-      </div>
-      <div style={{padding:18,position:"relative",zIndex:1,flex:1,minHeight:0,overflow:"auto"}}>
-        <div className="kp-panel" style={{minWidth:0,padding:"16px 18px 18px",borderRadius:18}}>
-          <div style={{fontSize:11,color:"#a8a4c0",lineHeight:1.45,marginBottom:14}}>Hover over a thumbnail to see what the prototype print version of the card looks like.</div>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:12,alignItems:"start"}}>
-            <div style={{overflowX:"auto",overflowY:"hidden",paddingBottom:8}}>
-              <div style={{position:"relative",width:hoveredRankIndex===-1?(galleryThumbWidth*13)+(12*6):(galleryThumbWidth*13)+(12*6)+galleryPreviewFrameWidth+6,minHeight:galleryPreviewFrameHeight}}>
-                <div style={{display:"grid",gridTemplateColumns:gridColumns,gridTemplateRows:`repeat(4, ${(galleryPreviewFrameHeight-(galleryRowGap*3))/4}px)`,columnGap:6,rowGap:galleryRowGap,alignItems:"start",transition:"grid-template-columns .26s cubic-bezier(.22,.84,.26,1)"}}>
-                  {hoveredRankIndex!==-1&&hoveredSrc&&<div
-                    onMouseEnter={()=>setGalleryHoverId(hoveredCard.id)}
-                    onMouseLeave={()=>setGalleryHoverId(curr=>curr===hoveredCard.id?null:curr)}
-                    style={{gridColumn:`${previewInsertIndex+1}`,gridRow:"1 / span 4",alignSelf:"stretch",justifySelf:"start",width:galleryPreviewFrameWidth,height:galleryPreviewFrameHeight,pointerEvents:"auto",animation:"inspectPop 0.16s ease-out"}}>
-                    <div style={{position:"relative",width:"100%",height:"100%",borderRadius:galleryPreviewRadius,overflow:"hidden",boxShadow:"0 28px 72px #00000066,0 0 0 1px #ffffff0f",border:"1px solid #88a8c844",background:"#091018"}}>
-                      <img src={hoveredSrc} alt={hoveredCard.name} draggable={false} style={{position:"absolute",left:`-${galleryPreviewInsetX}px`,top:`-${galleryPreviewInsetY}px`,width:galleryPreviewWidth,height:galleryPreviewHeight,display:"block",objectFit:"cover"}}/>
-                    </div>
-                  </div>}
-                  {suitRows.flatMap((row,rowIndex)=>RO.map((rank,colIndex)=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===row.suit);return(
-                    <div key={card.id} style={{gridColumn:`${displayColumnIndex(colIndex)+1}`,gridRow:`${rowIndex+1}`,alignSelf:"start",justifySelf:"start",width:galleryThumbWidth,height:(galleryPreviewFrameHeight-(galleryRowGap*3))/4}}>
-                      <GalleryThumbCard
-                        id={card.id}
-                        scale={galleryThumbScale}
-                        active={galleryHoverId===card.id}
-                        onHover={()=>setGalleryHoverId(card.id)}
-                        onLeave={()=>setGalleryHoverId(curr=>curr===card.id?null:curr)}
-                      />
-                    </div>
-                  );}))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {!galleryChippyDismissed&&<Chippy
-        title={CHIPPY_COPY.gallery.title}
-        message={CHIPPY_COPY.gallery.message}
-        visible
-        actionLabel="OK"
-        onAction={()=>setGalleryChippyDismissed(true)}
-        initialPos={{x:760,y:240}}
-        draggable
-      />}
-    </div>);
-  }
+  if(gs.mode==="rules"||gs.mode==="gallery")return <Suspense fallback={<div className="kp-route-loading">Loading...</div>}>
+    <PassiveScreens mode={gs.mode} hoverId={galleryHoverId} setHoverId={setGalleryHoverId}
+      chippyDismissed={galleryChippyDismissed} setChippyDismissed={setGalleryChippyDismissed}
+      isCompact={isMobileLandscape} onBack={()=>{playSfx("confirm",{volume:.28});clearGameState();}}/>
+  </Suspense>;
 
   const isOnlineMode=gs.mode==="online";
   const actingPlayer=gs.currentPlayer;
@@ -1919,9 +1740,9 @@ export default function KaizenPoker(){
       onReplay={()=>{setKonamiCelebrationKey(v=>v+1);playSfx("victory",{volume:.34});}}
       onClose={()=>setKonamiCelebrationOpen(false)}
     />
-    <div style={{height:"100vh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
+    <div className="kp-game-shell" style={{height:"100dvh",color:"#f5f1e8",fontFamily:FONT_BODY,display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"}}>
     <FeltBackdrop/>
-    <div style={{padding:headerPad,borderBottom:isSuddenDeath?"3px solid #ff5a4e":"2px solid #00000055",display:"flex",alignItems:"center",gap:headerGap,background:isSuddenDeath?"linear-gradient(180deg,#5c1626f2,#3a0f1af6)":"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:headerFontSize,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
+    <div className="kp-game-header" style={{padding:headerPad,borderBottom:isSuddenDeath?"3px solid #ff5a4e":"2px solid #00000055",display:"flex",alignItems:"center",gap:headerGap,background:isSuddenDeath?"linear-gradient(180deg,#5c1626f2,#3a0f1af6)":"linear-gradient(180deg,#252a4af2,#1a1d38f6)",fontSize:headerFontSize,flexWrap:"wrap",backdropFilter:"blur(10px)",position:"relative",zIndex:1,boxShadow:"0 6px 0 rgba(0,0,0,.25), 0 12px 30px rgba(0,0,0,.3)"}}>
       <span className="kp-wordmark" style={{fontSize:isMobileLandscape?16:20,letterSpacing:1}}>KAIZEN POKER</span>
       <span style={{color:"#8d89a8",fontWeight:800}}>Round {gs.round}</span>
       <span className="kp-pill" style={{padding:"4px 12px",fontSize:10,color:"#f5b942",animation:gs.phase==="reveal"?"pulseGold 1.8s ease-in-out infinite":"none"}}>
@@ -2070,7 +1891,7 @@ export default function KaizenPoker(){
           </div>)}
         </div>}
         {/* Hand */}
-        <div style={{padding:handPad,borderRadius:isMobileLandscape?14:16,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:`2px solid ${viewerPlayer==="A"?"#ff5a4e88":"#34a3ff88"}`,boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 14px 30px rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.06)"}}>
+        <div className="kp-hand-panel" style={{padding:handPad,borderRadius:isMobileLandscape?14:16,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:`2px solid ${viewerPlayer==="A"?"#ff5a4e88":"#34a3ff88"}`,boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 14px 30px rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.06)"}}>
           <div className="kp-section-label" style={{fontSize:12,color:viewerPlayer==="A"?"#ff9a93":"#8fc5ff",marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             YOUR HAND (Player {viewerPlayer})
             {canAct&&<span style={{color:pClr,fontSize:10}}>- {actionsLeft} action{actionsLeft!==1?"s":""} left</span>}
@@ -2229,4 +2050,3 @@ export default function KaizenPoker(){
     {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
   </div></CardRenderContext.Provider>);
 }
-

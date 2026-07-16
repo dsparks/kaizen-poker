@@ -498,16 +498,21 @@ function KonamiCelebrationOverlay({open,onClose,onReplay,cards=[]}) {
     </div>
   );
 }
-function GalleryThumbCard({id,onHover,onLeave,active=false,scale=1}){return <div
+function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){return <div
   onMouseEnter={onHover}
   onMouseLeave={onLeave}
+  onClick={onClick||onHover}
+  role="button"
+  tabIndex={0}
+  onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();(onClick||onHover)?.();}}}
   style={{
     width:120*scale,
     height:168*scale,
     transform:`scale(${scale}) translateY(${active?-4:0}px)`,
     transformOrigin:"top left",
     transition:"transform .18s ease,filter .18s ease",
-    filter:active?"drop-shadow(0 12px 22px rgba(0,0,0,.34)) brightness(1.04)":"drop-shadow(0 8px 16px rgba(0,0,0,.22))"
+    filter:active?"drop-shadow(0 12px 22px rgba(0,0,0,.34)) brightness(1.04)":"drop-shadow(0 8px 16px rgba(0,0,0,.22))",
+    cursor:"pointer"
   }}>
   <Card id={id}/>
 </div>;}

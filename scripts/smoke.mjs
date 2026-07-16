@@ -24,6 +24,10 @@ const ROUTES = [
   { name: "rules", hash: "#/rules" },
   { name: "solo-artless", hash: "#/solo-artless" },
   { name: "hotseat-mobile", hash: "#/hotseat", viewport: { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+  { name: "home-mobile-portrait", hash: "", viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+  { name: "hotseat-mobile-portrait", hash: "#/hotseat", viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+  { name: "gallery-mobile-portrait", hash: "#/gallery", viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+  { name: "rules-mobile-portrait", hash: "#/rules", viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
 ];
 
 const serverUp = async () => {
@@ -102,6 +106,31 @@ try {
     const errs = realErrors(rec);
     const ok = !!clicked && ghostsAfter === 0 && !errs.length;
     results.push({ name: `interaction (played ${clicked || "nothing"}, ${ghosts} ghost mid-flight)`, ok, errs });
+    await page.close();
+  }
+
+  // Portrait phone: the board must keep the log in a drawer, expose a
+  // horizontally scrollable full-size hand, and still accept card taps.
+  {
+    const page = await browser.newPage();
+    const rec = watchPage(page);
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await page.goto(BASE + "#/hotseat", { waitUntil: "load", timeout: 60000 });
+    await new Promise(r => setTimeout(r, 1200));
+    const audit = await page.evaluate(() => {
+      const card = document.querySelector(".kp-card-clickable");
+      const logButton = [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "LOG");
+      const permanentLog = [...document.querySelectorAll(".kp-section-label")].some(el => el.textContent.trim() === "GAME LOG");
+      const before = card?.getAttribute("data-card-id") || null;
+      card?.click();
+      logButton?.click();
+      return { before, hasLogButton: !!logButton, permanentLog, documentOverflow: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    });
+    await new Promise(r => setTimeout(r, 500));
+    const drawerOpen = await page.evaluate(() => [...document.querySelectorAll(".kp-section-label")].some(el => el.textContent.trim() === "Game Log"));
+    await page.screenshot({ path: path.join(OUT, "interaction-mobile-portrait.png") }).catch(() => {});
+    const errs = realErrors(rec);
+    results.push({name:`mobile portrait interaction (${audit.before || "no card"})`,ok:!!audit.before&&audit.hasLogButton&&!audit.permanentLog&&!audit.documentOverflow&&drawerOpen&&!errs.length,errs:[...errs,...(!audit.hasLogButton?["LOG drawer button missing"]:[]),...(audit.permanentLog?["permanent log visible"]:[]),...(audit.documentOverflow?["document has horizontal overflow"]:[]),...(!drawerOpen?["log drawer did not open"]:[])]});
     await page.close();
   }
 } finally {
