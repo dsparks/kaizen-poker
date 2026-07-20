@@ -328,8 +328,25 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
 .kp-gallery-preview-desktop img { display: block; width: 100%; border-radius: 14px; box-shadow: 0 28px 72px #0009; }
 .kp-gallery-preview-mobile { display: none; }
 
+/* Motion accessibility: stop the ambient/decorative animation loops. */
+@media (prefers-reduced-motion: reduce) {
+  .kp-felt::before,
+  .kp-felt::after { animation: none; }
+  .kp-card,
+  .kp-action-slot { animation: none; }
+  .kp-card-selected { animation: none; }
+  .kp-reveal-card { animation: none; }
+}
+
 @media (max-width: 900px) {
   .kp-table-frame { display: none; }
+  /* The rotating blurred swirl layers are a constant GPU cost — freeze them
+     on mobile (the static gradient still paints once). */
+  .kp-felt::before,
+  .kp-felt::after { animation: none; }
+  /* Bigger touch target for the card inspect/pin button. */
+  .kp-inspect-btn { width: 26px !important; height: 26px !important; }
+  .kp-inspect-btn svg { width: 13px; height: 13px; }
   .kp-main-column { padding: 10px !important; scroll-padding-bottom: 16px; }
   .kp-game-header { align-content: center; }
   .kp-game-header .kp-pill,

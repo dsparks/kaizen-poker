@@ -98,7 +98,9 @@ const saveLocalGameSnapshot=gs=>{
 const computeIsMobileLandscape=()=>{
   if(typeof window==="undefined")return false;
   const w=window.innerWidth,h=window.innerHeight;
-  return w<=600||(w>h&&w<=960&&h<=560);
+  // 900px matches theme.css's mobile breakpoint — keep the two in sync, or
+  // 600-900px windows get mobile CSS with the desktop layout (log column).
+  return w<=900||(w>h&&w<=960&&h<=560);
 };
 const hasPlaytestFlag=()=>{
   if(typeof window==="undefined")return false;
@@ -900,9 +902,9 @@ export default function KaizenPoker(){
   // --- UNDO ---
   const doUndo=()=>{if(undoState){commitGameState(undoState);setUndoState(null);setModal(null);setFdMode(false);}};
 
-  const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)patchGameState(p=>({...p,newCards:[]}));
+  const handlePlayCard=cid=>{if(!gs)return;
     const card=CM[cid],p=gs.currentPlayer;
-    if(fdMode){setFdMode(false);const snap=cloneGs(gs);let g=playFD(gs,cid);
+    if(fdMode){setFdMode(false);const snap=cloneGs(gs);let g=playFD(gs,cid);g.newCards=[];
       playSfx("cardPlay",{volume:.5});
       trackEvent(g,"action_played",{cardId:cid,effectId:cid,faceDown:true,actionType:"FaceDown"},{playerSlot:p});
       setUndoState(snap);// Can undo face-down (no info revealed)
@@ -920,6 +922,9 @@ export default function KaizenPoker(){
   // --- RESOLVE ACTION ---
   const resolveAction=(cid,effectId=cid,alreadyInPlay=false,baseGs=gs)=>{const card=CM[effectId],p=baseGs.currentPlayer;let g=cloneGs(baseGs);
     if(!alreadyInPlay){
+      // Clear NEW badges on the state we actually commit — patching them away
+      // separately gets clobbered when this clone lands.
+      g.newCards=[];
       g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
       g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
       playSfx("cardPlay",{volume:.5});

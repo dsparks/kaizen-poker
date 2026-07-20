@@ -21,6 +21,8 @@ function FeltBackdrop(){
   </>);
 }
 const CardRenderContext=createContext("html");
+// Touch-first device (no hover): gates tap fallbacks for hover-only previews.
+const IS_TOUCH_DEVICE=typeof window!=="undefined"&&!!window.matchMedia&&window.matchMedia("(hover: none)").matches;
 const ART_SOURCE_WIDTH=1049;
 const ART_SOURCE_HEIGHT=1499;
 const ART_CROP_X=36;
@@ -109,7 +111,7 @@ const Card=memo(function Card({id,selected,onClick,dimmed,small,glow,isNew,onMou
         {!small&&<div style={{fontSize:9,color:"#3e3a35",marginTop:"auto",lineHeight:1.3,paddingTop:5,fontFamily:FONT_BODY,fontWeight:600}}>{c.text}</div>}
       </>}
     {isNew&&<div style={{position:"absolute",top:small?2:4,right:small?3:6,fontSize:small?6:8,fontWeight:900,color:"#3bbf7c",background:"#3bbf7c22",borderRadius:3,padding:"0 4px",zIndex:3}}>NEW</div>}
-    {small&&onInspect&&<button onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
+    {small&&onInspect&&<button className="kp-inspect-btn" onClick={e=>{e.stopPropagation();onInspect();}} aria-label="Inspect card" title="Pin card preview" style={{position:"absolute",top:2,right:2,width:16,height:16,padding:0,borderRadius:"50%",border:"1px solid #00000018",background:"#f6efe0dd",color:"#3b3228",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 2px #00000022"}}>
       <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
         <circle cx="5" cy="5" r="3.2" fill="none" stroke="#3b3228" strokeWidth="1.4"/>
         <path d="M7.6 7.6L10.5 10.5" stroke="#3b3228" strokeWidth="1.4" strokeLinecap="round"/>
@@ -161,9 +163,10 @@ function FaceDownActionSlot({id,canPeek=false,copySticker}){const[hover,setHover
       onMouseEnter={canPeek?e=>{setPos({x:e.clientX,y:e.clientY});setHover(true);}:undefined}
       onMouseLeave={canPeek?()=>setHover(false):undefined}
       onMouseMove={canPeek?e=>setPos({x:e.clientX,y:e.clientY}):undefined}
+      onClick={canPeek&&IS_TOUCH_DEVICE?e=>{setPos({x:e.clientX,y:e.clientY});setHover(h=>!h);}:undefined}
       style={{position:"relative",width:68,height:95,cursor:canPeek?"help":"default"}}>
       <CardBack/>
-      <div style={{position:"absolute",left:4,right:4,bottom:4,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"#f4e9d8cc",background:"#2a0d18c0",borderRadius:5,padding:"2px 0",pointerEvents:"none"}}>{canPeek?"Hover to peek":"Face-down"}</div>
+      <div style={{position:"absolute",left:4,right:4,bottom:4,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"#f4e9d8cc",background:"#2a0d18c0",borderRadius:5,padding:"2px 0",pointerEvents:"none"}}>{canPeek?(IS_TOUCH_DEVICE?"Tap to peek":"Hover to peek"):"Face-down"}</div>
     </div>
     {canPeek&&hover&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
       <Card id={id} copySticker={copySticker}/>
@@ -282,8 +285,8 @@ function FlightGhost({flight,onDone}){
 // Stamped token for a Remember card that is active from the scrap pile.
 // Hovering shows the full card so players can re-read the exact text.
 function RememberChip({id}){const[hover,setHover]=useState(false);const[pos,setPos]=useState({x:0,y:0});
-  const c=CM[id];if(!c)return null;
   const renderStyle=useContext(CardRenderContext);
+  const c=CM[id];if(!c)return null;
   const previewW=renderStyle==="image"?220:160;
   const previewH=renderStyle==="image"?292:220;
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(8,pos.x+14));
@@ -294,6 +297,7 @@ function RememberChip({id}){const[hover,setHover]=useState(false);const[pos,setP
       onMouseEnter={e=>{setPos({x:e.clientX,y:e.clientY});setHover(true);}}
       onMouseLeave={()=>setHover(false)}
       onMouseMove={e=>setPos({x:e.clientX,y:e.clientY})}
+      onClick={IS_TOUCH_DEVICE?e=>{setPos({x:e.clientX,y:e.clientY});setHover(h=>!h);}:undefined}
       style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"help",maxWidth:"100%",minWidth:0}}>
       <span style={{fontFamily:FONT_DISPLAY,fontSize:11,color:"#fff",background:"linear-gradient(180deg,#b07ef5,#7a44c4)",padding:"4px 11px 5px",borderRadius:8,boxShadow:"0 3px 0 rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.3)",textShadow:"0 1px 0 rgba(0,0,0,.35)",letterSpacing:.4,whiteSpace:"nowrap",flexShrink:0}}>
         {c.rank}{SUITS[c.suit]} {c.name}
@@ -322,13 +326,16 @@ function getCascadeCardPool(gs){
   ].filter(Boolean);
   return [...new Set(ids)];
 }
-function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")return null;
+function VictorySolitaireCanvas({winner,cards=[]}){
+  // Hooks must run on every render: `winner` can flip from null to "A"/"B" at
+  // the same element position, and an early return here would crash React.
+  const active=!!winner&&winner!=="TIE";
   const rafRef=useRef(null);
   const spriteRefs=useRef([]);
   const spritesRef=useRef([]);
   const cardsKey=(cards||[]).join("|");
   const idsRef=useRef([]);
-  if(!idsRef.current.length||idsRef.current._key!==cardsKey){
+  if(active&&(!idsRef.current.length||idsRef.current._key!==cardsKey)){
     const pool=(cards.length?cards:CARDS.map(c=>c.id)).filter(Boolean);
     const shuffled=shuf(pool);
     const fallback=CARDS.map(c=>c.id);
@@ -337,11 +344,12 @@ function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")re
     idsRef.current=sampled;
     idsRef.current._key=cardsKey;
   }
-  const spriteIds=idsRef.current;
+  const spriteIds=active?idsRef.current:[];
   useEffect(()=>{
     if(!spriteIds.length)return;
     const sprites=spriteIds.map((id,i)=>({
       key:`${id}-${i}`,
+      idx:i,
       id,
       x:0,y:0,vx:0,vy:0,rot:0,vr:0,
       width:68,height:95,
@@ -366,7 +374,7 @@ function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")re
       s.hasDropped=true;
     };
     const syncNode=s=>{
-      const node=spriteRefs.current.find(entry=>entry?.dataset?.spriteKey===s.key);
+      const node=spriteRefs.current[s.idx];
       if(!node)return;
       node.style.transform=`translate3d(${s.x}px, ${s.y}px, 0) rotate(${s.rot}rad)`;
       node.style.opacity=s.active?"1":"0";
@@ -445,6 +453,7 @@ function VictorySolitaireCanvas({winner,cards=[]}){if(!winner||winner==="TIE")re
       if(rafRef.current)cancelAnimationFrame(rafRef.current);
     };
   },[cardsKey,winner,spriteIds.length]);
+  if(!active)return null;
   const glowColor=winner==="A"?"#ff5a4e":"#34a3ff";
   return <div aria-hidden="true" style={{position:"fixed",inset:0,zIndex:31,pointerEvents:"none",overflow:"hidden"}}>
     {spriteIds.map((id,i)=><div

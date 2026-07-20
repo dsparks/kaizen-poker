@@ -6,7 +6,10 @@ import { TUTORIAL_INITIAL_DECKS } from "./tutorialScript.js";
 function shuf(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=0|Math.random()*(i+1);[r[i],r[j]]=[r[j],r[i]]}return r}
 function sortC(ids){return[...ids].sort((a,b)=>{const ca=CM[a],cb=CM[b];return(RV[ca.rank]-RV[cb.rank])||SO.indexOf(ca.suit)-SO.indexOf(cb.suit)})}
 function drawCards(gs,player,n){
-  const st={...gs};const dk=player==="A"?[...st.aDeck]:[...st.bDeck];
+  // Strip results of any prior draw: a stale `error` would falsely end the
+  // game at the next `if(g.error)` check, and stale `drawn` would replay logs.
+  const st={...gs};delete st.error;delete st.drawn;
+  const dk=player==="A"?[...st.aDeck]:[...st.bDeck];
   const dc=player==="A"?[...st.aDiscard]:[...st.bDiscard];
   const hand=player==="A"?[...st.aHand]:[...st.bHand];const drawn=[];
   let reshuffled=false;
