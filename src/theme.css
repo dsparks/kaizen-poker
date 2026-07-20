@@ -339,6 +339,13 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
   .kp-modal-shell > div:first-child { cursor: default !important; }
   .kp-modal-shell .kp-card-clickable:hover,
   .kp-card-clickable:hover { transform: none !important; }
+  /* Hover lift is disabled on touch — give taps a stamped press-down instead. */
+  .kp-modal-shell .kp-card-clickable:active,
+  .kp-card-clickable:active {
+    transform: translateY(2px) scale(0.97) !important;
+    filter: brightness(1.08);
+    transition-duration: 0.05s;
+  }
   .kp-btn { min-height: 42px; padding: 10px 16px !important; }
   .kp-touch-control { min-height: 40px; display: inline-flex; align-items: center; }
   .kp-passive-header { padding: 8px 10px; justify-content: space-between; }

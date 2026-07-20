@@ -95,6 +95,11 @@ const saveLocalGameSnapshot=gs=>{
     if(canResumeLocally(gs))window.localStorage.setItem(LOCAL_GAME_SNAPSHOT_KEY,JSON.stringify(gs));
   }catch{}
 };
+const computeIsMobileLandscape=()=>{
+  if(typeof window==="undefined")return false;
+  const w=window.innerWidth,h=window.innerHeight;
+  return w<=600||(w>h&&w<=960&&h<=560);
+};
 const hasPlaytestFlag=()=>{
   if(typeof window==="undefined")return false;
   try{return new URLSearchParams(window.location.search).get(PLAYTEST_QUERY_FLAG)==="1";}catch{return false;}
@@ -122,10 +127,9 @@ export default function KaizenPoker(){
   const[galleryChippyDismissed,setGalleryChippyDismissed]=useState(false);
   const[konamiCelebrationOpen,setKonamiCelebrationOpen]=useState(false);
   const[konamiCelebrationKey,setKonamiCelebrationKey]=useState(0);
-  const[viewportSize,setViewportSize]=useState(()=>({
-    width:typeof window!=="undefined"?window.innerWidth:1280,
-    height:typeof window!=="undefined"?window.innerHeight:800,
-  }));
+  // Only the mobile-landscape boolean is stored, so resize events don't
+  // re-render the app unless the layout mode actually flips.
+  const[isMobileLandscape,setIsMobileLandscape]=useState(computeIsMobileLandscape);
   const[mobileLogOpen,setMobileLogOpen]=useState(false);
   const[analyticsSyncState,setAnalyticsSyncState]=useState(()=>({
     ...getAnalyticsDebugInfo(),
@@ -229,7 +233,9 @@ export default function KaizenPoker(){
       map.set(id,{rect:{left:r.left,top:r.top,width:r.width,height:r.height},faceDown:el.getAttribute("data-facedown")==="1"});
     });
     flightRectsRef.current=map;
-  });
+    // Deps: only re-measure when the game state (or layout mode) changes —
+    // running this on every render forces a synchronous reflow of every card.
+  },[gs,isMobileLandscape]);
   const commitGameState=nextGs=>{
     gameTransport.commit(nextGs);
     if(canResumeLocally(nextGs)){
@@ -592,10 +598,20 @@ export default function KaizenPoker(){
     prevPhaseRef.current=gs.phase;
   },[gs?.phase]);
 
+  // The seat "you" occupy for feel purposes: A in solo/tutorial, your seat
+  // online, nobody in hotseat (both players are local).
+  const getLocalSeat=g=>!g||g.mode==="hotseat"?null:g.mode==="online"?(liveSeat||onlineRef.current.seat||null):"A";
+
   useEffect(()=>{
     if(!gs)return;
     const prev=prevChipsRef.current;
-    if(gs.aChips>prev.a||gs.bChips>prev.b)playSfx("chip",{volume:.34});
+    if(gs.aChips>prev.a||gs.bChips>prev.b){
+      const gainer=gs.aChips>prev.a?"A":"B";
+      const local=getLocalSeat(gs);
+      // Opponent scoring gets a duller, pitched-down chip instead of the cheerful one.
+      if(local&&gainer!==local)playSfx("chip",{volume:.22,rate:.7});
+      else playSfx("chip",{volume:.34});
+    }
     prevChipsRef.current={a:gs.aChips||0,b:gs.bChips||0};
   },[gs?.aChips,gs?.bChips]);
 
@@ -607,7 +623,11 @@ export default function KaizenPoker(){
 
   useEffect(()=>{
     const isGameOver=!!(gs&&gs.phase==="gameOver");
-    if(isGameOver&&!prevGameOverRef.current)playSfx("victory",{volume:.38});
+    if(isGameOver&&!prevGameOverRef.current){
+      const local=getLocalSeat(gs);
+      const lost=!!local&&getMatchWinner(gs)!==local;
+      playSfx(lost?"defeat":"victory",{volume:.38});
+    }
     prevGameOverRef.current=isGameOver;
   },[gs?.phase]);
 
@@ -781,7 +801,7 @@ export default function KaizenPoker(){
 
   useEffect(()=>{
     if(typeof window==="undefined")return;
-    const syncViewport=()=>setViewportSize({width:window.innerWidth,height:window.innerHeight});
+    const syncViewport=()=>setIsMobileLandscape(computeIsMobileLandscape());
     syncViewport();
     window.addEventListener("resize",syncViewport);
     window.addEventListener("orientationchange",syncViewport);
@@ -807,8 +827,6 @@ export default function KaizenPoker(){
       home_route:isHomeRouteVariant(homeRoute)?homeRoute:"home",
     });
   },[gs?.mode,homeRoute,liveGameId]);
-
-  const isMobileLandscape=viewportSize.width<=600||(viewportSize.width>viewportSize.height&&viewportSize.width<=960&&viewportSize.height<=560);
 
   useEffect(()=>{
     if(!isMobileLandscape&&mobileLogOpen)setMobileLogOpen(false);
@@ -885,6 +903,7 @@ export default function KaizenPoker(){
   const handlePlayCard=cid=>{if(!gs)return;if(gs.newCards.length)patchGameState(p=>({...p,newCards:[]}));
     const card=CM[cid],p=gs.currentPlayer;
     if(fdMode){setFdMode(false);const snap=cloneGs(gs);let g=playFD(gs,cid);
+      playSfx("cardPlay",{volume:.5});
       trackEvent(g,"action_played",{cardId:cid,effectId:cid,faceDown:true,actionType:"FaceDown"},{playerSlot:p});
       setUndoState(snap);// Can undo face-down (no info revealed)
       offerRefresh(g,g2=>{g2=advance(g2);commitGameState(g2);});return;}
@@ -903,6 +922,7 @@ export default function KaizenPoker(){
     if(!alreadyInPlay){
       g=setZ(g,p,"hand",[...getH(g,p)].filter(id=>id!==cid));
       g=setZ(g,p,"play",[...getP(g,p),{id:cid,faceDown:false}]);
+      playSfx("cardPlay",{volume:.5});
       trackEvent(g,"action_played",{cardId:cid,effectId,faceDown:false,actionType:card.type},{playerSlot:p});
     }
     if(card.type==="Modify"){g=L(g,`${p} plays ${card.name} (Modify)`);g=advance(g);commitGameState(g);return;}
@@ -1595,16 +1615,22 @@ export default function KaizenPoker(){
   const pClr=viewerPlayer==="A"?"#ff5a4e":"#34a3ff";
   const chipGoal=7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#12142a",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#3d4470"}`,animation:i===count-1?"chipBounce .45s cubic-bezier(.26,1.5,.42,1)":"none"}}/>);
+  // Redact hidden information from the log: in online games mask the other
+  // seat (or both while unseated); in hotseat mask both players, since either
+  // player can scroll the log on the shared device.
+  const logHiddenPlayers=isOnlineMode
+    ?(seatPlayer?["A","B"].filter(pl=>pl!==seatPlayer):["A","B"])
+    :gs.mode==="hotseat"?["A","B"]:[];
   const visibleLog=gs.log.map(msg=>{
-    if(!isOnlineMode) return msg;
-    const hiddenPlayers=seatPlayer?["A","B"].filter(pl=>pl!==seatPlayer):["A","B"];
     let next=msg;
-    hiddenPlayers.forEach(pl=>{
+    logHiddenPlayers.forEach(pl=>{
       if(next.startsWith(`${pl}: `)) next=`${pl}: hidden hand`;
       else if(next.startsWith(`${pl} draws:`)) next=`${pl} draws cards`;
       else if(next.startsWith(`${pl} draws `) && next!==`${pl} draws`) next=`${pl} draws`;
       else if(next.startsWith(`${pl} keeps `)) next=`${pl} looks at the top card`;
+      else if(next.startsWith(`${pl} puts back:`)) next=`${pl} puts cards back on top of the deck`;
       else if(next.startsWith(`${pl} puts `) && next.includes("on bottom")) next=`${pl} adjusts the top of the deck`;
+      else if(next.startsWith(`${pl} cultivates `)) next=`${pl} cultivates a card to the top of the deck`;
       else if(next.startsWith(`${pl} takes `)) next=`${pl} takes a card, then discards a random card`;
       else if(next.startsWith(`${pl} has no face cards.`)) next=`${pl} reveals no face cards.`;
     });

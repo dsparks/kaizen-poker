@@ -1,7 +1,7 @@
 // Shared presentational components: cards, card back, buttons, modals, the
 // flight-ghost layer, victory overlays, and board widgets. Game logic lives in
 // engine.js; the stateful app shell is KaizenPoker.jsx.
-import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CARD_BACK_IMAGE_SRC } from "./cardBackImage.js";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
 import { SUITS, SC, SO, RO, CARDS, CM, TI, TC, isSoloMode, SOLO_DIFFICULTIES } from "./gameData.js";
@@ -31,53 +31,40 @@ const ART_IMAGE_WIDTH_SCALE=ART_SOURCE_WIDTH/ART_CROP_WIDTH;
 const ART_IMAGE_HEIGHT_SCALE=ART_SOURCE_HEIGHT/ART_CROP_HEIGHT;
 const ART_IMAGE_OFFSET_X=`-${(ART_CROP_X/ART_CROP_WIDTH)*100}%`;
 const ART_IMAGE_OFFSET_Y=`-${(ART_CROP_Y/ART_CROP_HEIGHT)*100}%`;
-function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,rankSticker,suitSticker,copySticker}){const c=CM[id];if(!c)return null;
+// Text halos for art-mode cards, hoisted so they aren't rebuilt per render.
+// Halo is suit-aware (white behind black text, dark behind white text); the
+// vertical name gets a heavier outline than the corner rank so it stays
+// legible over busy art.
+const outline8=(w,color)=>[
+  `${w}px 0 0 ${color}`,`-${w}px 0 0 ${color}`,`0 ${w}px 0 ${color}`,`0 -${w}px 0 ${color}`,
+  `${w}px ${w}px 0 ${color}`,`-${w}px ${w}px 0 ${color}`,`${w}px -${w}px 0 ${color}`,`-${w}px -${w}px 0 ${color}`,
+];
+const ART_CORNER_SHADOW={
+  dark:[
+    ".75px 0 0 #ffffff","-.75px 0 0 #ffffff","0 .75px 0 #ffffff","0 -.75px 0 #ffffff",
+    ".5px .5px 0 #ffffffd8","-.5px .5px 0 #ffffffd8",".5px -.5px 0 #ffffffd8","-.5px -.5px 0 #ffffffd8",
+    "0 2px 4px rgba(0,0,0,.35)",
+  ].join(","),
+  light:[...outline8(1,"#05070a"),"0 2px 4px rgba(0,0,0,.5)"].join(","),
+};
+const ART_NAME_SHADOW={
+  dark_small:[...outline8(1,"#ffffff"),"0 2px 5px rgba(0,0,0,.5)"].join(","),
+  dark_large:[...outline8(1.5,"#ffffff"),"0 2px 5px rgba(0,0,0,.5)"].join(","),
+  light_small:[...outline8(1,"#05070a"),"0 2px 5px rgba(0,0,0,.5)"].join(","),
+  light_large:[...outline8(1.5,"#05070a"),"0 2px 5px rgba(0,0,0,.5)"].join(","),
+};
+const Card=memo(function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseLeave,onMouseMove,onDoubleClick,onInspect,rankSticker,suitSticker,copySticker}){
   const renderStyle=useContext(CardRenderContext);
+  const c=CM[id];if(!c)return null;
   const artMode=renderStyle==="image";
   const w=artMode&&!small?180:(small?68:120),h=artMode&&!small?252:(small?95:168),ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
   const artSrc=artMode?getCardIllustrationSrc(c.name):null;
-  const artCornerColor=c.suit==="S"||c.suit==="C"?"#05070a":"#ffffff";
-  const artCornerStroke=c.suit==="S"||c.suit==="C"?"#ffffff":"#05070a";
-  const artCornerShadow=c.suit==="S"||c.suit==="C"
-    ?[
-      `.75px 0 0 ${artCornerStroke}`,
-      `-.75px 0 0 ${artCornerStroke}`,
-      `0 .75px 0 ${artCornerStroke}`,
-      `0 -.75px 0 ${artCornerStroke}`,
-      ".5px .5px 0 #ffffffd8",
-      "-.5px .5px 0 #ffffffd8",
-      ".5px -.5px 0 #ffffffd8",
-      "-.5px -.5px 0 #ffffffd8",
-      "0 2px 4px rgba(0,0,0,.35)"
-    ].join(",")
-    :[
-      `1px 0 0 ${artCornerStroke}`,
-      `-1px 0 0 ${artCornerStroke}`,
-      `0 1px 0 ${artCornerStroke}`,
-      `0 -1px 0 ${artCornerStroke}`,
-      `1px 1px 0 ${artCornerStroke}`,
-      `-1px 1px 0 ${artCornerStroke}`,
-      `1px -1px 0 ${artCornerStroke}`,
-      `-1px -1px 0 ${artCornerStroke}`,
-      "0 2px 4px rgba(0,0,0,.5)"
-    ].join(",");
-  // Heavier outline for the vertical card name so it stays legible over busy
-  // art. Halo is suit-aware (white behind black text, dark behind white text),
-  // matching the corner rank's coloring; corner rank keeps its thinner stroke.
-  const stroke=small?1:1.5;
-  const artNameShadow=[
-    `${stroke}px 0 0 ${artCornerStroke}`,
-    `-${stroke}px 0 0 ${artCornerStroke}`,
-    `0 ${stroke}px 0 ${artCornerStroke}`,
-    `0 -${stroke}px 0 ${artCornerStroke}`,
-    `${stroke}px ${stroke}px 0 ${artCornerStroke}`,
-    `-${stroke}px ${stroke}px 0 ${artCornerStroke}`,
-    `${stroke}px -${stroke}px 0 ${artCornerStroke}`,
-    `-${stroke}px -${stroke}px 0 ${artCornerStroke}`,
-    "0 2px 5px rgba(0,0,0,.5)"
-  ].join(",");
+  const darkSuit=c.suit==="S"||c.suit==="C";
+  const artCornerColor=darkSuit?"#05070a":"#ffffff";
+  const artCornerShadow=ART_CORNER_SHADOW[darkSuit?"dark":"light"];
+  const artNameShadow=ART_NAME_SHADOW[`${darkSuit?"dark":"light"}_${small?"small":"large"}`];
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     data-card-id={id}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
@@ -139,7 +126,7 @@ function Card({id,selected,onClick,dimmed,small,glow,isNew,onMouseEnter,onMouseL
     {suitSticker&&<div style={{position:"absolute",top:small?18:26,left:small?18:30,transform:"rotate(9deg)",background:"linear-gradient(180deg,#fffaf0,#f1e0be)",color:SC[suitSticker]||"#3b3228",border:"1px solid #bda274",borderRadius:"50%",width:small?13:20,height:small?13:20,fontSize:small?9:14,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px #00000020",zIndex:3}}>
       {SUITS[suitSticker]||suitSticker}
     </div>}
-  </div>);}
+  </div>);});
 function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
   const renderStyle=useContext(CardRenderContext);
   const previewW=renderStyle==="image"?220:160;
