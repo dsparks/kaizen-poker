@@ -74,12 +74,33 @@ Apply these migrations in order:
 - [supabase/migrations/0002_live_games.sql](supabase/migrations/0002_live_games.sql)
 - [supabase/migrations/0003_security_advisor_fixes.sql](supabase/migrations/0003_security_advisor_fixes.sql)
 - [supabase/migrations/0004_solo_analytics_views.sql](supabase/migrations/0004_solo_analytics_views.sql)
+- [supabase/migrations/0005_analytics_rls_followup.sql](supabase/migrations/0005_analytics_rls_followup.sql)
+- [supabase/migrations/0006_secure_guest_boundaries.sql](supabase/migrations/0006_secure_guest_boundaries.sql)
 
 Those migrations create:
 
 - analytics tables such as `games`, `game_initial_state`, `game_events`, `game_rounds`, `game_player_decks`, `game_player_card_presence`, and `game_player_card_usage`
 - the `live_games` table used by guest remote multiplayer
 - analytics views for deck win rates, opening hand win rates, usage summaries, and completed solo runs
+- token-checked RPC boundaries for live games and analytics ingestion; raw
+  tables are not intended to be accessed directly by browser clients
+
+Migration `0006` must be applied before deploying version `0.2.0` or later.
+The current clients call its RPCs and no longer write the underlying tables
+directly.
+
+### Online security scope
+
+Seat and analytics tokens are hashed in the database and checked inside
+security-definer RPCs. Unseated browsers cannot read a live game's state, and
+anonymous browser clients cannot read or write raw analytics tables.
+
+The current online mode is still client-authoritative: both claimed players
+receive the complete game state and may submit the next state. This is suitable
+for friendly guest play, not adversarial or ranked play. Strong hidden-card and
+anti-cheat guarantees require moving complete action/effect validation into a
+server-authoritative command reducer and returning a redacted view to each
+seat.
 
 ### 4. Guest Remote Multiplayer
 
@@ -154,3 +175,29 @@ order by win_rate_pct desc nulls last, total_runs desc, card_id;
 2. Push this project
 3. In GitHub, set `Settings -> Pages -> Source` to `GitHub Actions`
 4. Pushes to `main` will trigger the deploy workflow
+
+## State and rules architecture
+
+- `src/gameData.js` is the canonical card/rank metadata.
+- `src/memory.js` is the canonical model of each player's persistent knowledge.
+- `src/gameState.js` owns state migration and invariant validation.
+- `src/rulesEngine.js` owns the extracted pure state-transition commands.
+- `src/KaizenPoker.jsx` still orchestrates interactive, multi-step card effects.
+  New transitions should move into `rulesEngine.js` as commands instead of
+  adding more direct zone mutation to the component.
+
+Saved and transported state is migrated to schema version 2. Generated build
+artifacts under `dist/` should not be edited directly.
+
+## Verification
+
+```bash
+npm test
+npm run test:cards
+npm run build
+```
+
+The unit suite covers state migration/invariants, deterministic randomness,
+hand evaluation, draw exhaustion, reducer primitives, and Memory semantics.
+The card-effect suite drives all 48 Action effects through the real UI. CI runs
+both suites and a production build.

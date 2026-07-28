@@ -12,6 +12,7 @@ import { spawn, execSync } from "node:child_process";
 import { launchBrowser } from "./edge-launcher.mjs";
 
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:5173/kaizen-poker/";
+const DEV_PORT = new URL(BASE).port || "5173";
 const GAMES = parseInt(process.env.GAMES || "1", 10);
 const OUT = path.resolve("smoke_output");
 const IGNORABLE = [/net::ERR/i, /Failed to load resource/i, /umami/i, /supabase/i];
@@ -26,7 +27,8 @@ let devServer = null;
 const ensureServer = async () => {
   if (await serverUp()) return;
   console.log("dev server not running; starting one...");
-  devServer = spawn("npx", ["vite"], { stdio: "ignore", shell: true });
+  const viteBin=path.resolve("node_modules/vite/bin/vite.js");
+  devServer = spawn(process.execPath,[viteBin,"--host","127.0.0.1","--port",DEV_PORT,"--strictPort"],{stdio:"ignore"});
   for (let i = 0; i < 60; i++) { await sleep(1000); if (await serverUp()) return; }
   throw new Error("dev server never came up at " + BASE);
 };

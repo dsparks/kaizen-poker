@@ -1,10 +1,14 @@
 {
   "name": "kaizen-poker",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "optimize-art": "node scripts/optimize-card-art.mjs",
+    "test": "npm run test:unit",
+    "test:unit": "node scripts/engine-tests.mjs && node scripts/memory-tests.mjs",
+    "test:cards": "node scripts/card-tests.mjs",
+    "test:memory": "node scripts/memory-tests.mjs",
     "smoke": "node scripts/smoke.mjs",
     "predev": "node scripts/optimize-card-art.mjs",
     "prebuild": "node scripts/optimize-card-art.mjs",

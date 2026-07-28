@@ -36,8 +36,13 @@ export async function launchBrowser() {
   let port = null;
   for (let i = 0; i < 60; i++) {
     if (fs.existsSync(portFile)) {
-      port = parseInt(fs.readFileSync(portFile, "utf8").split(/\r?\n/)[0], 10);
-      if (port) break;
+      try{
+        port = parseInt(fs.readFileSync(portFile, "utf8").split(/\r?\n/)[0], 10);
+        if (port) break;
+      }catch{
+        // Chromium can briefly hold the readiness file exclusively on
+        // Windows. Treat that exactly like "not ready yet".
+      }
     }
     await new Promise(r => setTimeout(r, 250));
   }

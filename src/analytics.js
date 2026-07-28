@@ -1,5 +1,5 @@
-const APP_VERSION = "0.1.0";
-const RULES_VERSION = "2026-04-stats-v1";
+const APP_VERSION = "0.2.0";
+const RULES_VERSION = "2026-07-memory-v2";
 const ANALYTICS_SOURCE = "local_hotseat";
 const SOLO_ANALYTICS_SOURCE = "solo_variant";
 const SOLO_ART_ANALYTICS_SOURCE = "solo_art_test";
@@ -91,6 +91,7 @@ export function buildTrackedGame(gs) {
   };
   const tracked = {
     gameId: safeGs._gameId || mkId(),
+    syncToken: mkId(),
     source,
     appVersion: APP_VERSION,
     rulesVersion: RULES_VERSION,

@@ -1,20 +1,23 @@
 // Pure rules engine: hand evaluation, comparison, game-state constructors and
 // round bookkeeping. No React, no DOM.
 import { CARDS, CM, RV, SO, CHALLENGER_LOOKUP, SOLO_TARGET_CHIPS, SOLO_DIFFICULTIES, isSoloMode } from "./gameData.js";
-import { TUTORIAL_INITIAL_DECKS } from "./tutorialScript.js";
+import { TUTORIAL_INITIAL_DECKS } from "./tutorialData.js";
+import { initializeMemories, recordDiscardShuffle, recordDrawKnowledge } from "./memory.js";
+import { GAME_STATE_VERSION } from "./gameState.js";
+import { hashSeed, shuffleFromState } from "./rng.js";
 
 function shuf(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=0|Math.random()*(i+1);[r[i],r[j]]=[r[j],r[i]]}return r}
 function sortC(ids){return[...ids].sort((a,b)=>{const ca=CM[a],cb=CM[b];return(RV[ca.rank]-RV[cb.rank])||SO.indexOf(ca.suit)-SO.indexOf(cb.suit)})}
 function drawCards(gs,player,n){
   // Strip results of any prior draw: a stale `error` would falsely end the
   // game at the next `if(g.error)` check, and stale `drawn` would replay logs.
-  const st={...gs};delete st.error;delete st.drawn;
+  let st={...gs};delete st.error;delete st.drawn;
   const dk=player==="A"?[...st.aDeck]:[...st.bDeck];
   const dc=player==="A"?[...st.aDiscard]:[...st.bDiscard];
   const hand=player==="A"?[...st.aHand]:[...st.bHand];const drawn=[];
   let reshuffled=false;
-  for(let i=0;i<n;i++){if(!dk.length){if(!dc.length)return{...st,error:"DECK_EXHAUSTED"};dk.push(...shuf(dc));dc.length=0;reshuffled=true;}
-    drawn.push(dk.shift());hand.push(drawn[drawn.length-1]);}
+  for(let i=0;i<n;i++){if(!dk.length){if(!dc.length)return{...st,error:"DECK_EXHAUSTED"};st=recordDiscardShuffle(st,player,dc);const shuffled=shuffleFromState(st,dc);st=shuffled.state;dk.push(...shuffled.cards);dc.length=0;reshuffled=true;}
+    drawn.push(dk.shift());hand.push(drawn[drawn.length-1]);st=recordDrawKnowledge(st,player,drawn[drawn.length-1]);}
   if(player==="A"){st.aDeck=dk;st.aDiscard=dc;st.aHand=hand}else{st.bDeck=dk;st.bDiscard=dc;st.bHand=hand}
   if(reshuffled)st._lastReshuffleAt=`${Date.now()}-${player}-${Math.random().toString(16).slice(2,8)}`;
   return{...st,drawn};}
@@ -94,20 +97,22 @@ function getRoundRequirements(gs){
   if(bClose&&!aClose){aDraw=8;aActions=3;}
   return {aActions,bActions,aDraw,bDraw,suddenDeath:aClose||bClose};
 }
-function initGame(mode="hotseat",options={}){const all=shuf(CARDS.map(c=>c.id));
+function initGame(mode="hotseat",options={}){
   const startedAt=new Date().toISOString();
   const gameId=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():`kp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  let seeded={_gameId:gameId,_rngState:hashSeed(options.seed||gameId)};
+  const shuffled=shuffleFromState(seeded,CARDS.map(c=>c.id));seeded=shuffled.state;const all=shuffled.cards;
   const aInitialDeck=all.slice(0,26),bInitialDeck=all.slice(26),aInitialHand=aInitialDeck.slice(0,7),bInitialHand=isSoloMode(mode)?[]:bInitialDeck.slice(0,7);
   const soloDifficulty=isSoloMode(mode)?(options.soloDifficulty||SOLO_DIFFICULTIES.difficult):null;
-  return{mode,aDeck:all.slice(7,26),bDeck:isSoloMode(mode)?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:isSoloMode(mode)?[]:sortC(all.slice(26,33)),
+  return initializeMemories({mode,_stateVersion:GAME_STATE_VERSION,_rngState:seeded._rngState,aDeck:all.slice(7,26),bDeck:isSoloMode(mode)?bInitialDeck:bInitialDeck.slice(7),aHand:sortC(all.slice(0,7)),bHand:isSoloMode(mode)?[]:sortC(all.slice(26,33)),
     aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],scrap:[],aChips:0,bChips:0,round:1,firstPlayer:"A",
     phase:"action",currentPlayer:"A",regularActionsPlayed:0,actionsRequired:2,bonusActions:0,
     log:[],amends:{aFreeze:false,bFreeze:false,aNegate:false,bNegate:false},newCards:[],aMods:[],bMods:[],aForecast:[],bForecast:[],_aReq:2,_bReq:2,_remotePrompt:null,
-    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_soloDifficulty:soloDifficulty,_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)};}
+    _soloTarget:SOLO_TARGET_CHIPS,_soloReveal:null,_soloRevealedCards:[],_soloDifficulty:soloDifficulty,_gameId:gameId,_createdAt:startedAt,_aInitialDeck:aInitialDeck,_bInitialDeck:bInitialDeck,_aInitialHand:sortC(aInitialHand),_bInitialHand:sortC(bInitialHand)});}
 function cloneGs(gs){return JSON.parse(JSON.stringify(gs));}
 function tutorialRoundState(roundNumber,baseState=null){
   const seed=baseState?cloneGs(baseState):initGame("tutorial");
-  return {
+  return initializeMemories({
     ...seed,
     mode:"tutorial",
     round:roundNumber,
@@ -147,6 +152,6 @@ function tutorialRoundState(roundNumber,baseState=null){
     _bInitialDeck:[...TUTORIAL_INITIAL_DECKS.B],
     _aInitialHand:[...TUTORIAL_INITIAL_DECKS.A.slice(0,7)],
     _bInitialHand:[...TUTORIAL_INITIAL_DECKS.B.slice(0,7)],
-  };
+  });
 }
 export { shuf, sortC, drawCards, displayOrder, evalChallenger, isMatchOver, getMatchWinner, getRoundRequirements, initGame, cloneGs, tutorialRoundState };

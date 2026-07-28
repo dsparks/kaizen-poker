@@ -6,10 +6,12 @@
 //
 //   node scripts/card-tests.mjs
 import { spawn, execSync } from "node:child_process";
+import path from "node:path";
 import { launchBrowser } from "./edge-launcher.mjs";
 
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:5173/kaizen-poker/";
-const URL = BASE + "?playtest=1#/hotseat";
+const PAGE_URL = BASE + "?playtest=1#/hotseat";
+const DEV_PORT = new globalThis.URL(BASE).port || "5173";
 const GLYPH = { C: "♣", D: "♦", H: "♥", S: "♠" };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -18,7 +20,8 @@ let devServer = null;
 const ensureServer = async () => {
   if (await serverUp()) return;
   console.log("dev server not running; starting one...");
-  devServer = spawn("npx", ["vite"], { stdio: "ignore", shell: true });
+  const viteBin=path.resolve("node_modules/vite/bin/vite.js");
+  devServer = spawn(process.execPath,[viteBin,"--host","127.0.0.1","--port",DEV_PORT,"--strictPort"],{stdio:"ignore"});
   for (let i = 0; i < 60; i++) { await sleep(1000); if (await serverUp()) return; }
   throw new Error("dev server never came up at " + BASE);
 };
@@ -491,6 +494,7 @@ const TESTS = [
     await sleep(250); const g = await getState(page);
     if (g.aDeck[0] === "9H") fail(`9H still on top: ${g.aDeck}`);
     if (g.aDeck[g.aDeck.length - 1] !== "9H") fail(`9H not on bottom: ${g.aDeck}`);
+    if (g._aMemory?.["9H"]?.position !== g.aDeck.length - 1) fail(`Memory did not retain 9H at the bottom: ${JSON.stringify(g._aMemory?.["9H"])}`);
   } },
   { name: "3D Loot — draw 9H, then discard 2C", run: async (page, base) => {
     await setState(page, actionScenario(base, { aHand: ["3D", "2C"], aDeck: ["9H", "7H"] }));
@@ -526,6 +530,7 @@ const TESTS = [
     await sleep(250); const g = await getState(page);
     if (!g.aDiscard.includes("9H")) fail(`9H not entombed to discard: ${g.aDiscard}`);
     if (g.aDeck.includes("9H")) fail("9H still in deck");
+    for (const id of g.aDeck) if (g._aMemory?.[id]?.zone !== "aDeck") fail(`Memory forgot searched library card ${id}`);
   } },
   { name: "4D Gamble — search 9H to hand, random discard one (structure)", run: async (page, base) => {
     await setState(page, actionScenario(base, { aHand: ["4D", "2C"], aDeck: ["9H", "7H", "6H"] }));
@@ -564,7 +569,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 1 });
   page.on("pageerror", e => pageErrors.push(String(e?.message || e)));
-  await page.goto(URL, { waitUntil: "load", timeout: 60000 });
+  await page.goto(PAGE_URL, { waitUntil: "load", timeout: 60000 });
   const base = await evalUntil(page, () => { const g = window.__kp && window.__kp.getState(); return g && g.aHand ? g : null; }, null, { timeout: 15000 });
   if (!base) throw new Error("playtest bridge / hotseat game never became available");
 

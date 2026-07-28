@@ -32,25 +32,6 @@ function getHeaders() {
   };
 }
 
-async function restUpsert(table, rows, onConflict) {
-  if (!rows || (Array.isArray(rows) && !rows.length) || !isConfigured()) return;
-  const qs = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}${qs}`, {
-    method: "POST",
-    headers: getHeaders(),
-    body: JSON.stringify(rows),
-  });
-  if (!response.ok) {
-    let details = "";
-    try {
-      details = await response.text();
-    } catch {
-      details = "";
-    }
-    throw new Error(`Supabase upsert failed for ${table}: ${response.status}${details ? ` - ${details}` : ""}`);
-  }
-}
-
 function gameRow(tracked) {
   const winnerSlot = tracked.outcome?.winner === "TIE" ? null : tracked.outcome?.winner || null;
   return {
@@ -128,14 +109,29 @@ function profileRows(tracked) {
 
 export async function syncTrackedGame(tracked) {
   if (!tracked || !isConfigured()) return { skipped: true };
+  if(!tracked.syncToken)throw new Error("Tracked game is missing its analytics sync token.");
   const derived = deriveAnalyticsRows(tracked);
-  await restUpsert("player_profiles", profileRows(tracked), "id");
-  await restUpsert("games", [gameRow(tracked)], "id");
-  await restUpsert("game_initial_state", [initialStateRow(tracked)], "game_id");
-  await restUpsert("game_events", eventRows(tracked), "id");
-  await restUpsert("game_rounds", roundRows(tracked), "game_id,round_number");
-  await restUpsert("game_player_decks", derived.decks, "game_id,player_slot");
-  await restUpsert("game_player_card_presence", derived.cardPresence, "game_id,player_slot,card_id");
-  await restUpsert("game_player_card_usage", derived.cardUsage, "game_id,player_slot,card_id");
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/sync_game_analytics`,{
+    method:"POST",
+    headers:getHeaders(),
+    body:JSON.stringify({
+      p_token:tracked.syncToken,
+      p_payload:{
+        profiles:profileRows(tracked),
+        game:gameRow(tracked),
+        initial_state:initialStateRow(tracked),
+        events:eventRows(tracked),
+        rounds:roundRows(tracked),
+        decks:derived.decks,
+        card_presence:derived.cardPresence,
+        card_usage:derived.cardUsage,
+      },
+    }),
+  });
+  if(!response.ok){
+    let details="";
+    try{details=await response.text();}catch{}
+    throw new Error(`Supabase analytics sync failed: ${response.status}${details?` - ${details}`:""}`);
+  }
   return { skipped: false };
 }

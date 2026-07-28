@@ -15,8 +15,8 @@ const jsonHeaders = {
 const isConfigured = () => Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const mkId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `kp-live-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
-function tableUrl(path = "") {
-  return `${SUPABASE_URL}/rest/v1/live_games${path}`;
+function rpcUrl(name){
+  return `${SUPABASE_URL}/rest/v1/rpc/${name}`;
 }
 
 async function readJson(res, fallbackMessage) {
@@ -41,64 +41,58 @@ export function makeSeatToken() {
 
 export async function createLiveGame({ gameId, state, tracked, playerAToken }) {
   if (!isConfigured()) throw new Error("Supabase is not configured for multiplayer.");
-  const row = {
-    id: gameId || mkId(),
-    mode: "online",
-    status: "waiting",
-    state,
-    tracked: tracked || null,
-    version: 1,
-    player_a_token: playerAToken,
-    player_b_token: null,
-  };
-  const res = await fetch(tableUrl(""), {
+  const res = await fetch(rpcUrl("create_live_game"), {
     method: "POST",
     headers: jsonHeaders,
-    body: JSON.stringify(row),
+    body: JSON.stringify({
+      p_game_id:gameId||mkId(),
+      p_state:state,
+      p_tracked:tracked||null,
+      p_player_a_token:playerAToken,
+    }),
   });
   const body = await readJson(res, "Unable to create online game.");
-  return Array.isArray(body) ? body[0] : body;
+  return body;
 }
 
-export async function fetchLiveGame(gameId) {
+export async function fetchLiveGame(gameId,seatToken=null) {
   if (!isConfigured()) throw new Error("Supabase is not configured for multiplayer.");
-  const res = await fetch(tableUrl(`?id=eq.${encodeURIComponent(gameId)}&select=*`), {
-    method: "GET",
-    headers,
+  const res = await fetch(rpcUrl("get_live_game"), {
+    method: "POST",
+    headers:jsonHeaders,
+    body:JSON.stringify({p_game_id:gameId,p_seat_token:seatToken}),
   });
   const body = await readJson(res, "Unable to load online game.");
-  return Array.isArray(body) ? body[0] || null : body;
+  return body||null;
 }
 
 export async function claimSeat(gameId, seat, token) {
   if (!isConfigured()) throw new Error("Supabase is not configured for multiplayer.");
-  const seatColumn = seat === "A" ? "player_a_token" : "player_b_token";
-  const nullFilter = `${seatColumn}=is.null`;
-  const res = await fetch(tableUrl(`?id=eq.${encodeURIComponent(gameId)}&${nullFilter}`), {
-    method: "PATCH",
+  if(seat!=="B")throw new Error("Only the Player B seat can be claimed.");
+  const res = await fetch(rpcUrl("claim_live_game_seat"), {
+    method: "POST",
     headers: jsonHeaders,
-    body: JSON.stringify({ [seatColumn]: token, status: "active" }),
+    body: JSON.stringify({p_game_id:gameId,p_player_b_token:token}),
   });
   const body = await readJson(res, `Unable to claim seat ${seat}.`);
-  return Array.isArray(body) ? body[0] || null : body;
+  return body||null;
 }
 
 export async function updateLiveGame({ gameId, state, tracked, expectedVersion, seat, token, status }) {
   if (!isConfigured()) throw new Error("Supabase is not configured for multiplayer.");
-  const seatColumn = seat === "A" ? "player_a_token" : "player_b_token";
-  const query = `?id=eq.${encodeURIComponent(gameId)}&version=eq.${expectedVersion}&${seatColumn}=eq.${encodeURIComponent(token)}&select=*`;
-  const res = await fetch(tableUrl(query), {
-    method: "PATCH",
+  if(!["A","B"].includes(seat))throw new Error("A claimed seat is required.");
+  const res = await fetch(rpcUrl("update_live_game"), {
+    method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({
-      state,
-      tracked: tracked || null,
-      version: expectedVersion + 1,
-      status: status || "active",
-      updated_at: new Date().toISOString(),
+      p_game_id:gameId,
+      p_seat_token:token,
+      p_expected_version:expectedVersion,
+      p_state:state,
+      p_tracked:tracked||null,
+      p_status:status||"active",
     }),
   });
   const body = await readJson(res, "Unable to update online game.");
-  if (Array.isArray(body) && !body.length) throw new Error("Online game changed in another browser. Resyncing.");
-  return Array.isArray(body) ? body[0] || null : body;
+  return body||null;
 }

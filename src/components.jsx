@@ -1,7 +1,7 @@
 // Shared presentational components: cards, card back, buttons, modals, the
 // flight-ghost layer, victory overlays, and board widgets. Game logic lives in
 // engine.js; the stateful app shell is KaizenPoker.jsx.
-import { Fragment, createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { CARD_BACK_IMAGE_SRC } from "./cardBackImage.js";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
 import { SUITS, SC, SO, RO, CARDS, CM, TI, TC, isSoloMode, SOLO_DIFFICULTIES } from "./gameData.js";
@@ -69,7 +69,12 @@ const Card=memo(function Card({id,selected,onClick,dimmed,small,glow,isNew,onMou
   const artNameShadow=ART_NAME_SHADOW[`${darkSuit?"dark":"light"}_${small?"small":"large"}`];
   return(<div className={`kp-card${small?" kp-card-small":""}${onClick?" kp-card-clickable":""}${selected?" kp-card-selected":""}${isNew?" kp-card-new":""}`}
     data-card-id={id}
+    role={onClick?"button":undefined}
+    tabIndex={onClick?0:undefined}
+    aria-label={onClick?`${c.rank}${SUITS[c.suit]} ${c.name}. ${c.text}`:undefined}
+    aria-pressed={onClick&&selected!==undefined?!!selected:undefined}
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
+    onKeyDown={onClick?(event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();onClick(event);}}):undefined}
     title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:small?8:11,flexShrink:0,position:"relative",
     border:selected?`${small?2:3}px solid #f5b942`:isNew?`${small?2:3}px solid #3bbf7c`:glow?`${small?2:3}px solid ${glow}`:`${small?2:3}px solid ${artMode?"#f4e9d8":"#e8dcc4"}`,
     background:paperBg,
@@ -523,7 +528,7 @@ function Btn({label,bg="#333",onClick,disabled,silent=false}){
   })();
   return(<button className="kp-btn" onClick={e=>{if(disabled)return;if(!silent)playSfx("confirm",{volume:.28});onClick?.(e);}} disabled={disabled}
     style={{padding:"9px 18px",background:disabled?"#23264a":flatBg,fontSize:13,opacity:disabled?0.65:1}}>{label}</button>);}
-function SfxToggle({enabled,onToggle}){return(<button className="kp-pill" onClick={()=>{playSfx(enabled?"error":"confirm",{volume:.24});onToggle();}} style={{padding:"4px 12px",fontSize:10,color:enabled?"#a9f0c8":"#c8c4d8",borderColor:enabled?"#3bbf7c88":undefined,background:enabled?"#1a3a2e":undefined}}>SFX {enabled?"On":"Off"}</button>);}
+function SfxToggle({enabled,onToggle}){return(<button className="kp-pill" aria-pressed={enabled} onClick={()=>{playSfx(enabled?"error":"confirm",{volume:.24});onToggle();}} style={{padding:"4px 12px",fontSize:10,color:enabled?"#a9f0c8":"#c8c4d8",borderColor:enabled?"#3bbf7c88":undefined,background:enabled?"#1a3a2e":undefined}}>SFX {enabled?"On":"Off"}</button>);}
 function Chip({filled,color,label,active}){return <div style={{width:22,height:22,borderRadius:"50%",display:"grid",placeItems:"center",position:"relative",
   background:filled?`radial-gradient(circle at 35% 30%,#fff8,${color} 25%,${color}dd 58%,#0008 100%)`:"radial-gradient(circle at 35% 30%,#32404d,#18202a 68%,#081018 100%)",
   border:`2px solid ${filled?`${color}aa`:"#445262"}`,boxShadow:filled?`0 0 14px ${color}55, inset 0 1px 0 #fff8, 0 6px 12px #0005`:"inset 0 1px 0 #ffffff14, 0 4px 10px #0004",
@@ -533,15 +538,28 @@ function Chip({filled,color,label,active}){return <div style={{width:22,height:2
 </div>;}
 
 // Draggable Modal
-function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});
+function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});const shellRef=useRef(null);const titleId=useId();
+  useLayoutEffect(()=>{
+    const previous=document.activeElement;
+    shellRef.current?.focus({preventScroll:true});
+    return()=>previous?.focus?.({preventScroll:true});
+  },[]);
+  const trapFocus=event=>{
+    if(event.key!=="Tab")return;
+    const focusable=[...(shellRef.current?.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')||[])];
+    if(!focusable.length){event.preventDefault();return;}
+    const first=focusable[0],last=focusable[focusable.length-1];
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
   const onD=e=>{dr.current=true;off.current={x:e.clientX-pos.x,y:e.clientY-pos.y};
     const mv=e2=>{if(dr.current)setPos({x:e2.clientX-off.current.x,y:e2.clientY-off.current.y})};
     const up=()=>{dr.current=false;window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up)};
     window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(14,5,14,0.66)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-    <div className="kp-modal-shell kp-panel" style={{padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",left:pos.x,top:pos.y,position:"relative",animation:"revealRise .26s cubic-bezier(.26,1.36,.42,1)"}}>
+    <div ref={shellRef} className="kp-modal-shell kp-panel" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={trapFocus} style={{padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",left:pos.x,top:pos.y,position:"relative",animation:"revealRise .26s cubic-bezier(.26,1.36,.42,1)"}}>
       <div onMouseDown={onD} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,cursor:"grab",userSelect:"none",padding:"0 0 8px",borderBottom:"2px solid #00000044"}}>
-        <div style={{fontSize:17,color:"#f5b942",fontFamily:FONT_DISPLAY,letterSpacing:.5,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{title}</div>
+        <div id={titleId} style={{fontSize:17,color:"#f5b942",fontFamily:FONT_DISPLAY,letterSpacing:.5,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{title}</div>
         <span style={{fontSize:9,color:"#8d89a8"}}>drag to move</span></div>
       {children}</div></div>);}
 
@@ -575,15 +593,12 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
     <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg="#f5b942" onClick={()=>onPick(pk)}/></Modal>);}
 
-// Deck memory tracker — shows cards whose current location the player can reasonably know
+// Persistent player memory — shows only information that player has learned.
 function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
   const canView=player===viewerPlayer||(isSoloMode(gs.mode)&&player==="B");
   if(!canView)return null;
   const initialDeck=(player==="A"?gs._aInitialDeck:gs._bInitialDeck)||[];
-  const currentDeck=player==="A"?gs.aDeck:gs.bDeck;
-  const currentHand=player==="A"?gs.aHand:gs.bHand;
-  const currentPlay=player==="A"?gs.aPlay:gs.bPlay;
-  const currentDiscard=player==="A"?gs.aDiscard:gs.bDiscard;
+  const memory=(player==="A"?gs._aMemory:gs._bMemory)||{};
   const easySoloTopId=isSoloMode(gs.mode)&&player==="B"&&gs._soloDifficulty===SOLO_DIFFICULTIES.easy&&gs.phase==="action"
     ?(gs.bDeck[0]||null)
     :null;
@@ -592,30 +607,42 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
     :new Set();
   const zoneMeta={
     H:{label:"Hand",color:"#f5d38f",background:"#f5d38f24",border:"#f5d38f55"},
+    h:{label:"Opponent Hand",color:"#c9b590",background:"#c9b59018",border:"#c9b59044"},
     P:{label:"In Play",color:"#7ce7bc",background:"#7ce7bc1f",border:"#7ce7bc55"},
+    p:{label:"Opponent Play",color:"#64bd9d",background:"#64bd9d18",border:"#64bd9d44"},
     D:{label:"Deck",color:"#74b7ff",background:"#74b7ff22",border:"#74b7ff55"},
+    O:{label:"Opponent Deck",color:"#789bc4",background:"#789bc418",border:"#789bc444"},
+    X:{label:"Deck / Hand Uncertain",color:"#a5a9bc",background:"#a5a9bc18",border:"#a5a9bc44"},
     d:{label:"Discard",color:"#ff9f8d",background:"#ff9f8d20",border:"#ff9f8d55"},
+    o:{label:"Opponent Discard",color:"#d37f71",background:"#d37f7118",border:"#d37f7144"},
     S:{label:"Scrap",color:"#d4a6ff",background:"#d4a6ff22",border:"#d4a6ff55"},
     R:{label:"Revealed",color:"#96e6ff",background:"#96e6ff1d",border:"#96e6ff55"},
   };
+  const ownPrefix=player.toLowerCase();
+  const oppPrefix=player==="A"?"b":"a";
+  const displayZone=zone=>{
+    if(zone==="scrap")return"S";
+    if(zone===`${ownPrefix}Hand`)return"H";
+    if(zone===`${oppPrefix}Hand`)return"h";
+    if(zone===`${ownPrefix}Play`)return"P";
+    if(zone===`${oppPrefix}Play`)return"p";
+    if(zone===`${ownPrefix}Deck`)return"D";
+    if(zone===`${oppPrefix}Deck`)return"O";
+    if(zone===`${ownPrefix}Hidden`||zone===`${oppPrefix}Hidden`)return"X";
+    if(zone===`${ownPrefix}Discard`)return"d";
+    if(zone===`${oppPrefix}Discard`)return"o";
+    return null;
+  };
   const getMemoryZone=id=>{
-    if(currentHand.includes(id))return"H";
-    if(currentPlay.some(a=>a?.id===id))return"P";
-    if(currentDiscard.includes(id))return"d";
-    if(gs.scrap.includes(id))return"S";
+    const stored=displayZone(memory[id]?.zone);
+    if(stored)return stored;
     if(easySoloTopId===id)return"D";
     if(revealedSoloSet.has(id))return"R";
     return null;
   };
-  const knownCards=initialDeck.filter(id=>getMemoryZone(id));
-  const memoryCounts={
-    H:knownCards.filter(id=>getMemoryZone(id)==="H").length,
-    P:knownCards.filter(id=>getMemoryZone(id)==="P").length,
-    D:currentDeck.length,
-    d:knownCards.filter(id=>getMemoryZone(id)==="d").length,
-    S:knownCards.filter(id=>getMemoryZone(id)==="S").length,
-    R:knownCards.filter(id=>getMemoryZone(id)==="R").length,
-  };
+  const knownCards=CARDS.map(card=>card.id).filter(id=>getMemoryZone(id));
+  const shownZones=["H","h","P","p","D","O","X","d","o","S","R"].filter(key=>knownCards.some(id=>getMemoryZone(id)===key));
+  const memoryCounts=Object.fromEntries(shownZones.map(key=>[key,knownCards.filter(id=>getMemoryZone(id)===key).length]));
   const clr=player==="A"?"#ff5a4e":"#34a3ff";
   if(!show)return(<button onClick={()=>setShow(true)} style={{padding:"5px 12px 6px",borderRadius:9,fontSize:11,fontFamily:FONT_DISPLAY,letterSpacing:.4,
     border:`2px solid ${clr}aa`,background:"#12142a",color:clr,cursor:"pointer",boxShadow:"0 3px 0 rgba(0,0,0,.35)",transition:"background .12s, color .12s"}}>{player} Memory</button>);
@@ -625,21 +652,19 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
         <span style={{color:clr,fontWeight:800,letterSpacing:.8,textTransform:"uppercase"}}>{player} Memory</span>
         <span style={{fontSize:9,color:"#8d89a8"}}>{knownCards.length} card{knownCards.length!==1?"s":""} currently tracked</span>
       </div>
-      <button onClick={()=>setShow(false)} style={{background:"none",border:"none",color:"#8d89a8",cursor:"pointer",fontSize:12}}>x</button></div>
+      <button onClick={()=>setShow(false)} aria-label={`Close Player ${player} memory`} style={{background:"none",border:"none",color:"#8d89a8",cursor:"pointer",fontSize:12}}>x</button></div>
     <div style={{display:"grid",gap:8}}>
       <div style={{display:"grid",gridTemplateColumns:"18px repeat(13, minmax(18px, 1fr))",gap:3,alignItems:"center",minWidth:320}}>
         <div/>
         {RO.map(rank=><div key={`head-${rank}`} style={{fontSize:10,color:"#a8a4c0",textAlign:"center",fontWeight:700}}>{rank}</div>)}
         {SO.map(suit=><Fragment key={`row-${suit}`}>
           <div style={{fontSize:12,color:SC[suit],textAlign:"center",fontWeight:900,textShadow:`0 0 10px ${SC[suit]}44`}}>{SUITS[suit]}</div>
-          {RO.map(rank=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===suit);const inDeck=initialDeck.includes(card.id);const zone=inDeck?getMemoryZone(card.id):null;const meta=zone?zoneMeta[zone]:null;
+          {RO.map(rank=>{const card=CARDS.find(c=>c.rank===rank&&c.suit===suit);const inDeck=initialDeck.includes(card.id);const zone=getMemoryZone(card.id);const meta=zone?zoneMeta[zone]:null;const topKnown=memory[card.id]?.position===0;
             return <div
               key={card.id}
-              title={!inDeck
-                ?`${card.rank}${SUITS[card.suit]} is not part of ${player}'s deck`
-                :zone
-                  ?`${card.name} (${card.rank}${SUITS[card.suit]}) - ${meta.label}`
-                  :`${card.name} (${card.rank}${SUITS[card.suit]}) - Unknown`}
+              title={zone
+                ?`${card.name} (${card.rank}${SUITS[card.suit]}) - ${meta.label}${topKnown?" (top card)":""}`
+                :`${card.name} (${card.rank}${SUITS[card.suit]}) - Unknown${inDeck?"; began in this player's deck":""}`}
               style={{
                 height:18,
                 borderRadius:4,
@@ -651,7 +676,7 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
                 fontSize:10,
                 fontWeight:800,
                 boxShadow:zone?`inset 0 1px 0 #ffffff10, 0 0 0 1px ${meta.border}22`:"inset 0 1px 0 #ffffff05",
-                opacity:inDeck?1:.18,
+                opacity:zone?1:inDeck?0.62:0.18,
                 letterSpacing:.2,
                 userSelect:"none"
               }}
@@ -659,7 +684,7 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
         </Fragment>)}
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-        {["H","P","D","d","S",...(memoryCounts.R?["R"]:[])].map(key=><div key={key} title={zoneMeta[key].label} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 7px",borderRadius:999,border:`1px solid ${zoneMeta[key].border}`,background:zoneMeta[key].background,boxShadow:"inset 0 1px 0 #ffffff10"}}>
+        {shownZones.map(key=><div key={key} title={zoneMeta[key].label} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 7px",borderRadius:999,border:`1px solid ${zoneMeta[key].border}`,background:zoneMeta[key].background,boxShadow:"inset 0 1px 0 #ffffff10"}}>
           <span style={{minWidth:12,textAlign:"center",fontSize:10,fontWeight:900,color:zoneMeta[key].color}}>{key}</span>
           <span style={{fontSize:9,color:"#c2d0dc"}}>{zoneMeta[key].label}</span>
           <span style={{fontSize:9,color:"#8d89a8"}}>{memoryCounts[key]||0}</span>
@@ -671,7 +696,7 @@ function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false)
 function PublicZones({gs,extraControls,onToggleZone,canToggleZone,spotlightZone}){const[exp,setExp]=useState(null);
   const zones=[{key:"scrap",label:"Scrap",cards:gs.scrap,color:"#a86ef0"},{key:"aDiscard",label:"A Discard",cards:gs.aDiscard,color:"#ff5a4e"},{key:"bDiscard",label:"B Discard",cards:gs.bDiscard,color:"#34a3ff"}];
   return(<div><div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-    {zones.map(z=>{const enabled=canToggleZone?canToggleZone(z.key):true;const spotlight=spotlightZone===z.key;const open=exp===z.key;return(<button key={z.key} data-zone={z.key} onClick={()=>{if(!enabled)return;const next=open?null:z.key;setExp(next);if(next)onToggleZone?.(z.key);}} style={{padding:"5px 12px 6px",borderRadius:9,fontSize:11,fontFamily:FONT_DISPLAY,letterSpacing:.4,cursor:enabled?"pointer":"default",
+    {zones.map(z=>{const enabled=canToggleZone?canToggleZone(z.key):true;const spotlight=spotlightZone===z.key;const open=exp===z.key;return(<button key={z.key} data-zone={z.key} aria-expanded={open} onClick={()=>{if(!enabled)return;const next=open?null:z.key;setExp(next);if(next)onToggleZone?.(z.key);}} style={{padding:"5px 12px 6px",borderRadius:9,fontSize:11,fontFamily:FONT_DISPLAY,letterSpacing:.4,cursor:enabled?"pointer":"default",
       border:`2px solid ${open||spotlight?z.color:z.color+"aa"}`,background:open?z.color:spotlight?z.color+"33":"#12142a",color:open?"#fff":z.color,textShadow:open?"0 1px 0 rgba(0,0,0,.4)":"none",opacity:enabled?1:0.45,
       boxShadow:spotlight?`0 3px 0 rgba(0,0,0,.35), 0 0 16px ${z.color}66`:"0 3px 0 rgba(0,0,0,.35)",animation:spotlight?"pulse 1.4s infinite":"none",transition:"background .12s, color .12s, transform .08s"}}>{z.label} <span style={{opacity:.8}}>({z.cards.length})</span></button>);})}
     {extraControls}

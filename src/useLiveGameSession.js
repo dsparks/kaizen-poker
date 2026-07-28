@@ -34,7 +34,7 @@ export function useLiveGameSession({gameTransport,onTrackedState}){
     stopPolling();
     pollRef.current=setInterval(async()=>{
       try{
-        const row=await fetchLiveGame(gameId);
+        const row=await fetchLiveGame(gameId,sessionRef.current.token);
         if(!row?.state)return;
         const rowVersion=row.version||1;
         const localVersion=sessionRef.current.version||1;
@@ -70,7 +70,7 @@ export function useLiveGameSession({gameTransport,onTrackedState}){
         console.error("Live game update failed",err);
         setOnlineError(err.message||"Live update failed.");
         try{
-          const fresh=await fetchLiveGame(session.gameId);
+          const fresh=await fetchLiveGame(session.gameId,session.token);
           if(fresh?.state){
             session.version=fresh.version||session.version;
             gameTransport.commit(fresh.state);
