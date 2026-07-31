@@ -208,7 +208,12 @@ const CARD_BACK_LEAVES=[
   {x:87,y:95,s:.28,r:48,t:"heart",gold:true,o:.95},
 ];
 function CardBack({width=68,height=95,style}){
-  return(<div className="kp-cardback" style={{width,height,borderRadius:6,flexShrink:0,background:"radial-gradient(circle at 50% 32%,#8d2433 0%,#5c1626 55%,#3a0f1d 100%)",border:"2px solid #f4e9d866",boxShadow:"0 4px 0 rgba(0,0,0,.35), 0 8px 18px #00000033",overflow:"hidden",position:"relative",...style}}>
+  // The placeholder SVG is crimson, so it wants the crimson field and the
+  // translucent cream rim. The printed art is cream paper with its own inked
+  // frame: over that, the same rim muddies to mauve — so it gets a paper
+  // ground and a thin ink edge instead.
+  const art=!!CARD_BACK_IMAGE_SRC;
+  return(<div className="kp-cardback" style={{width,height,borderRadius:6,flexShrink:0,background:art?"#f4ece0":"radial-gradient(circle at 50% 32%,#8d2433 0%,#5c1626 55%,#3a0f1d 100%)",border:art?"1px solid #14181c8c":"2px solid #f4e9d866",boxShadow:"0 4px 0 rgba(0,0,0,.35), 0 8px 18px #00000033",overflow:"hidden",position:"relative",...style}}>
     {CARD_BACK_IMAGE_SRC
       ?<img src={CARD_BACK_IMAGE_SRC} alt="" draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:"inherit",userSelect:"none",pointerEvents:"none"}}/>
       :<svg viewBox="0 0 120 168" width="100%" height="100%" style={{display:"block"}} aria-hidden="true">

@@ -6,5 +6,9 @@ dist
 web_art
 # Smoke-suite screenshots (npm run smoke)
 smoke_output
+# Card back / logo trial renders (~60 MB of explorations). The chosen design
+# ships from card_back/; brand/README.md and its two comparison sheets are
+# tracked, so the write-up survives without the rejected concepts.
+brand/concepts
 # Per-machine Claude Code permission grants
 .claude/settings.local.json
