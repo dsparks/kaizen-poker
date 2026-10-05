@@ -2,7 +2,7 @@
 // flight-ghost layer, victory overlays, and board widgets. Game logic lives in
 // engine.js; the stateful app shell is KaizenPoker.jsx.
 import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { CARD_BACK_IMAGE_SRC } from "./cardBackImage.js";
+import { CARD_BACK_IMAGE_SRC, cardBackSrcFor } from "./cardBackImage.js";
 import { getCardIllustrationSrc } from "./cardImageMap.js";
 import { SUITS, SC, SO, RO, CARDS, CM, TI, TC, isSoloMode, SOLO_DIFFICULTIES } from "./gameData.js";
 import { evalHand, shuf, sortC } from "./engine.js";
@@ -170,7 +170,7 @@ function FaceDownActionSlot({id,canPeek=false,copySticker}){const[hover,setHover
       onMouseMove={canPeek?e=>setPos({x:e.clientX,y:e.clientY}):undefined}
       onClick={canPeek&&IS_TOUCH_DEVICE?e=>{setPos({x:e.clientX,y:e.clientY});setHover(h=>!h);}:undefined}
       style={{position:"relative",width:68,height:95,cursor:canPeek?"help":"default"}}>
-      <CardBack/>
+      <CardBack variant={id}/>
       <div style={{position:"absolute",left:4,right:4,bottom:4,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",color:"#f4e9d8cc",background:"#2a0d18c0",borderRadius:5,padding:"2px 0",pointerEvents:"none"}}>{canPeek?(IS_TOUCH_DEVICE?"Tap to peek":"Hover to peek"):"Face-down"}</div>
     </div>
     {canPeek&&hover&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
@@ -207,15 +207,16 @@ const CARD_BACK_LEAVES=[
   {x:20,y:88,s:.26,r:-30,t:"leaf",o:.8},
   {x:87,y:95,s:.28,r:48,t:"heart",gold:true,o:.95},
 ];
-function CardBack({width=68,height=95,style}){
+function CardBack({width=68,height=95,style,variant=0}){
   // The placeholder SVG is crimson, so it wants the crimson field and the
-  // translucent cream rim. The printed art is cream paper with its own inked
-  // frame: over that, the same rim muddies to mauve — so it gets a paper
-  // ground and a thin ink edge instead.
+  // translucent cream rim. The stamped art is white bristol with black ink:
+  // over that, the same rim muddies — so it gets a paper ground and a thin
+  // ink edge instead. `variant` picks one of the hand-stamped impressions.
   const art=!!CARD_BACK_IMAGE_SRC;
-  return(<div className="kp-cardback" style={{width,height,borderRadius:6,flexShrink:0,background:art?"#f4ece0":"radial-gradient(circle at 50% 32%,#8d2433 0%,#5c1626 55%,#3a0f1d 100%)",border:art?"1px solid #14181c8c":"2px solid #f4e9d866",boxShadow:"0 4px 0 rgba(0,0,0,.35), 0 8px 18px #00000033",overflow:"hidden",position:"relative",...style}}>
-    {CARD_BACK_IMAGE_SRC
-      ?<img src={CARD_BACK_IMAGE_SRC} alt="" draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:"inherit",userSelect:"none",pointerEvents:"none"}}/>
+  const src=art?cardBackSrcFor(variant):null;
+  return(<div className="kp-cardback" style={{width,height,borderRadius:6,flexShrink:0,background:art?"#f9f9f6":"radial-gradient(circle at 50% 32%,#8d2433 0%,#5c1626 55%,#3a0f1d 100%)",border:art?"1px solid #14181c8c":"2px solid #f4e9d866",boxShadow:"0 4px 0 rgba(0,0,0,.35), 0 8px 18px #00000033",overflow:"hidden",position:"relative",...style}}>
+    {src
+      ?<img src={src} alt="" draggable={false} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:"inherit",userSelect:"none",pointerEvents:"none"}}/>
       :<svg viewBox="0 0 120 168" width="100%" height="100%" style={{display:"block"}} aria-hidden="true">
       <defs>
         <mask id="kpBonsaiPads">
@@ -287,7 +288,7 @@ function FlightGhost({flight,onDone}){
   },[]);
   return(<div ref={ref} data-flight-ghost="1" className="kp-flight" style={{position:"fixed",left:0,top:0,zIndex:1300,pointerEvents:"none",transformOrigin:"top left",willChange:"transform,opacity",filter:"drop-shadow(0 8px 14px rgba(0,0,0,.4))",transform:`translate(${flight.from.left}px,${flight.from.top}px) scale(${flight.from.width/68},${flight.from.height/95})`}}>
     {flight.back
-      ?<CardBack style={{boxShadow:"0 4px 0 rgba(0,0,0,.3)"}}/>
+      ?<CardBack variant={flight.id} style={{boxShadow:"0 4px 0 rgba(0,0,0,.3)"}}/>
       :<Card id={flight.id} small/>}
   </div>);
 }
@@ -524,14 +525,14 @@ function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){ret
 </div>;}
 function HandBadge({ids,mods,delay}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span key={r.handName} style={{display:"inline-block",padding:"4px 14px",borderRadius:9,background:"#12142a",border:`2px solid ${c}`,color:c,fontWeight:400,fontSize:13,fontFamily:FONT_DISPLAY,letterSpacing:.6,whiteSpace:"nowrap",boxShadow:`0 3px 0 rgba(0,0,0,.4), 0 0 14px ${c}33`,animation:`scorePunch .42s cubic-bezier(.26,1.5,.42,1) ${delay||"0s"} backwards`}}>{r.handName}</span>;}
-function Btn({label,bg="#333",onClick,disabled,silent=false}){
+function Btn({label,bg="#333",onClick,disabled,silent=false,autoFocus=false}){
   // Normalize legacy bg values (gradients, "#333" secondaries) into flat stamped fills.
   const flatBg=(()=>{
     if(bg==="#333"||bg==="#555")return "#41477a";
     const m=typeof bg==="string"?bg.match(/#[0-9a-fA-F]{6}/):null;
     return m?m[0]:bg;
   })();
-  return(<button className="kp-btn" onClick={e=>{if(disabled)return;if(!silent)playSfx("confirm",{volume:.28});onClick?.(e);}} disabled={disabled}
+  return(<button className="kp-btn" onClick={e=>{if(disabled)return;if(!silent)playSfx("confirm",{volume:.28});onClick?.(e);}} disabled={disabled} autoFocus={autoFocus}
     style={{padding:"9px 18px",background:disabled?"#23264a":flatBg,fontSize:13,opacity:disabled?0.65:1}}>{label}</button>);}
 function SfxToggle({enabled,onToggle}){return(<button className="kp-pill" aria-pressed={enabled} onClick={()=>{playSfx(enabled?"error":"confirm",{volume:.24});onToggle();}} style={{padding:"4px 12px",fontSize:10,color:enabled?"#a9f0c8":"#c8c4d8",borderColor:enabled?"#3bbf7c88":undefined,background:enabled?"#1a3a2e":undefined}}>SFX {enabled?"On":"Off"}</button>);}
 function Chip({filled,color,label,active}){return <div style={{width:22,height:22,borderRadius:"50%",display:"grid",placeItems:"center",position:"relative",

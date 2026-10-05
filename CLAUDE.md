@@ -55,9 +55,14 @@ file back into the bundle.
 - `USE_ILLUSTRATED_CARDS` (top of `src/KaizenPoker.jsx`) gates illustrated vs
   HTML card faces. The solo test mode (`#/solo-artless`) always renders the
   opposite of the default so both faces stay previewable.
-- The card back is `CardBack` in `KaizenPoker.jsx`: it auto-uses an image from
+- The card back is `CardBack` in `components.jsx`: it auto-uses the images in
   `card_back/` (via the pipeline above) and falls back to a placeholder SVG
-  emblem when that folder is empty.
+  emblem when that folder is empty. The current backs are 8 unique "Office
+  Black" rubber-stamp impressions of the bonsai; each back picks one by a
+  stable key (`variant`), so piles don't look cloned. They were rendered by the
+  stamp generator saved at
+  `D:\Dropbox\538\poker_deckbuilder\card_back_options\stamped-card-backs.html`
+  (recipe B, batch-1 seeds, full-bleed export).
 - David prefers generated painterly art for hero/identity assets; hand-built
   SVG is welcome for UI chrome only.
 - **Verification: run `npm run smoke`.** (If running as an agent: disable the
