@@ -379,6 +379,13 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
   .kp-gallery-preview-mobile span { font: 12px var(--font-body); text-transform: uppercase; letter-spacing: 1px; }
 }
 
+/* Phone landscape (~390px tall): full 180x252 art cards push the hand below the
+   fold. Zoom them down so the cards you play stay on screen; tap-to-inspect
+   still shows the full card. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .kp-hand-panel .kp-card:not(.kp-card-small) { zoom: 0.62; }
+}
+
 @media (max-width: 600px) {
   .kp-game-header { padding: 7px 8px !important; gap: 6px !important; }
   .kp-game-header .kp-wordmark { width: 100%; font-size: 17px !important; }

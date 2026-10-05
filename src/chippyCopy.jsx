@@ -24,7 +24,7 @@ export const CHIPPY_COPY = {
     complete: {
       title: "Tutorial Complete",
       message:
-        "That's the tutorial! You know enough to play a real game now. Press MENU whenever you're ready to start one.",
+        "That's the tutorial! You know enough to play a real game now. Take on the Challenger solo, or grab a friend for a hotseat game on this device.",
     },
     fallback: {
       title: "Tutorial",
@@ -34,7 +34,7 @@ export const CHIPPY_COPY = {
       firstAction: {
         title: "First Action",
         message:
-          "Hi, I'm Chippy! I'll walk you through your first three rounds.\nEach round, both players take two Actions, then both hands are scored. Let's start simple: click Loot to play it as your first Action.",
+          "Hi, I'm Chippy! I'll walk you through your first three rounds.\nEach round, both players take two Actions, then both hands are scored; the better poker hand wins a chip, and the first player to 7 chips wins the game. Let's start simple: click Loot to play it as your first Action.",
       },
       drawThenDiscard: {
         title: "Draw, Then Discard",
@@ -67,7 +67,7 @@ export const CHIPPY_COPY = {
       roundComplete: {
         title: "Round One Complete",
         message:
-          "A Full House in round one — strong start. Buff turned two pair into something much bigger. Press Next Round and I'll show you face-down plays.",
+          "A Full House in round one — strong start, and that's your first chip. Buff turned two pair into something much bigger.\nBetween rounds, everything in your hand and in play goes to your discard, and you draw a fresh seven. When your deck runs out, your discard is shuffled into a new deck. Press Next Round and I'll show you face-down plays.",
       },
     },
     round2: {
@@ -107,7 +107,7 @@ export const CHIPPY_COPY = {
       faceDownBasics: {
         title: "Face-Down Basics",
         message:
-          "That's the takeaway: when none of your cards' abilities appeal, a face-down play is always a solid fallback. Press Next Round.",
+          "That's the takeaway: when none of your cards' abilities appeal, a face-down play is always a solid fallback.\nTwo safety nets while you learn: Undo takes back an Action that didn't reveal anything new, and Actions that do reveal information (like drawing) ask you to confirm with Play It first. Press Next Round.",
       },
     },
     round3: {
@@ -158,7 +158,7 @@ export const CHIPPY_COPY = {
       wrapUp: {
         title: "Tutorial Wrap-Up",
         message:
-          "And that's the basics! There's a lot more to discover, but you're ready for a real game. Press Finish Tutorial.",
+          "And that's the basics! A few last rules for real games:\n• Sudden death: when a player reaches 6 chips, their opponent draws an extra card and takes an extra Action that round.\n• If you ever need to draw and your deck and discard are both empty, you lose — so don't scrap your deck too thin.\n• The Memory panel tracks what you've seen of each deck, so you don't have to.\nPress Finish Tutorial.",
       },
     },
   },

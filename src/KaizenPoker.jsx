@@ -137,6 +137,8 @@ export default function KaizenPoker(){
   // re-render the app unless the layout mode actually flips.
   const[isMobileLandscape,setIsMobileLandscape]=useState(computeIsMobileLandscape);
   const[mobileLogOpen,setMobileLogOpen]=useState(false);
+  // Hotseat: which player last tapped "ready" on the pass-the-device cover.
+  const[hotseatReadyPlayer,setHotseatReadyPlayer]=useState(null);
   const[analyticsSyncState,setAnalyticsSyncState]=useState(()=>({
     ...getAnalyticsDebugInfo(),
     lastAttemptAt:null,
@@ -445,6 +447,15 @@ export default function KaizenPoker(){
     const free=queued.filter(m=>!m.sourceId);
     return [...free,...getP(g,pl).flatMap(a=>a.faceDown?[]:queued.filter(m=>m.sourceId===a.id))];
   };
+  // Net rank/suit change on one card from stacked Modifies (null fields = unchanged).
+  const foldMods=(mods,id)=>{const ms=mods.filter(m=>m.target===id);
+    return ms.length?ms.reduce((c,m)=>({rank:m.rank||c.rank,suit:m.suit||c.suit}),{rank:null,suit:null}):null;};
+  // A deck-out ends the game outside the showdown: record the winner explicitly
+  // and drop any stale showdown data so the end screen can't show last round's result.
+  const clearRevealForNoDrawEnd=(g,winner,loser)=>{
+    g._winner=winner;g._endReason=`${loser} couldn't draw`;
+    g._revealAE=null;g._revealBE=null;g._revealWinner=null;
+  };
   const drawCardsChecked=(base,player,count)=>{
     let next=drawCards(base,player,count);
     if(!next.error)return next;
@@ -454,6 +465,7 @@ export default function KaizenPoker(){
       next=L(next,`${player} can't draw the required card${count===1?"":"s"}; the tutorial ends.`);
     }else{
       next.phase="gameOver";next.currentPlayer=winner;
+      clearRevealForNoDrawEnd(next,winner,player);
       next=L(next,`${player} can't draw the required card${count===1?"":"s"}. Player ${winner} wins!`);
     }
     trackGameFinished(next,winner);commitGameState(next);
@@ -488,7 +500,7 @@ export default function KaizenPoker(){
     else if(mode==="tutorial")g=L(g,`Tutorial Opponent: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);
     else g=L(g,`B: ${g.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]} ${CM[id].name}`).join(", ")}`);return g;};
   const buildPassiveModeState=mode=>({mode,phase:"browse",round:1,firstPlayer:"A",currentPlayer:"A",aDeck:[],bDeck:[],aHand:[],bHand:[],aDiscard:[],bDiscard:[],aPlay:[],bPlay:[],log:[],_createdAt:new Date().toISOString()});
-  const startGame=(mode="hotseat",{replaceUrl=false,soloDifficulty=null}={})=>{trackUmami("mode_started",{mode,entry:"local"});flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode,soloDifficulty?{soloDifficulty}:{});setSoloIntroVisible(isSoloMode(mode));setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
+  const startGame=(mode="hotseat",{replaceUrl=false,soloDifficulty=null}={})=>{trackUmami("mode_started",{mode,entry:"local"});flushTrackedSession(gs,"mode_switch");const g=buildFreshGame(mode,soloDifficulty?{soloDifficulty}:{});setSoloIntroVisible(isSoloMode(mode));setHotseatReadyPlayer(null);setTracked(buildTrackedGame(g));commitGameState(g);updateHashForMode(mode,{replace:replaceUrl});};
   const resumeLocalGame=()=>{const saved=loadLocalGameSnapshot();if(!saved)return;trackUmami("mode_resumed",{mode:saved.mode||"hotseat"});flushTrackedSession(gs,"mode_switch");setSoloIntroVisible(false);setTracked(buildTrackedGame(saved));commitGameState(saved);updateHashForMode(saved.mode||"hotseat");};
   const startGallery=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"gallery",entry:"menu"});flushTrackedSession(gs,"mode_switch");const galleryState=buildPassiveModeState("gallery");setTracked(buildTrackedGame(galleryState));setSoloIntroVisible(false);setGalleryHoverId(null);setGalleryChippyDismissed(false);commitGameState(galleryState);updateHashForMode("gallery",{replace:replaceUrl});};
   const startRules=({replaceUrl=false}={})=>{trackUmami("mode_started",{mode:"rules",entry:"menu"});flushTrackedSession(gs,"mode_switch");const rulesState=buildPassiveModeState("rules");setTracked(buildTrackedGame(rulesState));setSoloIntroVisible(false);setGalleryHoverId(null);commitGameState(rulesState);updateHashForMode("rules",{replace:replaceUrl});};
@@ -897,28 +909,45 @@ export default function KaizenPoker(){
     g2=L(g2,`${player} discards ${CM[cardId].name}`);commitGameState(g2);
     checkCap(g2,player,cardId,then);};
 
-  const offerRefresh=(g,done)=>{const p=g.currentPlayer;if(!getH(g,p).length){done(g);return;}
-    const opts=[{label:"Refresh (discard, then draw)",key:"refresh"}];
-    if(g.scrap.includes("QH"))opts.push({label:"Sift (draw, then discard)",key:"sift"});
-    if(g.scrap.includes("QS"))opts.push({label:"Declutter (scrap from discard)",key:"declutter"});
-    opts.push({label:"Skip",key:"skip"});
-    setModal({type:"refreshOpts",opts,onChoice:key=>{setModal(null);
-      if(key==="skip"){done(g);return;}
-      if(key==="refresh"){setModal({type:"pickDiscard",hand:getH(g,p),title:"Refresh: Discard (then draw)",
+  // A player Refreshes (discard, then draw). Sift (QH) and Declutter (QS) apply to
+  // *every* Refresh while scrapped — the face-down option and Rummage alike.
+  // optional: the face-down Refresh may be skipped; Rummage's may not.
+  // Declutter is a scrap, so Freeze blocks it.
+  const offerRefresh=(g,done,{player=g.currentPlayer,optional=true,title="Face-Down Options",source="refresh"}={})=>{const p=player;
+    const own=p===g.currentPlayer;// opponent's draws stay hidden from the acting player
+    const handoffTo=own?null:p;
+    const hasHand=getH(g,p).length>0;
+    const canSift=g.scrap.includes("QH");
+    const canDeclutter=g.scrap.includes("QS")&&!isFroz(g,p)&&getD(g,p).length>0;
+    const drawLog=(g2,suffix="")=>own?`${p} draws ${CM[g2.drawn[0]].name}${suffix}`:`${p} draws${suffix}`;
+    const doRefresh=()=>{
+      if(!hasHand){done(L(g,`${p} has no cards to Refresh.`));return;}
+      setModal({type:"pickDiscard",hand:getH(g,p),title:`Refresh: ${own?"Discard":`${p} discards`} (then draw)`,tutorialKey:"refresh-discard",handoffTo,
         onPick:id=>{setModal(null);
           discardFromHand(g,p,id,g2=>{
             setUndoState(null);
-            g2=drawCardsChecked(g2,p,1);if(g2.error)return;if(g2.drawn){trackDraws(g2,p,g2.drawn,"refresh");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}
-            done(g2);});}});return;}
-      if(key==="sift"){setUndoState(null);let g2=drawCardsChecked(g,p,1);if(g2.error)return;if(g2.drawn){trackDraws(g2,p,g2.drawn,"sift");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name} (Sift)`);g2.newCards=g2.drawn;}commitGameState(g2);
-        setModal({type:"pickDiscard",hand:getH(g2,p),title:"Sift: Discard a card",newCards:g2.drawn||[],
+            g2=drawCardsChecked(g2,p,1);if(g2.error)return;if(g2.drawn){trackDraws(g2,p,g2.drawn,source);g2=L(g2,drawLog(g2));if(own)g2.newCards=g2.drawn;}
+            done(g2);});}});};
+    if(!hasHand&&!canSift&&!canDeclutter){if(!optional)g=L(g,`${p} has no cards to Refresh.`);done(g);return;}
+    if(!canSift&&!canDeclutter&&!optional){doRefresh();return;}
+    const opts=[];
+    if(hasHand)opts.push({label:"Refresh (discard, then draw)",key:"refresh"});
+    if(canSift)opts.push({label:"Sift (draw, then discard)",key:"sift"});
+    if(canDeclutter)opts.push({label:"Declutter (scrap from discard)",key:"declutter"});
+    if(optional)opts.push({label:"Skip",key:"skip"});
+    setModal({type:"refreshOpts",title:own?title:`${title}: ${p} chooses`,opts,handoffTo,onChoice:key=>{setModal(null);
+      if(key==="skip"){done(g);return;}
+      if(key==="refresh"){doRefresh();return;}
+      if(key==="sift"){setUndoState(null);let g2=drawCardsChecked(g,p,1);if(g2.error)return;if(g2.drawn){trackDraws(g2,p,g2.drawn,"sift");g2=L(g2,drawLog(g2," (Sift)"));if(own)g2.newCards=g2.drawn;}commitGameState(g2);
+        setModal({type:"pickDiscard",hand:getH(g2,p),title:`Sift: ${own?"Discard":`${p} discards`} a card`,newCards:own?(g2.drawn||[]):[],handoffTo,
           onPick:id=>{setModal(null);discardFromHand(g2,p,id,done);}});return;}
-      if(key==="declutter"){const disc=getD(g,p);if(!disc.length){done(g);return;}
-        setModal({type:"pickFromList",title:"Declutter: Scrap from discard",cards:disc,canCancel:true,
-          statsPlayer:p,
+      if(key==="declutter"){
+        setModal({type:"pickFromList",title:`Declutter: ${own?"Scrap":`${p} scraps`} from discard`,cards:getD(g,p),canCancel:true,
+          statsPlayer:p,handoffTo,
           onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));
-            g2.scrap=[...g2.scrap,id];g2=L(g2,`${p} scraps ${CM[id].name} (Declutter)`);done(g2);},
-          onCancel:()=>{setModal(null);done(g);}});}}});};
+            g2.scrap=[...g2.scrap,id];trackEvent(g2,"card_scrapped",{cardId:id,reason:"declutter"},{playerSlot:p});g2=L(g2,`${p} scraps ${CM[id].name} (Declutter)`);done(g2);},
+          // Declutter is a "may instead": backing out still owes the Refresh unless it was optional.
+          onCancel:()=>{setModal(null);if(optional)done(g);else doRefresh();}});}}});};
 
   // --- UNDO ---
   const createUndoSnapshot=game=>({
@@ -993,22 +1022,19 @@ export default function KaizenPoker(){
           g2=L(g2,`${p} puts ${CM[dk[0]].name} on bottom`);done(g2);}});return;}
     // 3D Loot
     if(effectId==="3D"){g=drawCardsChecked(g,p,1);if(g.error)return;if(g.drawn){trackDraws(g,p,g.drawn,"loot");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}commitGameState(g);
-      setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",newCards:g.drawn||[],
+      setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",tutorialKey:"loot-discard",newCards:g.drawn||[],
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>done(g2));}});return;}
     // 3H Rummage
     if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"You Refresh",opt2:"Opponent Refreshes",
-      on1:()=>{setModal(null);setModal({type:"pickDiscard",hand:getH(g,p),title:"Rummage: Discard (then draw)",
-        onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>{
-          g2=drawCardsChecked(g2,p,1);if(g2.error)return;if(g2.drawn){trackDraws(g2,p,g2.drawn,"rummage");g2=L(g2,`${p} draws ${CM[g2.drawn[0]].name}`);g2.newCards=g2.drawn;}done(g2);});}});},
-      on2:()=>{setModal(null);const oh=getH(g,opp(p));
+      on1:()=>{setModal(null);offerRefresh(g,done,{player:p,optional:false,title:"Rummage",source:"rummage"});},
+      on2:()=>{setModal(null);
         if(isSoloMode(g.mode)){g=L(g,"...the Challenger has no hand to Refresh. Fizzles.");done(g);return;}
+        // Online remote prompt only supports a plain Refresh (no Sift/Declutter choice yet).
         if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
           queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"rummage_opp",player:opp(p),title:`${opp(p)} must discard (then draws)`});
           return;
         }
-        setModal({type:"pickDiscard",hand:oh,title:`Rummage: ${opp(p)} discards, then draws`,
-          onPick:id=>{setModal(null);discardFromHand(g,opp(p),id,g2=>{
-            g2=drawCardsChecked(g2,opp(p),1);if(g2.error)return;if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"rummage");g2=L(g2,`${opp(p)} draws`);}done(g2);});}});}});return;}
+        offerRefresh(g,done,{player:opp(p),optional:false,title:"Rummage",source:"rummage"});}});return;}
     // 3S Consider
     if(effectId==="3S"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       g=rememberTopCard(g,p,p);commitGameState(g);
@@ -1032,9 +1058,11 @@ export default function KaizenPoker(){
       g=rememberLibrary(g,p,p);commitGameState(g);
       pick("Gamble: Search your deck, take 1 card, then discard 1 at random",sortC(dk),null,id=>{let g2={...g};
         const shuffled=shuffleFromState(g2,[...getDk(g2,p)].filter(x=>x!==id));g2=shuffled.state;g2=setZ(g2,p,"deck",shuffled.cards);g2=randomizeLibraryKnowledge(g2,p);let h=[...getH(g2,p),id];g2.newCards=[id];
-        const randomPick=randomIndexFromState(g2,h.length);g2=randomPick.state;const disc=h[randomPick.index];h=h.filter((_,i)=>i!==randomPick.index);
-        g2=setZ(g2,p,"hand",h);g2=setZ(g2,p,"discard",[...getD(g2,p),disc]);
-        g2=L(g2,`${p} takes ${CM[id].name}, randomly discards ${CM[disc].name}`);done(g2);});return;}
+        const randomPick=randomIndexFromState(g2,h.length);g2=randomPick.state;const disc=h[randomPick.index];
+        g2=setZ(g2,p,"hand",h);g2=L(g2,`${p} takes ${CM[id].name}, then discards at random`);
+        if(disc===id)g2.newCards=[];
+        // Through discardFromHand so a randomly discarded Capitalize (8S) still triggers.
+        discardFromHand(g2,p,disc,done);});return;}
     // 4H Cultivate
     if(effectId==="4H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       g=rememberLibrary(g,p,p);commitGameState(g);
@@ -1083,8 +1111,11 @@ export default function KaizenPoker(){
       if(!oa.length){g=L(g,"...no opponent actions. Fizzles.");done(g);return;}
       pick("Abduct: Steal an opponent action into your discard",oa.map(a=>a.id),null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"play",[...getP(g2,opp(p))].filter(a=>a.id!==id));
-        g2=setZ(g2,p,"discard",[...getD(g2,p),id]);g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==cid));
-        g2.scrap=[...g2.scrap,cid];g2=L(g2,`${p} abducts ${CM[id].name}!`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
+        g2=setZ(g2,p,"discard",[...getD(g2,p),id]);g2=L(g2,`${p} abducts ${CM[id].name}!`);
+        // "then scrap this card" — Freeze stops the scrap; Abduct stays in play.
+        if(frozen)g2=L(g2,"...Frozen! Abduct isn't scrapped.");
+        else{g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==cid));g2.scrap=[...g2.scrap,cid];}
+        done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6H Exchange
     if(effectId==="6H"){const od=getD(g,opp(p)),md=getD(g,p);
       if(!od.length||!md.length){g=L(g,"...need cards in both discards. Fizzles.");done(g);return;}
@@ -1096,24 +1127,30 @@ export default function KaizenPoker(){
           g2=L(g2,`${p} exchanges: gives ${CM[mid].name}, takes ${CM[oid].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});
       },()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6S Banish
-    if(effectId==="6S"){const od=getD(g,opp(p));if(!od.length){g=L(g,"...opponent discard empty. Fizzles.");done(g);return;}
+    if(effectId==="6S"){if(frozen){g=L(g,"...Frozen!");done(g);return;}
+      const od=getD(g,opp(p));if(!od.length){g=L(g,"...opponent discard empty. Fizzles.");done(g);return;}
       pick("Banish: Scrap a card from your opponent's discard",od,null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p))].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
         g2=L(g2,`${p} banishes ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 7H Abdicate
-    if(effectId==="7H"){const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
+    if(effectId==="7H"){
+      // The Challenger has no hand; drawing would pull (and burn) its next showdown card.
+      if(isSoloMode(g.mode)){g=L(g,"...the Challenger has no hand. Fizzles.");done(g);return;}
+      const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
       if(!faces.length){g=rememberCards(g,p,oh,`${opp(p).toLowerCase()}Hand`);g=L(g,`${opp(p)} has no face cards.`);g=drawCardsChecked(g,opp(p),1);if(g.error)return;if(g.drawn){trackDraws(g,opp(p),g.drawn,"abdicate");g=L(g,`${opp(p)} draws`);}done(g);return;}
       if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
         queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"abdicate",player:opp(p),title:`${opp(p)} must discard a face card`,faceOnly:true});
         return;
       }
-      setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard a face card`,filter:id=>FACE.includes(CM[id].rank),
+      setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard a face card`,filter:id=>FACE.includes(CM[id].rank),handoffTo:opp(p),
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,opp(p),"hand",[...getH(g2,opp(p))].filter(x=>x!==id));
           g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);g2=L(g2,`${opp(p)} discards ${CM[id].name} (Abdicate)`);
           g2=drawCardsChecked(g2,opp(p),1);if(g2.error)return;if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"abdicate");g2=L(g2,`${opp(p)} draws`);}done(g2);}});return;}
     // 7S Nullify
-    if(effectId==="7S"){const allM=[...getP(g,"A").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"A"})),
-      ...getP(g,"B").filter(a=>CM[a.id].type==="Modify"&&!a.faceDown).map(a=>({...a,ow:"B"}))];
+    // A Duplicate/Reflect copying a Modify counts as a Modify here.
+    if(effectId==="7S"){const isMod=a=>getActionCard(a)?.type==="Modify"&&!a.faceDown;
+      const allM=[...getP(g,"A").filter(isMod).map(a=>({...a,ow:"A"})),
+      ...getP(g,"B").filter(isMod).map(a=>({...a,ow:"B"}))];
       if(!allM.length){g=L(g,"...no Modifies. Fizzles.");done(g);return;}
       pick("Nullify: Remove a Modify",allM.map(m=>m.id),null,id=>{let g2={...g};const ow=allM.find(m=>m.id===id).ow;
         g2=setZ(g2,ow,"play",[...getP(g2,ow)].filter(a=>a.id!==id));g2=setZ(g2,ow,"discard",[...getD(g2,ow),id]);
@@ -1141,7 +1178,7 @@ export default function KaizenPoker(){
     if(effectId==="9D"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no face cards. Fizzles.");done(g);return;}
         pick("Impeach: Scrap a face card",disc,id=>FACE.includes(CM[id].rank),
-          id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
+          id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p,tutorialKey:"impeach-target"});return;}
     // 9H Accumulate
     if(effectId==="9H"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const ss=new Set(g.scrap.map(id=>CM[id].suit)),sr=new Set(g.scrap.map(id=>CM[id].rank));
@@ -1156,22 +1193,22 @@ export default function KaizenPoker(){
         pick("Reap: Scrap a card matching another discard card",disc,id=>valid.includes(id),
           id=>{done(L(scrapF({...g},p,id),`${p} reaps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // JD Duplicate — immediately copies another of your Actions in play
-    if(effectId==="JD"){const myActions=getP(g,p).filter(a=>a.id!==cid&&!a.faceDown);
-      if(!myActions.length){g=L(g,"...no other actions to copy. Fizzles.");done(g);return;}
-      pick("Duplicate: Pick one of YOUR actions to copy",myActions.map(a=>a.id),null,id=>{
-        let g2=cloneGs(g);// Mark Duplicate as copying that action
-        const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id}:a);
-        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} duplicates ${CM[id].name}`);
-        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
-      ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
-    // JH Reflect — copies an opponent's Action in play
-    if(effectId==="JH"){const oppActions=getP(g,opp(p)).filter(a=>!a.faceDown);
-      if(!oppActions.length){g=L(g,"...no opponent actions to copy. Fizzles.");done(g);return;}
-      pick("Reflect: Pick an OPPONENT'S action to copy",oppActions.map(a=>a.id),null,id=>{
-        let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:id}:a);
-        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} reflects ${CM[id].name}`);
-        if(["Enact","Amend"].includes(CM[id]?.type))resolveCopiedImmediate(g2,id);else done(g2);},
-      ()=>{g=L(g,"...cancelled. Fizzles.");done(g);});return;}
+    // JD Duplicate / JH Reflect copy the *effective* action (a copy of a copy copies
+    // the original effect), and a Negated player can't copy a Modify.
+    if(effectId==="JD"||effectId==="JH"){
+      const isDup=effectId==="JD",src=isDup?p:opp(p);
+      const actions=getP(g,src).filter(a=>a.id!==cid&&!a.faceDown);
+      if(!actions.length){g=L(g,isDup?"...no other actions to copy. Fizzles.":"...no opponent actions to copy. Fizzles.");done(g);return;}
+      const negated=p==="A"?g.amends.aNegate:g.amends.bNegate;
+      const effectOf=id=>getActionCard(actions.find(a=>a.id===id))?.id||id;
+      const allowed=id=>!(negated&&CM[effectOf(id)]?.type==="Modify");
+      if(!actions.some(a=>allowed(a.id))){g=L(g,"...Negate prevents copying a Modify. Fizzles.");done(g);return;}
+      pick(isDup?"Duplicate: Pick one of YOUR actions to copy":"Reflect: Pick an OPPONENT'S action to copy",actions.map(a=>a.id),allowed,id=>{
+        const eff=effectOf(id);
+        let g2=cloneGs(g);const pl=getP(g2,p).map(a=>a.id===cid?{...a,copiedFrom:eff}:a);
+        g2=setZ(g2,p,"play",pl);g2=L(g2,`${p} ${isDup?"duplicates":"reflects"} ${CM[eff].name}`);
+        if(["Enact","Amend"].includes(CM[eff]?.type))resolveCopiedImmediate(g2,eff);else done(g2);},
+      ()=>{g=L(g,"...cancelled. Fizzles.");done(g);},negated?{hint:"Negated: you can't copy a Modify this round."}:{});return;}
     // AD Explore
     if(effectId==="AD"){g=drawCardsChecked(g,p,1);if(g.error)return;if(g.drawn){trackDraws(g,p,g.drawn,"explore");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
     // AC Salvage
@@ -1205,6 +1242,10 @@ export default function KaizenPoker(){
     // KD Improvise
     if(effectId==="KD"){const milled=reduceGameCommand(g,{type:"MILL",player:p,count:3});g=milled.state;const m=milled.events[0]?.payload.cards||[];
       g=L(g,`${p} mills: ${m.map(id=>CM[id].name).join(", ")}`);commitGameState(g);
+      // Nothing to return (deck and discard both empty): skip straight to the discard.
+      if(!getD(g,p).length){g=L(g,"...discard empty, nothing to return.");
+        if(!getH(g,p).length){done(g);return;}
+        setModal({type:"pickDiscard",hand:getH(g,p),title:"Improvise: Discard",onPick:did=>{setModal(null);discardFromHand(g,p,did,done);}});return;}
       pick("Improvise: Take from discard",[...getD(g,p)],null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
@@ -1252,6 +1293,10 @@ export default function KaizenPoker(){
     const next=(g2)=>resolveMods(g2||g,pl,mods,i+1);
     const modLabel=entry.copiedFrom?`${CM[entry.sourceId]?.name||mc.name} copying ${CM[entry.copiedFrom]?.name||mc.name}`:mc.name;
     const skip=()=>{let g2=L(g,`${pl}: ${modLabel} - skipped`);commitGameState(g2);next(g2);};
+    // A scoring card's current rank/suit after earlier Modifies this round, so
+    // stacked Modifies (and Clone) build on the modified card, not the printed one.
+    const effOf=id=>getAppliedMods(g,pl).filter(m=>m.target===id).reduce((c,m)=>({rank:m.rank||c.rank,suit:m.suit||c.suit}),{rank:CM[id].rank,suit:CM[id].suit});
+    const effName=id=>{const e=effOf(id);return e.rank===CM[id].rank&&e.suit===CM[id].suit?CM[id].name:`${CM[id].name} (now ${e.rank}${SUITS[e.suit]})`;};
     // Forecast: choose target now, resolve after reveal
     if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
       setModal({type:"pickFromList",title:`${pl}: Forecast - pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,cancelLabel:"Skip Modify",
@@ -1260,29 +1305,29 @@ export default function KaizenPoker(){
     // Vanish: defer
     if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} - after scoring`);commitGameState(g2);next(g2);return;}
     // Buff
-    if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff - choose which scoring card to modify`,cards:hand,filter:id=>higherRanks(CM[id].rank).length>0,canCancel:true,
+    if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff - choose which scoring card to modify`,tutorialKey:"buff-target",cards:hand,filter:id=>higherRanks(effOf(id).rank).length>0,canCancel:true,
       hint:"Pick the scoring card Buff will raise. Aces can count as high or low here.",
-      onPick:tid=>{setModal(null);const hr=higherRanks(CM[tid].rank);
+      onPick:tid=>{setModal(null);const hr=higherRanks(effOf(tid).rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Buff ${CM[tid].name}: New rank`,ranks:hr,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickRank",tutorialKey:"buff-rank",title:`Buff ${effName(tid)}: New rank`,ranks:hr,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
-    if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf - choose which scoring card to modify`,cards:hand,filter:id=>lowerRanks(CM[id].rank).length>0,canCancel:true,
+    if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf - choose which scoring card to modify`,cards:hand,filter:id=>lowerRanks(effOf(id).rank).length>0,canCancel:true,
       hint:"Pick the scoring card Nerf will lower. Aces can count as high or low here.",
-      onPick:tid=>{setModal(null);const lr=lowerRanks(CM[tid].rank);
+      onPick:tid=>{setModal(null);const lr=lowerRanks(effOf(tid).rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Nerf ${CM[tid].name}: New rank`,ranks:lr,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickRank",title:`Nerf ${effName(tid)}: New rank`,ranks:lr,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
-    if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge - choose which scoring card to modify`,cards:hand,filter:id=>adjacentRanks(CM[id].rank).length>0,canCancel:true,
+    if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge - choose which scoring card to modify`,cards:hand,filter:id=>adjacentRanks(effOf(id).rank).length>0,canCancel:true,
       hint:"Pick the scoring card Nudge will move by one rank.",
-      onPick:tid=>{setModal(null);const opts=adjacentRanks(CM[tid].rank);
+      onPick:tid=>{setModal(null);const opts=adjacentRanks(effOf(tid).rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Nudge ${CM[tid].name}: ±1`,ranks:opts,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickRank",title:`Nudge ${effName(tid)}: ±1`,ranks:opts,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
@@ -1299,8 +1344,8 @@ export default function KaizenPoker(){
       setModal({type:"pickFromList",title:`${pl}: Clone - pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
           setModal({type:"pickFromList",title:`Clone: Choose the scoring card to copy onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
-            onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
-              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> copy of ${CM[sid].name}`);commitGameState(g2);next(g2);}});},
+            onPick:sid=>{setModal(null);const src=effOf(sid);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:src.rank,suit:src.suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:src.rank,suit:src.suit},{playerSlot:pl,phase:"score"});
+              g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> copy of ${effName(sid)}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
     if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce - discard empty`);commitGameState(g2);next(g2);return;}
@@ -1348,7 +1393,7 @@ export default function KaizenPoker(){
                 on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${r}`);commitGameState(g3);proc(g3,ti+1);}});}
               else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${r}`);commitGameState(g3);proc(g3,ti+1);}}});},
         onSuit:()=>{setModal(null);
-          setModal({type:"pickSuit",title:`Camouflage: ${CM[tid].name} -> any suit`,showHand:hand,
+          setModal({type:"pickSuit",tutorialKey:"camouflage-suit",title:`Camouflage: ${CM[tid].name} -> any suit`,showHand:hand,
             onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];trackEvent(g3,"queen_choice",{source:"camouflage",target:tid,rank:null,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});},
         onBoth:()=>{setModal(null);
           setModal({type:"pickRank",title:`${CM[tid].name}: Pick rank`,ranks:RO,showHand:hand,
@@ -1411,7 +1456,8 @@ export default function KaizenPoker(){
       if(effect.id==="8D")effs.push({t:"vanish",pl});
       if(effect.id==="8C"&&((pl==="A"&&winner==="B")||(pl==="B"&&winner==="A")))effs.push({t:"capitulate",pl});
     }}
-    procPost(g,effs,0);};
+    // Once the match is decided, skip post-score prompts (Forecast/Vanish/Capitulate).
+    procPost(g,isMatchOver(g)?[]:effs,0);};
 
   const startNextRound=(g)=>{
     if(g.mode==="tutorial"){
@@ -1455,7 +1501,7 @@ export default function KaizenPoker(){
       g2=L(g2,`Tutorial Opponent: ${g2.bHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
       trackRoundStart(g2);commitGameState(g2);return;
     }
-    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`WINNER: ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
+    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g._winner=winner;g=L(g,`WINNER: ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     g.aHand=[];g.bHand=[];g.aPlay=[];g.bPlay=[];g.newCards=[];g.aMods=[];g.bMods=[];g.aForecast=[];g.bForecast=[];g._remotePrompt=null;
     g.amends={aFreeze:false,bFreeze:false,aNegate:false,bNegate:false};g._soloReveal=null;
     const nextFirstPlayer=isSoloMode(g.mode)
@@ -1463,14 +1509,15 @@ export default function KaizenPoker(){
       :(g._revealWinner==="A"||g._revealWinner==="B"
         ?g._revealWinner
         :g.firstPlayer);
+    g._revealAE=null;g._revealBE=null;g._revealWinner=null;
     g.round++;g.firstPlayer=nextFirstPlayer;g.currentPlayer=g.firstPlayer;g.regularActionsPlayed=0;g.bonusActions=0;
     g=L(g,`=== ROUND ${g.round} === ${isSoloMode(g.mode)?"Solo Mode":`Player ${g.firstPlayer} acts first`}`);
     const {aActions:aR,bActions:bR,aDraw:aD,bDraw:bD,suddenDeath}=getRoundRequirements(g);
     if(suddenDeath)g=L(g,"SUDDEN DEATH!");
     g._aReq=aR;g._bReq=bR;g.actionsRequired=g.currentPlayer==="A"?aR:bR;
-    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";g=L(g,"A can't draw!");trackGameFinished(g,"B");commitGameState(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
+    g=drawCards(g,"A",aD);if(g.error){g.phase="gameOver";clearRevealForNoDrawEnd(g,"B","A");g=L(g,isSoloMode(g.mode)?"You can't draw! The Challenger wins the solo run.":"A can't draw! Player B wins!");trackGameFinished(g,"B");commitGameState(g);return;}trackDraws(g,"A",g.drawn||[],"round_start");g.aHand=sortC(g.aHand);
     if(!isSoloMode(g.mode)){
-      g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";g=L(g,"B can't draw!");trackGameFinished(g,"A");commitGameState(g);return;}trackDraws(g,"B",g.drawn||[],"round_start");g.bHand=sortC(g.bHand);
+      g=drawCards(g,"B",bD);if(g.error){g.phase="gameOver";clearRevealForNoDrawEnd(g,"A","B");g=L(g,"B can't draw! Player A wins!");trackGameFinished(g,"A");commitGameState(g);return;}trackDraws(g,"B",g.drawn||[],"round_start");g.bHand=sortC(g.bHand);
     }else g.bHand=[];
     g.phase="action";g=L(g,`A: ${g.aHand.map(id=>`${CM[id].rank}${SUITS[CM[id].suit]}`).join(", ")}`);
     if(isSoloMode(g.mode))g=L(g,`Challenger Deck: ${g.bDeck.length} cards remain`);
@@ -1480,7 +1527,7 @@ export default function KaizenPoker(){
 
   const procPost=(g,effs,i)=>{if(i>=effs.length){
     trackRoundSummary(g);
-    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g=L(g,`WINNER: ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
+    if(isMatchOver(g)){const winner=getMatchWinner(g);g.phase="gameOver";g._winner=winner;g=L(g,`WINNER: ${isSoloMode(g.mode)?(winner==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${winner} wins the game!`}`);trackGameFinished(g,winner);commitGameState(g);return;}
     const aH=getH(g,"A"),bH=getH(g,"B");
     g.aDiscard=[...g.aDiscard,...g.aPlay.map(a=>a.id),...aH];g.bDiscard=[...g.bDiscard,...g.bPlay.map(a=>a.id),...bH];
     startNextRound(g);return;}
@@ -1496,7 +1543,7 @@ export default function KaizenPoker(){
       g2=L(g2,`${e.pl}: Forecast puts ${CM[e.target].name} on top of the deck`);
       commitGameState(g2);procPost(g2,effs,i+1);return;}
     if(e.t==="vanish"){if(isFroz(g,e.pl)){g=L(g,`${e.pl}: Vanish - Frozen!`);procPost(g,effs,i+1);return;}
-      const activeMods=getAppliedMods(g,e.pl);const effS=new Set(getH(g,e.pl).map(id=>{const m=activeMods.find(x=>x.target===id);return m?.suit||CM[id].suit;}));
+      const activeMods=getAppliedMods(g,e.pl);const effS=new Set(getH(g,e.pl).map(id=>{return foldMods(activeMods,id)?.suit||CM[id].suit;}));
       const disc=getD(g,e.pl);const valid=disc.filter(id=>effS.has(CM[id].suit));
       if(!valid.length){procPost(g,effs,i+1);return;}
       if(g.mode==="tutorial"&&e.pl==="B"){
@@ -1542,7 +1589,9 @@ export default function KaizenPoker(){
       onReplay={()=>{setKonamiCelebrationKey(v=>v+1);playSfx("victory",{volume:.34});}}
       onClose={()=>setKonamiCelebrationOpen(false)}
     />
-    <div style={{minHeight:"100vh",fontFamily:FONT_BODY,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,position:"relative",overflow:"hidden"}}>
+    {/* body is overflow:hidden, so the home screen scrolls itself; "safe center" stops
+        short (phone-landscape) viewports from clipping the top and bottom buttons. */}
+    <div style={{height:"100dvh",fontFamily:FONT_BODY,display:"flex",alignItems:"center",justifyContent:"safe center",flexDirection:"column",gap:20,position:"relative",overflowX:"hidden",overflowY:"auto",padding:"16px 0"}}>
     <FeltBackdrop/>
     <div className="kp-panel" style={{position:"relative",padding:"26px 30px 30px",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,maxWidth:580,width:"min(580px,calc(100vw - 48px))"}}>
       <div style={{width:"100%",display:"flex",justifyContent:"flex-end"}}><SfxToggle enabled={sfxEnabled} onToggle={()=>setSfxEnabled(v=>!v)}/></div>
@@ -1661,8 +1710,15 @@ export default function KaizenPoker(){
   const sectionRadius=isMobileLandscape?16:18;
   const handCardSmall=false;
   const actionAreaMinHeight=isMobileLandscape?78:95;
+  // Phone landscape (~390px tall): collapse empty action panels so the hand stays on screen.
+  const isShortLandscape=typeof window!=="undefined"&&window.innerWidth>window.innerHeight&&window.innerHeight<=560;
+  const actionAreaHeightFor=pl=>isShortLandscape&&!getP(gs,pl).length?20:actionAreaMinHeight;
   const publicAreaGap=isMobileLandscape?10:16;
 
+  // Hotseat: whenever the screen's owner changes (turn passes, score-phase switch,
+  // or an opponent prompt like Abdicate), cover the board until that player taps ready.
+  const hotseatScreenOwner=gs.mode==="hotseat"&&(gs.phase==="action"||gs.phase==="score")?(modal?.handoffTo||viewerPlayer):null;
+  const showHotseatHandoff=!!hotseatScreenOwner&&hotseatScreenOwner!==hotseatReadyPlayer;
   const pClr=viewerPlayer==="A"?"#ff5a4e":"#34a3ff";
   const chipGoal=7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#12142a",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#3d4470"}`,animation:i===count-1?"chipBounce .45s cubic-bezier(.26,1.5,.42,1)":"none"}}/>);
@@ -1716,7 +1772,7 @@ export default function KaizenPoker(){
     const postQueue=revealPostQueue(gs);
     const soloRow=isSoloMode(gs.mode)&&gs._soloReveal?.cardId?CHALLENGER_LOOKUP[CM[gs._soloReveal.cardId].rank]:null;
     const shell=(
-      <div style={{padding:isFinal?24:16,background:"linear-gradient(180deg,#262b4cf6,#191c36fa)",borderRadius:isFinal?24:18,border:`3px solid ${wClr}`,boxShadow:isFinal?`0 8px 0 rgba(0,0,0,.4), 0 40px 100px ${wClr}44, inset 0 2px 0 rgba(255,255,255,.08)`:`0 6px 0 rgba(0,0,0,.4), 0 24px 60px ${wClr}33, inset 0 2px 0 rgba(255,255,255,.08)`,animation:"revealRise 0.4s cubic-bezier(.26,1.36,.42,1)",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%"}}>
+      <div style={{padding:isFinal?24:16,background:"linear-gradient(180deg,#262b4cf6,#191c36fa)",borderRadius:isFinal?24:18,border:`3px solid ${wClr}`,boxShadow:isFinal?`0 8px 0 rgba(0,0,0,.4), 0 40px 100px ${wClr}44, inset 0 2px 0 rgba(255,255,255,.08)`:`0 6px 0 rgba(0,0,0,.4), 0 24px 60px ${wClr}33, inset 0 2px 0 rgba(255,255,255,.08)`,animation:"revealRise 0.4s cubic-bezier(.26,1.36,.42,1)",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%",margin:"auto",flexShrink:0}}>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
         {isFinal&&<>
           <div style={{position:"absolute",top:-110,left:-80,width:260,height:260,borderRadius:"50%",background:`radial-gradient(circle,${wClr}33 0%,transparent 68%)`,pointerEvents:"none"}}/>
@@ -1748,7 +1804,7 @@ export default function KaizenPoker(){
                 </div>
                 <div style={{display:"flex",gap:5,justifyContent:"center",marginBottom:6,flexWrap:"wrap"}}>
                   {displayOrder(aH,getAppliedMods(gs,"A")).map((id,i)=>{
-                    const mod=getAppliedMods(gs,"A").find(m=>m.target===id);
+                    const mod=foldMods(getAppliedMods(gs,"A"),id);
                     return(<div key={id} className="kp-reveal-card" style={{position:"relative",animationDelay:`${i*0.06}s`,animationFillMode:"backwards"}}>
                       <PreviewCard id={id} glow={w==="A"?"#ff5a4e":undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
                     </div>);
@@ -1784,7 +1840,7 @@ export default function KaizenPoker(){
                   PLAYER {pl} {isWinner&&"*"}</div>
                 <div style={{display:"flex",gap:5,marginBottom:6}}>
                   {displayOrder(h,mods).map((id,i)=>{
-                    const mod=mods.find(m=>m.target===id);
+                    const mod=foldMods(mods,id);
                     return(<div key={id} className="kp-reveal-card" style={{position:"relative",animationDelay:`${i*0.06}s`,animationFillMode:"backwards"}}>
                       <PreviewCard id={id} glow={isWinner?clr:undefined} rankSticker={mod?.rank} suitSticker={mod?.suit}/>
                     </div>);})}
@@ -1804,8 +1860,10 @@ export default function KaizenPoker(){
         </div>
       </div>
     );
-    if(!isFinal)return <div style={{position:"fixed",inset:0,zIndex:25,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(13,21,29,.18) 0%,rgba(10,15,22,.78) 38%,rgba(5,8,12,.9) 100%)",backdropFilter:"blur(6px)"}}>{shell}</div>;
-    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px 20px",background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictorySolitaireCanvas winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
+    // Overlay scrolls and the shell centres via margin:auto, so short (phone-landscape) screens can still reach Next Round.
+    const overlayPad=isMobileLandscape?"10px 8px":"28px 20px";
+    if(!isFinal)return <div style={{position:"fixed",inset:0,zIndex:25,display:"flex",overflowY:"auto",padding:overlayPad,background:"radial-gradient(circle at 50% 20%,rgba(13,21,29,.18) 0%,rgba(10,15,22,.78) 38%,rgba(5,8,12,.9) 100%)",backdropFilter:"blur(6px)"}}>{shell}</div>;
+    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",overflowY:"auto",padding:overlayPad,background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}><VictorySolitaireCanvas winner={winnerPlayer} cards={cascadeCards}/>{shell}</div>;
   };
 
   return(<CardRenderContext.Provider value={cardRenderStyle}>
@@ -1937,14 +1995,14 @@ export default function KaizenPoker(){
                         <div style={{fontSize:10,color:"#eaf6ff",fontWeight:800,lineHeight:1.2}}>{challengerDisplayLookup.handName}</div>
                       </div>}
                     </div>
-                    :Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><CardBack key={i} style={{transform:`translateX(${i*-46}px)`}}/>)
+                    :Array.from({length:Math.min(4,Math.max(gs.bDeck.length,1))},(_,i)=><CardBack key={i} variant={i} style={{transform:`translateX(${i*-46}px)`}}/>)
                   }
                 </div>
               </div>
             </div>
             <div style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:"2px solid #ff5a4e55",boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.28), inset 0 2px 0 rgba(255,255,255,.06)",overflow:"hidden"}}>
               <div className="kp-section-label" style={{color:"#ff9a93",marginBottom:6}}>YOUR ACTIONS</div>
-              <div style={{display:"flex",gap:4,minHeight:actionAreaMinHeight,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:4,minHeight:actionAreaHeightFor("A"),flexWrap:"wrap"}}>
                 {getP(gs,"A").map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                   :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                     <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
@@ -1954,7 +2012,7 @@ export default function KaizenPoker(){
           </div>
           :<div style={{display:"flex",gap:publicAreaGap,flexWrap:"wrap",minWidth:0}}>{[opp(viewerPlayer),viewerPlayer].map(pl=>(<div key={pl} style={{flex:"1 1 320px",minWidth:0,padding:panelPad,borderRadius:sectionRadius,background:"linear-gradient(180deg,#252a4af0,#1a1d38f4)",border:`2px solid ${pl==="A"?"#ff5a4e55":"#34a3ff55"}`,boxShadow:"0 5px 0 rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.28), inset 0 2px 0 rgba(255,255,255,.06)",overflow:"hidden"}}>
             <div className="kp-section-label" style={{color:pl==="A"?"#ff9a93":"#8fc5ff",marginBottom:6}}>{pl}'s ACTIONS</div>
-            <div style={{display:"flex",gap:4,minHeight:actionAreaMinHeight,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:4,minHeight:actionAreaHeightFor(pl),flexWrap:"wrap"}}>
               {getP(gs,pl).map((a,i)=>a.faceDown?<FaceDownActionSlot key={i} id={a.id} canPeek={pl===viewerPlayer} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
                 :<div key={i} className="kp-action-slot" style={{position:"relative"}}>
                   <PreviewCard id={a.id} copySticker={a.copiedFrom?CM[a.copiedFrom]?.name:undefined}/>
@@ -1991,6 +2049,7 @@ export default function KaizenPoker(){
         {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20,position:"relative"}}>
           <VictorySolitaireCanvas winner={getMatchWinner(gs)} cards={getMatchWinner(gs)==="A"?getH(gs,"A"):(isSoloMode(gs.mode)&&gs._soloReveal?.cardId?[gs._soloReveal.cardId]:getH(gs,"B"))}/>
           <div style={{fontSize:24,fontWeight:900,color:"#f5b942",fontFamily:FONT_DISPLAY,position:"relative",zIndex:32}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
+          {gs._endReason&&<div style={{fontSize:14,color:"#ffe9b8",margin:"6px 0 10px",position:"relative",zIndex:32}}>{isSoloMode(gs.mode)&&gs._endReason.startsWith("A ")?"You couldn't draw a full hand.":`Player ${gs._endReason}.`}</div>}
           <div style={{position:"relative",zIndex:32}}><Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div></div>}
         {gs.mode!=="tutorial"&&playtestEnabled&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel
@@ -2024,7 +2083,7 @@ export default function KaizenPoker(){
     {gs.phase==="reveal"&&renderShowdown(isMatchOver(gs))}
     {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
     {/* MODALS */}
-    {modal?.type==="refreshOpts"&&<Modal title="Face-Down Options">
+    {modal?.type==="refreshOpts"&&<Modal title={modal.title||"Face-Down Options"}>
       <p style={{color:"#aaa",fontSize:12,marginBottom:10}}>Choose:</p>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
         {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#34a3ff":o.key==="sift"?"#3bbf7c":"#a86ef0"} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
@@ -2124,6 +2183,18 @@ export default function KaizenPoker(){
         {label:"Difficult",onClick:()=>setSoloDifficulty(SOLO_DIFFICULTIES.difficult)}
       ]}
     />}
-    {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null} />}
+    {gs.mode==="tutorial"&&tutorialPrompt&&<Chippy title={tutorialPrompt.title} message={tutorialPrompt.message} tag={tutorialTag} visible actionLabel={tutorialPrompt.expect?.kind==="ack"?"OK":""} onAction={tutorialPrompt.expect?.kind==="ack"?()=>acknowledgeTutorial(tutorialPrompt.expect.value||"opp-turn"):null}
+      actionButtons={tutorialPrompt.expect?.kind==="menu"?[
+        {label:"Play Solo",onClick:()=>startGame("solo"),background:"#3bbf7c"},
+        {label:"Play Hotseat",onClick:()=>startGame("hotseat")},
+      ]:null} />}
+    {showHotseatHandoff&&<div role="dialog" aria-modal="true" aria-label={`Pass the device to Player ${hotseatScreenOwner}`} data-hotseat-handoff="1"
+      style={{position:"fixed",inset:0,zIndex:1400,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18,padding:16,textAlign:"center",
+        background:`radial-gradient(circle at 50% 40%,${hotseatScreenOwner==="A"?"#5a1f2b":"#16345a"},#0d0e1f 70%)`}}>
+      <div style={{fontSize:13,letterSpacing:3,color:"#c9c3e6",fontWeight:800}}>PASS THE DEVICE</div>
+      <div style={{fontSize:isMobileLandscape?34:48,fontWeight:900,fontFamily:FONT_DISPLAY,color:hotseatScreenOwner==="A"?"#ff7a70":"#5bb6ff",textShadow:"0 4px 0 rgba(0,0,0,.4)"}}>Player {hotseatScreenOwner}</div>
+      <div style={{fontSize:14,color:"#d8d4ee",maxWidth:360}}>{modal?.handoffTo===hotseatScreenOwner?`${modal.title}. Player ${opp(hotseatScreenOwner)}, look away.`:`Your turn. Player ${opp(hotseatScreenOwner)}, look away.`}</div>
+      <Btn label="I'm Ready" bg={hotseatScreenOwner==="A"?"#ff5a4e":"#34a3ff"} autoFocus onClick={()=>setHotseatReadyPlayer(hotseatScreenOwner)}/>
+    </div>}
   </div></CardRenderContext.Provider>);
 }

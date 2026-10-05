@@ -13,7 +13,19 @@ import { launchBrowser } from "./edge-launcher.mjs";
 const BASE = process.env.SMOKE_BASE_URL || "http://localhost:5173/kaizen-poker/";
 const OUT = path.resolve("smoke_output");
 // Network noise (analytics, supabase when offline) shouldn't fail the suite.
-const IGNORABLE = [/net::ERR/i, /Failed to load resource/i, /umami/i, /supabase/i];
+const IGNORABLE = [/net::ERR/i, /Failed to load resource/i, /umami/i, /supabase/i, /Analytics sync failed/i];
+
+// Hotseat shows a "pass the device" cover whenever the screen changes hands.
+// Returns true if a cover was present (and tapped).
+const dismissHandoff = async page => {
+  const had = await page.evaluate(() => {
+    const btn = document.querySelector("[data-hotseat-handoff] button");
+    btn?.click();
+    return !!btn;
+  });
+  if (had) await new Promise(r => setTimeout(r, 300));
+  return had;
+};
 
 const ROUTES = [
   { name: "home", hash: "" },
@@ -73,6 +85,10 @@ try {
     try {
       await page.goto(BASE + route.hash, { waitUntil: "load", timeout: 60000 });
       await new Promise(r => setTimeout(r, 1200));
+      if (route.hash === "#/hotseat") {
+        await page.screenshot({ path: path.join(OUT, route.name + "-handoff.png") }).catch(() => {});
+        if (!(await dismissHandoff(page))) rec.pageErrors.push("hotseat handoff cover missing");
+      }
     } catch (e) {
       navOk = false;
       rec.pageErrors.push("NAVIGATION FAILED: " + e.message);
@@ -91,6 +107,7 @@ try {
     await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 1.5 });
     await page.goto(BASE + "#/hotseat", { waitUntil: "load", timeout: 60000 });
     await new Promise(r => setTimeout(r, 1200));
+    await dismissHandoff(page);
     const clicked = await page.evaluate(() => {
       const el = document.querySelector(".kp-card-clickable");
       if (!el) return null;
@@ -117,6 +134,7 @@ try {
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await page.goto(BASE + "#/hotseat", { waitUntil: "load", timeout: 60000 });
     await new Promise(r => setTimeout(r, 1200));
+    await dismissHandoff(page);
     const audit = await page.evaluate(() => {
       const card = document.querySelector(".kp-card-clickable");
       const logButton = [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "LOG");

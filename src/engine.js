@@ -22,8 +22,9 @@ function drawCards(gs,player,n){
   if(reshuffled)st._lastReshuffleAt=`${Date.now()}-${player}-${Math.random().toString(16).slice(2,8)}`;
   return{...st,drawn};}
 export function evalHand(cardIds,mods=[]){
-  let eff=cardIds.map(id=>{const b=CM[id];const m=mods.find(x=>x.target===id);
-    return m?{...b,rank:m.rank||b.rank,suit:m.suit||b.suit,mod:true}:{...b,mod:false}});
+  // Mods on the same card stack in order (e.g. Buff 9->Q, then Nudge Q->K).
+  let eff=cardIds.map(id=>{const b=CM[id];const ms=mods.filter(x=>x.target===id);
+    return ms.length?ms.reduce((c,m)=>({...c,rank:m.rank||c.rank,suit:m.suit||c.suit}),{...b,mod:true}):{...b,mod:false}});
   const ranks=eff.map(c=>c.rank),suits=eff.map(c=>c.suit);
   const rv=ranks.map(r=>RV[r]).sort((a,b)=>b-a);
   const rc={};ranks.forEach(r=>{rc[r]=(rc[r]||0)+1});const sc={};suits.forEach(s=>{sc[s]=(sc[s]||0)+1});
@@ -80,6 +81,8 @@ function isMatchOver(gs){
   return isSoloMode(gs.mode) ? (gs.aChips>=SOLO_TARGET_CHIPS||gs.bChips>=SOLO_TARGET_CHIPS) : (gs.aChips>=7||gs.bChips>=7);
 }
 function getMatchWinner(gs){
+  // An explicit winner (e.g. a player couldn't draw) beats the chip count.
+  if(gs._winner==="A"||gs._winner==="B")return gs._winner;
   if(gs.mode==="tutorial")return gs.aChips>=gs.bChips?"A":"B";
   return isSoloMode(gs.mode) ? (gs.aChips>=SOLO_TARGET_CHIPS?"A":"B") : (gs.aChips>=7?"A":"B");
 }
@@ -144,6 +147,8 @@ function tutorialRoundState(roundNumber,baseState=null){
     _revealAE:null,
     _revealBE:null,
     _revealWinner:null,
+    _winner:null,
+    _endReason:null,
     _soloReveal:null,
     _tutorialRound:roundNumber,
     _tutorialAck:null,

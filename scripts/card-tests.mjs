@@ -558,6 +558,74 @@ const TESTS = [
     if (!g.aHand.includes("9H")) fail(`9H not returned to hand: ${g.aHand}`);
     if (!g.aDiscard.includes("2C") || g.aHand.includes("2C")) fail(`2C not discarded: hand=${g.aHand} disc=${g.aDiscard}`);
   } },
+
+  // ===== regressions: rules interactions =====
+  { name: "Stacked Modifies — Buff 2S→8, then Nudge builds on 8 (→9) for Four of a Kind", run: async (page, base) => {
+    await setState(page, scoreScenario(base, { aHand: ["9C", "9D", "9H", "2S", "3C"], aPlay: [{ id: "10H", faceDown: false }, { id: "10C", faceDown: false }] }));
+    await clickReveal(page);
+    await clickModalCard(page, "2S"); await clickModalText(page, "8");   // Buff
+    await clickModalCard(page, "2S"); await clickModalText(page, "9");   // Nudge: 9 only offered if it builds on 8
+    if (!await waitReveal(page)) fail("scoring never reached reveal");
+    const g = await getState(page);
+    if (g._revealAE.handName !== "Four of a Kind") fail(`expected Four of a Kind, got ${g._revealAE.handName}`);
+  } },
+  { name: "Negate — Duplicate can't copy a Modify (fizzles)", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["JD", "3C"], aPlay: [{ id: "10H", faceDown: false }], amends: { aFreeze: false, bFreeze: false, aNegate: true, bNegate: false } }));
+    await clickHand(page, "JD"); await maybeClickPlayIt(page);
+    await sleep(300); const g = await getState(page);
+    const jd = g.aPlay.find(a => a.id === "JD");
+    if (!jd) fail("JD not in play");
+    if (jd.copiedFrom) fail(`JD copied ${jd.copiedFrom} despite Negate`);
+  } },
+  { name: "Nullify — can remove a Duplicate that copies a Modify", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["7S", "3C"], bPlay: [{ id: "JD", faceDown: false, copiedFrom: "10H" }] }));
+    await clickHand(page, "7S"); await maybeClickPlayIt(page);
+    await clickModalCard(page, "JD");
+    await sleep(250); const g = await getState(page);
+    if (g.bPlay.some(a => a.id === "JD")) fail("JD still in play");
+    if (!g.bDiscard.includes("JD")) fail(`JD not in B discard: ${g.bDiscard}`);
+  } },
+  { name: "Freeze — Banish can't scrap while Frozen", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["6S", "3C"], bDiscard: ["9H"], amends: { aFreeze: true, bFreeze: false, aNegate: false, bNegate: false } }));
+    await clickHand(page, "6S"); await maybeClickPlayIt(page);
+    await sleep(300); const g = await getState(page);
+    if (g.scrap.includes("9H") || !g.bDiscard.includes("9H")) fail(`9H was scrapped while Frozen: scrap=${g.scrap}`);
+  } },
+  { name: "Gamble — a randomly discarded Capitalize (8S) still triggers", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["4D"], aDeck: ["8S", "7H"], aDiscard: ["5C"] }));
+    await clickHand(page, "4D"); await maybeClickPlayIt(page);
+    await clickModalCard(page, "8S");   // only card in hand afterwards, so it's the random discard
+    await clickModalCard(page, "5C");   // Capitalize: scrap a card
+    await sleep(250); const g = await getState(page);
+    if (!g.scrap.includes("5C")) fail(`Capitalize didn't scrap 5C: scrap=${g.scrap}`);
+  } },
+  { name: "Rummage — Sift (QH scrapped) is offered on Rummage's Refresh", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["3H", "2C"], aDeck: ["9H"], scrap: ["QH"] }));
+    await clickHand(page, "3H"); await maybeClickPlayIt(page);
+    await clickModalText(page, "You Refresh");
+    await clickModalStarts(page, "Sift");
+    await clickModalCard(page, "2C");
+    await sleep(250); const g = await getState(page);
+    if (!g.aHand.includes("9H")) fail(`Sift didn't draw 9H: ${g.aHand}`);
+    if (!g.aDiscard.includes("2C")) fail(`Sift didn't discard 2C: ${g.aDiscard}`);
+  } },
+  { name: "Improvise — empty deck and discard skips straight to the discard", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["KD", "2C"] }));
+    await clickHand(page, "KD"); await maybeClickPlayIt(page);
+    await clickModalCard(page, "2C");
+    await sleep(250); const g = await getState(page);
+    if (!g.aDiscard.includes("2C")) fail(`2C not discarded: ${g.aDiscard}`);
+  } },
+  { name: "Deck-out — game-over names the right winner and drops stale showdown", run: async (page, base) => {
+    await setState(page, actionScenario(base, { aHand: ["3D", "2C"], _revealAE: { handName: "Flush" }, _revealBE: { handName: "Pair" }, _revealWinner: "A" }));
+    await clickHand(page, "3D"); await maybeClickPlayIt(page);
+    if (!await waitPhase(page, "gameOver")) fail("game did not end");
+    const g = await getState(page);
+    if (g._winner !== "B") fail(`expected winner B, got ${g._winner}`);
+    if (g._revealAE) fail("stale showdown data survived");
+    const text = await page.evaluate(() => document.body.innerText);
+    if (!/Player B Wins/i.test(text)) fail("end screen doesn't say Player B wins");
+  } },
 ];
 
 // ---- run ----

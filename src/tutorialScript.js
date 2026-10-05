@@ -50,7 +50,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
       message: copy.round1.firstAction.message,
       expect: { kind: "playCard", value: "3D" },
     };
-    if (modal?.type === "pickDiscard" && /^Loot/.test(modal.title || "")) return {
+    if (modal?.tutorialKey === "loot-discard") return {
       title: copy.round1.drawThenDiscard.title,
       message: copy.round1.drawThenDiscard.message,
       expect: { kind: "modalCard", value: "2C" },
@@ -70,12 +70,12 @@ export function getTutorialPrompt(gs, modal, fdMode) {
       message: copy.round1.scorePhase.message,
       expect: { kind: "reveal" },
     };
-    if (modal?.type === "pickFromList" && /Buff/.test(modal.title || "")) return {
+    if (modal?.tutorialKey === "buff-target") return {
       title: copy.round1.chooseTarget.title,
       message: copy.round1.chooseTarget.message,
       expect: { kind: "modalCard", value: "6D" },
     };
-    if (modal?.type === "pickRank" && /Buff/.test(modal.title || "")) return {
+    if (modal?.tutorialKey === "buff-rank") return {
       title: copy.round1.chooseRank.title,
       message: copy.round1.chooseRank.message,
       expect: { kind: "modalRank", value: "K" },
@@ -93,7 +93,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
       message: copy.round2.defaultFaceDownReward.message,
       expect: { kind: "refreshChoice", value: "refresh" },
     };
-    if (modal?.type === "pickDiscard" && /^Refresh/.test(modal.title || "")) return {
+    if (modal?.tutorialKey === "refresh-discard") return {
       title: copy.round2.refresh.title,
       message: copy.round2.refresh.message,
       expect: { kind: "modalCard", value: "5H" },
@@ -136,7 +136,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
       message: copy.round3.discardCamouflage.message,
       expect: { kind: "none" },
     };
-    if (modal?.type === "pickFromList" && /Impeach/.test(modal.title || "")) return {
+    if (modal?.tutorialKey === "impeach-target") return {
       title: copy.round3.scrapCamouflage.title,
       message: copy.round3.scrapCamouflage.message,
       expect: { kind: "modalCard", value: "QD" },
@@ -178,7 +178,7 @@ export function getTutorialPrompt(gs, modal, fdMode) {
       message: copy.round3.thisComesFromScrap.message,
       expect: { kind: "queenChoice", value: "suit" },
     };
-    if (modal?.type === "pickSuit" && /Camouflage/.test(modal.title || "")) return {
+    if (modal?.tutorialKey === "camouflage-suit") return {
       title: copy.round3.completeFlush.title,
       message: copy.round3.completeFlush.message,
       expect: { kind: "modalSuit", value: "C" },
@@ -190,9 +190,11 @@ export function getTutorialPrompt(gs, modal, fdMode) {
     };
   }
 
+  // Unscripted state: let the player act freely rather than blocking every input
+  // (an `expect` of "none" here would softlock anything the script didn't foresee).
   return {
     title: copy.fallback.title,
     message: copy.fallback.message,
-    expect: { kind: "none" },
+    expect: null,
   };
 }

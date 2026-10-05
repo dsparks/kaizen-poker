@@ -72,6 +72,13 @@ const completeState=()=>migrateGameState({
   assert.equal(evalHand(["10H","JH","QH","KH","AH"]).handName,"Royal Flush");
   assert.equal(evalHand(["AC","2D","3H","4S","5C"]).handName,"Straight");
   assert.equal(compareHands(["9C","9D","9H","2S","2C"],["8C","8D","8H","AS","AC"]),"A");
+  // Stacked mods on one card apply in order; a later suit-only mod keeps the earlier rank.
+  const stacked=[{target:"2S",rank:"8",suit:null},{target:"2S",rank:"9",suit:null},{target:"2S",rank:null,suit:"D"}];
+  const ev=evalHand(["9C","9D","9H","2S","3C"],stacked);
+  assert.equal(ev.handName,"Four of a Kind");
+  assert.equal(ev.effective.find(c=>c.id==="2S").suit,"D");
+  // A wheel loses to a 6-high straight.
+  assert.equal(compareHands(["AC","2D","3H","4S","5C"],["2C","3D","4H","5S","6C"]),"B");
 }
 
 {
