@@ -37,7 +37,7 @@ import { randomIndexFromState, shuffleFromState } from "./rng.js";
 import { getPlayerZone, opponent, reduceGameCommand, setPlayerZone } from "./rulesEngine.js";
 import { randomizeLibraryKnowledge, rememberBottomCard, rememberCards, rememberDeckOrder, rememberLibrary, rememberTopCard, syncVisibleMemories } from "./memory.js";
 import { SFX_ENABLED_KEY, setGlobalSfxEnabled, getSfxEnabledDefault, playSfx } from "./sfx.js";
-import { FONT_DISPLAY, FONT_BODY, USE_ILLUSTRATED_CARDS, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
+import { FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
 
 // ============================================================
 // APP SHELL HELPERS (routing, local snapshots, misc)
@@ -99,6 +99,13 @@ const saveLocalGameSnapshot=gs=>{
     if(canResumeLocally(gs))window.localStorage.setItem(LOCAL_GAME_SNAPSHOT_KEY,JSON.stringify(gs));
   }catch{}
 };
+// Card aesthetic ("graphic" | "illustrated"), chosen on the main menu and
+// remembered per browser.
+const CARD_AESTHETIC_KEY="kp-card-aesthetic";
+const loadCardAesthetic=()=>{
+  try{const v=window.localStorage.getItem(CARD_AESTHETIC_KEY);if(v==="graphic"||v==="illustrated")return v;}catch{}
+  return DEFAULT_CARD_AESTHETIC;
+};
 const computeIsMobileLandscape=()=>{
   if(typeof window==="undefined")return false;
   const w=window.innerWidth,h=window.innerHeight;
@@ -122,6 +129,7 @@ export default function KaizenPoker(){
   const[undoState,setUndoState]=useState(null); // snapshot before last action, for undo
   const[toast,setToast]=useState(null);
   const[sfxEnabled,setSfxEnabled]=useState(()=>getSfxEnabledDefault());
+  const[cardAesthetic,setCardAesthetic]=useState(loadCardAesthetic);
   const[joinCode,setJoinCode]=useState("");
   const[shareLink,setShareLink]=useState("");
   const[soloIntroVisible,setSoloIntroVisible]=useState(false);
@@ -160,10 +168,11 @@ export default function KaizenPoker(){
   const initialRouteHandledRef=useRef(false);
   const lastUmamiScreenRef=useRef("");
   const konamiProgressRef=useRef(0);
+  useEffect(()=>{try{window.localStorage.setItem(CARD_AESTHETIC_KEY,cardAesthetic);}catch{}},[cardAesthetic]);
   // Warm the (web-optimized) card illustrations once the browser is idle so
-  // cards never pop in blank mid-game.
+  // cards never pop in blank mid-game. Only needed when illustrations are on.
   useEffect(()=>{
-    if(!USE_ILLUSTRATED_CARDS||typeof window==="undefined")return undefined;
+    if(cardAesthetic!=="illustrated"||typeof window==="undefined")return undefined;
     const warm=()=>{CARDS.forEach(c=>{const src=getCardIllustrationSrc(c.name);if(src){const img=new Image();img.src=src;}});};
     if(window.requestIdleCallback){
       const handle=window.requestIdleCallback(warm,{timeout:4000});
@@ -171,7 +180,7 @@ export default function KaizenPoker(){
     }
     const timer=setTimeout(warm,1500);
     return()=>clearTimeout(timer);
-  },[]);
+  },[cardAesthetic]);
   // Card flights: ghosts that fly when a card changes zones between commits.
   const[flights,setFlights]=useState([]);
   const flightKeyRef=useRef(0);
@@ -1598,6 +1607,23 @@ export default function KaizenPoker(){
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#8d89a8",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 className="kp-wordmark" style={{fontSize:54,fontWeight:400,letterSpacing:2,margin:0,textAlign:"center",lineHeight:1}}>KAIZEN POKER</h1>
         <p style={{color:"#c8c4d8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
+        <div style={{width:"100%",display:"grid",gap:8}}>
+          <div className="kp-section-label" id="kpAestheticLabel" style={{color:"#f4e9d8",textAlign:"center"}}>Card Aesthetic</div>
+          <div className="kp-aesthetic kp-panel-inset" role="radiogroup" aria-labelledby="kpAestheticLabel">
+            {[
+              {key:"graphic",label:"Graphical",note:"Clean type and suit rings, no artwork",style:"graphic"},
+              {key:"illustrated",label:"Illustrated",note:"Painted card art",style:"image"},
+            ].map(o=>(
+              <button key={o.key} type="button" role="radio" aria-checked={cardAesthetic===o.key}
+                onClick={()=>{if(cardAesthetic!==o.key){playSfx("confirm",{volume:.28});setCardAesthetic(o.key);}}}>
+                <span className="kp-aesthetic-card" aria-hidden="true">
+                  <CardRenderContext.Provider value={o.style}><Card id="7H" small/></CardRenderContext.Provider>
+                </span>
+                <span><span className="kp-aesthetic-label">{o.label}</span><span className="kp-aesthetic-note">{o.note}</span></span>
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={{width:"100%",display:"grid",gap:14}}>
           <div style={{display:"grid",gap:8}}>
             <div className="kp-section-label" style={{color:"#f5b942",textAlign:"center"}}>Learn</div>
@@ -1656,12 +1682,12 @@ export default function KaizenPoker(){
   const actingPlayer=gs.currentPlayer;
   const seatPlayer=isOnlineMode?(liveSeat||onlineRef.current.seat||null):null;
   const viewerPlayer=gs.mode==="tutorial"?"A":isOnlineMode?(seatPlayer||actingPlayer):actingPlayer;
-  // The solo test mode always renders the opposite of the default card style:
-  // with illustrations as the default it is the "Solo Artless Test" (HTML cards),
-  // and if USE_ILLUSTRATED_CARDS is rolled back it becomes the art test again.
+  // Card faces follow the player's menu choice; the solo test mode always shows
+  // the opposite one, so both faces stay one click away for review.
+  const chosenRenderStyle=cardAesthetic==="illustrated"?"image":"graphic";
   const cardRenderStyle=gs.mode==="solo_art"
-    ?(USE_ILLUSTRATED_CARDS?"html":"image")
-    :(USE_ILLUSTRATED_CARDS?"image":"html");
+    ?(chosenRenderStyle==="image"?"graphic":"image")
+    :chosenRenderStyle;
   const soloDifficulty=gs._soloDifficulty||SOLO_DIFFICULTIES.difficult;
   const easySoloMode=isSoloMode(gs.mode)&&soloDifficulty===SOLO_DIFFICULTIES.easy;
   const showingRevealedChallengerCard=easySoloMode&&!!gs._soloReveal?.cardId&&gs.phase!=="action";

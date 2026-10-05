@@ -195,6 +195,65 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
   text-transform: uppercase;
 }
 
+/* ---------------- Graphic card face (GraphicCard.jsx) ----------------
+   Sized entirely in cqw: the face is an inline-size container, so the same
+   layout serves the 180px hand card, the 68px table card and any preview.
+   The center rule sits at exactly 50% of the card's height. */
+.kp-gc { position: absolute; inset: 0; container-type: inline-size; overflow: hidden; border-radius: inherit; background: #fbfbf8; color: #17171a; font-family: "Archivo", "Helvetica Neue", Arial, sans-serif; }
+.kp-gc svg { display: block; }
+.kp-gc-idx { position: absolute; left: 4.5cqw; top: 4.5cqw; width: 15cqw; display: flex; flex-direction: column; align-items: center; gap: 1.2cqw; color: var(--suit); }
+.kp-gc-idx span { font-weight: 800; font-stretch: 70%; font-size: 16cqw; line-height: .82; letter-spacing: -.03em; }
+.kp-gc-ten span { font-size: 14cqw; letter-spacing: -.08em; }
+.kp-gc-idx svg { width: 9cqw; height: 9cqw; }
+.kp-gc-flip { left: auto; top: auto; right: 4.5cqw; bottom: 4.5cqw; transform: rotate(180deg); }
+.kp-gc-rail { position: absolute; left: 4.5cqw; width: 15cqw; top: 33cqw; bottom: 4.5cqw; background: var(--suit); border-radius: 2.4cqw; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; overflow: hidden; }
+.kp-gc-rail h3 { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; padding: 4cqw 0; color: #fff; font-family: inherit; font-weight: 800; font-stretch: 82%; font-size: var(--nfs, 10cqw); line-height: 1; white-space: nowrap; letter-spacing: .01em; }
+.kp-gc-emblem { position: absolute; left: 24cqw; right: 5cqw; top: 6cqw; bottom: calc(50% + 4.5cqw); color: var(--suit); }
+.kp-gc-emblem svg { width: 100%; height: 100%; }
+.kp-gc-mid { position: absolute; left: 24cqw; right: 4.5cqw; top: 50%; border-top: .45cqw solid #17171a2e; }
+.kp-gc-type { position: absolute; left: 24cqw; right: 5cqw; top: calc(50% + 3.2cqw); display: flex; align-items: center; gap: 2cqw; font-size: 3.8cqw; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #46464e; line-height: 1; }
+.kp-gc-type i { width: 3.2cqw; height: 3.2cqw; background: var(--type); display: block; }
+.kp-gc-text { position: absolute; left: 24cqw; right: 4.5cqw; top: calc(50% + 9.6cqw); bottom: 4.5cqw; margin: 0; overflow: hidden; color: #26262c; font-size: var(--fs, 5.4cqw); line-height: 1.24; font-weight: 500; font-stretch: 92%; }
+.kp-gc-text b { font-weight: 750; }
+.kp-gc-rem { font-style: italic; opacity: .72; }
+/* Rules text flows around the inverted corner index: a zero-width float pushes
+   a second float, sized like the index, down to the box's bottom-right. */
+.kp-gc-text::before { content: ""; float: right; width: 0; height: calc(100% - 25cqw); }
+.kp-gc-corner { float: right; clear: right; width: 18cqw; height: 25cqw; }
+/* Table size (68 x 95): index, name rail and emblem only, plus a type stripe. */
+.kp-gc-mini .kp-gc-idx { width: 22cqw; left: 4cqw; }
+.kp-gc-mini .kp-gc-idx span { font-size: 25cqw; }
+.kp-gc-mini .kp-gc-ten span { font-size: 20cqw; }
+.kp-gc-mini .kp-gc-idx svg { width: 12cqw; height: 12cqw; }
+.kp-gc-mini .kp-gc-rail { width: 22cqw; left: 4cqw; top: 46cqw; bottom: 4cqw; }
+.kp-gc-mini .kp-gc-rail h3 { font-size: var(--nfs-mini, 13cqw); padding: 5cqw 0; }
+.kp-gc-mini .kp-gc-emblem { left: 31cqw; right: 5cqw; top: 30cqw; bottom: auto; height: 66cqw; }
+.kp-gc-mini::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4cqw; background: var(--type); }
+
+/* ---------------- Card aesthetic switch (main menu) ---------------- */
+.kp-aesthetic { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; }
+.kp-aesthetic button {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 92px;
+  border: 2px solid transparent; border-radius: 10px; background: transparent; cursor: pointer;
+  color: var(--text-soft); text-align: left; font-family: var(--font-body);
+  transition: background .12s, transform .07s, box-shadow .12s, color .12s;
+}
+.kp-aesthetic button:hover { background: rgba(255, 255, 255, .05); color: var(--text-bright); }
+.kp-aesthetic button:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; }
+.kp-aesthetic button[aria-checked="true"] {
+  background: linear-gradient(180deg, #ffd06a, var(--gold)); color: #2a1a00;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .42), inset 0 -3px 0 rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .35);
+}
+.kp-aesthetic button[aria-checked="true"]:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, .42), inset 0 2px 0 rgba(255, 255, 255, .3); }
+.kp-aesthetic-card { flex: none; transform: rotate(-4deg); pointer-events: none; }
+.kp-aesthetic button[aria-checked="true"] .kp-aesthetic-card { transform: rotate(-4deg) translateY(-2px); }
+.kp-aesthetic-label { display: block; font-family: var(--font-display); font-size: 19px; letter-spacing: .5px; line-height: 1.05; }
+.kp-aesthetic button[aria-checked="true"] .kp-aesthetic-label { text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
+.kp-aesthetic-note { display: block; font-size: 12px; font-weight: 700; line-height: 1.3; margin-top: 4px; opacity: .85; }
+@media (max-width: 460px) {
+  .kp-aesthetic button { flex-direction: column; text-align: center; gap: 8px; padding: 10px 6px; }
+}
+
 /* ---------------- Cards ---------------- */
 .kp-card {
   animation: cardDeal 0.32s cubic-bezier(0.26, 1.36, 0.42, 1);

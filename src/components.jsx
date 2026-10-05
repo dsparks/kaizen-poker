@@ -7,11 +7,13 @@ import { getCardIllustrationSrc } from "./cardImageMap.js";
 import { SUITS, SC, SO, RO, CARDS, CM, TI, TC, isSoloMode, SOLO_DIFFICULTIES } from "./gameData.js";
 import { evalHand, shuf, sortC } from "./engine.js";
 import { playSfx } from "./sfx.js";
+import { GraphicCardFace } from "./GraphicCard.jsx";
 
-// Visual theme: set to false to roll back to the HTML-first card faces.
-// The solo test mode (mode key "solo_art") always shows the opposite style of
-// this default, so there is always one place to preview the other card face.
-const USE_ILLUSTRATED_CARDS=true;
+// Card aesthetic: "graphic" (illustration-free Counted Rings faces, see
+// GraphicCard.jsx) or "illustrated" (painted art). Players switch it on the main
+// menu; this is the default for new players. The solo test mode (mode key
+// "solo_art") always shows the opposite of the player's choice.
+const DEFAULT_CARD_AESTHETIC="graphic";
 const FONT_DISPLAY="'Lilita One','Arial Black',sans-serif";
 const FONT_BODY="'Nunito','Segoe UI',sans-serif";
 function FeltBackdrop(){
@@ -59,7 +61,9 @@ const Card=memo(function Card({id,selected,onClick,dimmed,small,glow,isNew,onMou
   const renderStyle=useContext(CardRenderContext);
   const c=CM[id];if(!c)return null;
   const artMode=renderStyle==="image";
-  const w=artMode&&!small?180:(small?68:120),h=artMode&&!small?252:(small?95:168),ti=TI[c.type];
+  const graphicMode=renderStyle==="graphic";
+  const fullSize=(artMode||graphicMode)&&!small;
+  const w=fullSize?180:(small?68:120),h=fullSize?252:(small?95:168),ti=TI[c.type];
   const baseTransform=selected?"translateY(-4px)":isNew?"translateY(-3px)":"translateY(0)";
   const paperBg=small?`linear-gradient(180deg,${ti.bg},#e7dcc6)`:`linear-gradient(180deg,#fbf7ef 0%,${ti.bg} 22%,#e6dcc8 100%)`;
   const artSrc=artMode?getCardIllustrationSrc(c.name):null;
@@ -76,13 +80,15 @@ const Card=memo(function Card({id,selected,onClick,dimmed,small,glow,isNew,onMou
     onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick}
     onKeyDown={onClick?(event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();onClick(event);}}):undefined}
     title={small?"Hover to preview, use View to pin":undefined} style={{width:w,height:h,borderRadius:small?8:11,flexShrink:0,position:"relative",
-    border:selected?`${small?2:3}px solid #f5b942`:isNew?`${small?2:3}px solid #3bbf7c`:glow?`${small?2:3}px solid ${glow}`:`${small?2:3}px solid ${artMode?"#f4e9d8":"#e8dcc4"}`,
-    background:paperBg,
+    border:selected?`${small?2:3}px solid #f5b942`:isNew?`${small?2:3}px solid #3bbf7c`:glow?`${small?2:3}px solid ${glow}`:`${small?2:3}px solid ${graphicMode?"#dcd8cc":artMode?"#f4e9d8":"#e8dcc4"}`,
+    background:graphicMode?"#fbfbf8":paperBg,
     boxShadow:selected?"0 5px 0 rgba(0,0,0,.35), 0 0 20px #f5b94266":isNew?"0 5px 0 rgba(0,0,0,.35), 0 0 18px #3bbf7c66":glow?`0 5px 0 rgba(0,0,0,.35), 0 0 16px ${glow}55`:"0 5px 0 rgba(0,0,0,.32), 0 9px 18px rgba(0,0,0,.28)",
     cursor:onClick?"pointer":"default",display:"flex",flexDirection:"column",
-    padding:artMode?0:(small?"4px 5px":"7px 9px"),overflow:"hidden",opacity:dimmed?0.3:1,
+    padding:(artMode||graphicMode)?0:(small?"4px 5px":"7px 9px"),overflow:"hidden",opacity:dimmed?0.3:1,
     transform:baseTransform}}>
-    {artMode&&artSrc
+    {graphicMode
+      ?<GraphicCardFace id={id} small={small}/>
+      :artMode&&artSrc
       ?<>
         <img src={artSrc} alt="" draggable={false} style={{position:"absolute",left:ART_IMAGE_OFFSET_X,top:ART_IMAGE_OFFSET_Y,width:`${ART_IMAGE_WIDTH_SCALE*100}%`,height:`${ART_IMAGE_HEIGHT_SCALE*100}%`,objectFit:"cover",objectPosition:"50% 42%",borderRadius:"inherit",userSelect:"none",pointerEvents:"none",filter:"saturate(1.04) contrast(.98)"}}/>
         <div style={{position:"absolute",inset:0,borderRadius:"inherit",background:"linear-gradient(90deg,rgba(0,0,0,.68) 0%,rgba(0,0,0,.34) 22%,rgba(0,0,0,0) 48%)",pointerEvents:"none"}}/>
@@ -136,8 +142,8 @@ const Card=memo(function Card({id,selected,onClick,dimmed,small,glow,isNew,onMou
   </div>);});
 function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,setPinned]=useState(false);const[pos,setPos]=useState({x:0,y:0});
   const renderStyle=useContext(CardRenderContext);
-  const previewW=renderStyle==="image"?220:160;
-  const previewH=renderStyle==="image"?292:220;
+  const previewW=renderStyle!=="html"?220:160;
+  const previewH=renderStyle!=="html"?292:220;
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(16,pos.x+20));
   const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(16,pos.y-30));
   return(<>
@@ -158,8 +164,8 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
   </>);}
 function FaceDownActionSlot({id,canPeek=false,copySticker}){const[hover,setHover]=useState(false);const[pos,setPos]=useState({x:0,y:0});
   const renderStyle=useContext(CardRenderContext);
-  const previewW=renderStyle==="image"?220:160;
-  const previewH=renderStyle==="image"?292:220;
+  const previewW=renderStyle!=="html"?220:160;
+  const previewH=renderStyle!=="html"?292:220;
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(8,pos.x+14));
   const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(8,pos.y-previewH-12));
   return(<>
@@ -298,8 +304,8 @@ function FlightGhost({flight,onDone}){
 function RememberChip({id}){const[hover,setHover]=useState(false);const[pos,setPos]=useState({x:0,y:0});
   const renderStyle=useContext(CardRenderContext);
   const c=CM[id];if(!c)return null;
-  const previewW=renderStyle==="image"?220:160;
-  const previewH=renderStyle==="image"?292:220;
+  const previewW=renderStyle!=="html"?220:160;
+  const previewH=renderStyle!=="html"?292:220;
   const previewX=Math.min((typeof window!=="undefined"?window.innerWidth:1280)-previewW,Math.max(8,pos.x+14));
   const previewY=Math.min((typeof window!=="undefined"?window.innerHeight:900)-previewH,Math.max(8,pos.y+18));
   const shortText=c.text.replace("As long as this card is scrapped, ","");
@@ -710,4 +716,4 @@ function PublicZones({gs,extraControls,onToggleZone,canToggleZone,spotlightZone}
     {exp&&(()=>{const z=zones.find(x=>x.key===exp);if(!z||!z.cards.length)return <div style={{fontSize:10,color:"#8d89a8",marginTop:4,fontStyle:"italic"}}>Empty</div>;
       return(<div style={{marginTop:6,padding:8,background:"#12142acc",borderRadius:10,border:`2px solid ${z.color}44`,boxShadow:"inset 0 3px 8px rgba(0,0,0,.4)"}}>
         <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{sortC(z.cards).map((id,i)=><PreviewCard key={id+i} id={id}/>)}</div></div>);})()}</div>);}
-export { FONT_DISPLAY, FONT_BODY, USE_ILLUSTRATED_CARDS, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones };
+export { FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones };

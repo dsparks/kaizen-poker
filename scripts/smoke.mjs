@@ -88,6 +88,12 @@ try {
       if (route.hash === "#/hotseat") {
         await page.screenshot({ path: path.join(OUT, route.name + "-handoff.png") }).catch(() => {});
         if (!(await dismissHandoff(page))) rec.pageErrors.push("hotseat handoff cover missing");
+        // Graphic card faces auto-fit their rules text; none may be clipped.
+        await new Promise(r => setTimeout(r, 600));
+        const clipped = await page.evaluate(() => [...document.querySelectorAll(".kp-gc-text")]
+          .filter(p => p.clientHeight && p.scrollHeight > p.clientHeight + 1)
+          .map(p => p.closest("[data-card-id]")?.getAttribute("data-card-id")));
+        if (clipped.length) rec.pageErrors.push("graphic card rules text clipped: " + clipped.join(", "));
       }
     } catch (e) {
       navOk = false;

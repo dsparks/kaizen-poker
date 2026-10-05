@@ -52,9 +52,15 @@ file back into the bundle.
 
 ## Other things worth knowing
 
-- `USE_ILLUSTRATED_CARDS` (top of `src/KaizenPoker.jsx`) gates illustrated vs
-  HTML card faces. The solo test mode (`#/solo-artless`) always renders the
-  opposite of the default so both faces stay previewable.
+- Card faces: players pick a **card aesthetic** on the main menu — "graphic"
+  (default; `DEFAULT_CARD_AESTHETIC` in `components.jsx`) or "illustrated" —
+  saved in localStorage (`kp-card-aesthetic`). Graphic faces are
+  `src/GraphicCard.jsx` ("Counted Rings": the suit emblem has one layer per
+  rank, Ace = 1, ink outermost) styled by `.kp-gc*` in `theme.css`, sized in
+  cqw, with rules text auto-fitted below a center rule (measured once per card
+  after Archivo loads; smoke fails if any is clipped). Suit outlines are
+  Phosphor Icons (MIT) in `src/suitShapes.js`. The solo test mode
+  (`#/solo-artless`) always renders the opposite of the player's choice.
 - The card back is `CardBack` in `components.jsx`: it auto-uses the images in
   `card_back/` (via the pipeline above) and falls back to a placeholder SVG
   emblem when that folder is empty. The current backs are 8 unique "Office
