@@ -1607,23 +1607,6 @@ export default function KaizenPoker(){
       <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",color:"#8d89a8",fontWeight:800}}>Deckbuilding Duel Prototype</div>
       <h1 className="kp-wordmark" style={{fontSize:54,fontWeight:400,letterSpacing:2,margin:0,textAlign:"center",lineHeight:1}}>KAIZEN POKER</h1>
         <p style={{color:"#c8c4d8",fontSize:14,maxWidth:460,textAlign:"center",lineHeight:1.6,margin:0}}>A deckbuilding poker duel. Play hot-seat locally, learn with Chippy in the guided Tutorial, take on the Challenger in Solo Mode, or create an online guest game and send the link to a friend.</p>
-        <div style={{width:"100%",display:"grid",gap:8}}>
-          <div className="kp-section-label" id="kpAestheticLabel" style={{color:"#f4e9d8",textAlign:"center"}}>Card Aesthetic</div>
-          <div className="kp-aesthetic kp-panel-inset" role="radiogroup" aria-labelledby="kpAestheticLabel">
-            {[
-              {key:"graphic",label:"Graphical",note:"Clean type and suit rings, no artwork",style:"graphic"},
-              {key:"illustrated",label:"Illustrated",note:"Painted card art",style:"image"},
-            ].map(o=>(
-              <button key={o.key} type="button" role="radio" aria-checked={cardAesthetic===o.key}
-                onClick={()=>{if(cardAesthetic!==o.key){playSfx("confirm",{volume:.28});setCardAesthetic(o.key);}}}>
-                <span className="kp-aesthetic-card" aria-hidden="true">
-                  <CardRenderContext.Provider value={o.style}><Card id="7H" small/></CardRenderContext.Provider>
-                </span>
-                <span><span className="kp-aesthetic-label">{o.label}</span><span className="kp-aesthetic-note">{o.note}</span></span>
-              </button>
-            ))}
-          </div>
-        </div>
         <div style={{width:"100%",display:"grid",gap:14}}>
           <div style={{display:"grid",gap:8}}>
             <div className="kp-section-label" style={{color:"#f5b942",textAlign:"center"}}>Learn</div>
@@ -1660,6 +1643,16 @@ export default function KaizenPoker(){
         </div>
       </div>
         {onlineError&&<div style={{fontSize:12,color:"#fca5a5",textAlign:"center",maxWidth:460}}>{onlineError}</div>}
+        {/* Deliberately quiet: a small setting at the foot of the menu. */}
+        <div className="kp-aesthetic">
+          <span id="kpAestheticLabel">Card aesthetic</span>
+          <div className="kp-aesthetic-seg" role="radiogroup" aria-labelledby="kpAestheticLabel">
+            {[["graphic","Graphical"],["illustrated","Illustrated"]].map(([key,label])=>(
+              <button key={key} type="button" role="radio" aria-checked={cardAesthetic===key}
+                onClick={()=>{if(cardAesthetic!==key){playSfx("confirm",{volume:.24});setCardAesthetic(key);}}}>{label}</button>
+            ))}
+          </div>
+        </div>
         </div></div>
     {homeRoute==="demo"&&!demoChippyDismissed&&<Chippy
       title={CHIPPY_COPY.demo.title}

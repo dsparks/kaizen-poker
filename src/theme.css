@@ -230,29 +230,24 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
 .kp-gc-mini .kp-gc-emblem { left: 31cqw; right: 5cqw; top: 30cqw; bottom: auto; height: 66cqw; }
 .kp-gc-mini::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4cqw; background: var(--type); }
 
-/* ---------------- Card aesthetic switch (main menu) ---------------- */
-.kp-aesthetic { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; }
-.kp-aesthetic button {
-  display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 92px;
-  border: 2px solid transparent; border-radius: 10px; background: transparent; cursor: pointer;
-  color: var(--text-soft); text-align: left; font-family: var(--font-body);
-  transition: background .12s, transform .07s, box-shadow .12s, color .12s;
+/* ---------------- Card aesthetic switch (main menu) ----------------
+   Deliberately quiet: a small labeled segmented control at the foot of the
+   menu. Only the selected option carries the gold stamped highlight. */
+.kp-aesthetic { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 4px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .06); width: 100%; }
+.kp-aesthetic > span { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); }
+.kp-aesthetic-seg { display: inline-flex; gap: 3px; padding: 3px; border-radius: 9px; background: var(--panel-darkest); box-shadow: inset 0 2px 5px rgba(0, 0, 0, .45); }
+.kp-aesthetic-seg button {
+  font-family: var(--font-body); font-weight: 800; font-size: 12px; letter-spacing: .3px;
+  padding: 5px 11px; border: 0; border-radius: 7px; background: transparent; color: var(--text-dim); cursor: pointer;
+  transition: color .12s, background .12s;
 }
-.kp-aesthetic button:hover { background: rgba(255, 255, 255, .05); color: var(--text-bright); }
-.kp-aesthetic button:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; }
-.kp-aesthetic button[aria-checked="true"] {
-  background: linear-gradient(180deg, #ffd06a, var(--gold)); color: #2a1a00;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, .42), inset 0 -3px 0 rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .35);
+.kp-aesthetic-seg button:hover { color: var(--text-soft); }
+.kp-aesthetic-seg button:focus-visible { outline: 2px solid var(--cream); outline-offset: 1px; }
+.kp-aesthetic-seg button[aria-checked="true"] {
+  background: linear-gradient(180deg, #ffd06a, var(--gold)); color: #2a1a00; cursor: default;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .35);
 }
-.kp-aesthetic button[aria-checked="true"]:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, .42), inset 0 2px 0 rgba(255, 255, 255, .3); }
-.kp-aesthetic-card { flex: none; transform: rotate(-4deg); pointer-events: none; }
-.kp-aesthetic button[aria-checked="true"] .kp-aesthetic-card { transform: rotate(-4deg) translateY(-2px); }
-.kp-aesthetic-label { display: block; font-family: var(--font-display); font-size: 19px; letter-spacing: .5px; line-height: 1.05; }
-.kp-aesthetic button[aria-checked="true"] .kp-aesthetic-label { text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
-.kp-aesthetic-note { display: block; font-size: 12px; font-weight: 700; line-height: 1.3; margin-top: 4px; opacity: .85; }
-@media (max-width: 460px) {
-  .kp-aesthetic button { flex-direction: column; text-align: center; gap: 8px; padding: 10px 6px; }
-}
+@media (max-width: 900px) { .kp-aesthetic-seg button { padding: 9px 14px; } }
 
 /* ---------------- Cards ---------------- */
 .kp-card {
