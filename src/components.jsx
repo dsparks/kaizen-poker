@@ -23,6 +23,7 @@ function FeltBackdrop(){
   </>);
 }
 const CardRenderContext=createContext("html");
+const SUIT_NAMES={C:"Clubs",D:"Diamonds",H:"Hearts",S:"Spades"};
 // Touch-first device (no hover): gates tap fallbacks for hover-only previews.
 const IS_TOUCH_DEVICE=typeof window!=="undefined"&&!!window.matchMedia&&window.matchMedia("(hover: none)").matches;
 const ART_SOURCE_WIDTH=1049;
@@ -155,7 +156,7 @@ function PreviewCard(props){const[hover,setHover]=useState(false);const[pinned,s
     {hover&&!pinned&&<div style={{position:"fixed",left:previewX,top:previewY,zIndex:1200,pointerEvents:"none",animation:"inspectPop 0.12s ease-out"}}>
       <Card id={props.id} rankSticker={props.rankSticker} suitSticker={props.suitSticker} copySticker={props.copySticker}/>
     </div>}
-    {pinned&&<Modal title={`${CM[props.id]?.rank||""}${SUITS[CM[props.id]?.suit]||""} ${CM[props.id]?.name||"Card"}`}>
+    {pinned&&<Modal title={`${CM[props.id]?.name||"Card"} · ${CM[props.id]?.rank||""} of ${SUIT_NAMES[CM[props.id]?.suit]||""}`}>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
         <Card id={props.id} rankSticker={props.rankSticker} suitSticker={props.suitSticker} copySticker={props.copySticker}/>
         <Btn label="Close" bg="#333" onClick={()=>setPinned(false)}/>
@@ -511,7 +512,12 @@ function KonamiCelebrationOverlay({open,onClose,onReplay,cards=[]}) {
     </div>
   );
 }
-function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){return <div
+// scale is relative to a 120px-wide card; full-size faces (graphic, image) are
+// 180px wide, so they shrink further to land at the same thumbnail size.
+function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){
+  const renderStyle=useContext(CardRenderContext);
+  const visualScale=renderStyle==="html"?scale:scale*120/180;
+  return <div
   onMouseEnter={onHover}
   onMouseLeave={onLeave}
   onClick={onClick||onHover}
@@ -521,7 +527,7 @@ function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){ret
   style={{
     width:120*scale,
     height:168*scale,
-    transform:`scale(${scale}) translateY(${active?-4:0}px)`,
+    transform:`scale(${visualScale}) translateY(${active?-4:0}px)`,
     transformOrigin:"top left",
     transition:"transform .18s ease,filter .18s ease",
     filter:active?"drop-shadow(0 12px 22px rgba(0,0,0,.34)) brightness(1.04)":"drop-shadow(0 8px 16px rgba(0,0,0,.22))",
@@ -531,6 +537,9 @@ function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){ret
 </div>;}
 function HandBadge({ids,mods,delay}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span key={r.handName} style={{display:"inline-block",padding:"4px 14px",borderRadius:9,background:"#12142a",border:`2px solid ${c}`,color:c,fontWeight:400,fontSize:13,fontFamily:FONT_DISPLAY,letterSpacing:.6,whiteSpace:"nowrap",boxShadow:`0 3px 0 rgba(0,0,0,.4), 0 0 14px ${c}33`,animation:`scorePunch .42s cubic-bezier(.26,1.5,.42,1) ${delay||"0s"} backwards`}}>{r.handName}</span>;}
+// Button roles, used consistently across modals: the main action is gold,
+// equal-weight choices share one blue, and Cancel/Skip/Close are quiet.
+const BTN_PRIMARY="#f5b942",BTN_CHOICE="#34a3ff",BTN_QUIET="#333";
 function Btn({label,bg="#333",onClick,disabled,silent=false,autoFocus=false}){
   // Normalize legacy bg values (gradients, "#333" secondaries) into flat stamped fills.
   const flatBg=(()=>{
@@ -550,7 +559,8 @@ function Chip({filled,color,label,active}){return <div style={{width:22,height:2
 </div>;}
 
 // Draggable Modal
-function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});const shellRef=useRef(null);const titleId=useId();
+// eyebrow: optional small tag above the title (e.g. which hotseat player is choosing).
+function Modal({title,eyebrow,children}){const[pos,setPos]=useState({x:0,y:0});const dr=useRef(false),off=useRef({x:0,y:0});const shellRef=useRef(null);const titleId=useId();
   useLayoutEffect(()=>{
     const previous=document.activeElement;
     shellRef.current?.focus({preventScroll:true});
@@ -571,39 +581,43 @@ function Modal({title,children}){const[pos,setPos]=useState({x:0,y:0});const dr=
   return(<div style={{position:"fixed",inset:0,background:"rgba(14,5,14,0.66)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div ref={shellRef} className="kp-modal-shell kp-panel" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={trapFocus} style={{padding:20,maxWidth:620,width:"90%",maxHeight:"80vh",overflowX:"hidden",overflowY:"auto",left:pos.x,top:pos.y,position:"relative",animation:"revealRise .26s cubic-bezier(.26,1.36,.42,1)"}}>
       <div onMouseDown={onD} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,cursor:"grab",userSelect:"none",padding:"0 0 8px",borderBottom:"2px solid #00000044"}}>
-        <div id={titleId} style={{fontSize:17,color:"#f5b942",fontFamily:FONT_DISPLAY,letterSpacing:.5,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{title}</div>
+        <div style={{minWidth:0}}>
+          {eyebrow&&<div className="kp-modal-label" style={{marginBottom:3}}>{eyebrow}</div>}
+          <div id={titleId} style={{fontSize:17,color:"#f5b942",fontFamily:FONT_DISPLAY,letterSpacing:.5,textShadow:"0 2px 0 rgba(0,0,0,.4)",textWrap:"balance"}}>{title}</div>
+        </div>
         <span style={{fontSize:9,color:"#8d89a8"}}>drag to move</span></div>
       {children}</div></div>);}
 
 // Multi-select modal (as proper component, not IIFE)
-function MultiPickModal({title,cards,maxPick,onPick,btnLabel="Confirm",statsPlayer,gs,viewerPlayer,hint}){const[pk,setPk]=useState([]);
-  return(<Modal title={title}><div style={{fontSize:11,color:"#8d89a8",marginBottom:6}}>{hint||`Select up to ${maxPick}`}</div>
+function MultiPickModal({title,eyebrow,cards,maxPick,onPick,btnLabel="Confirm",statsPlayer,gs,viewerPlayer,hint}){const[pk,setPk]=useState([]);
+  return(<Modal title={title} eyebrow={eyebrow}><p className="kp-modal-hint">{hint||`Select up to ${maxPick}.`}</p>
     {statsPlayer&&gs&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={statsPlayer} viewerPlayer={viewerPlayer}/></div>}
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<maxPick?[...p,id]:p)}/>))}</div>
-    <Btn label={`${btnLabel} (${pk.length})`} bg="#f5b942" onClick={()=>onPick(pk)}/></Modal>);}
+    <Btn label={`${btnLabel} (${pk.length})`} bg={BTN_PRIMARY} onClick={()=>onPick(pk)}/></Modal>);}
 
 // Brainstorm: pick 3 in order
 function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
   const toggle=id=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  return(<Modal title="Brainstorm: Put 3 cards on top (tap in order, 1st = top)">
+  return(<Modal title="Brainstorm · Put 3 cards on top of your deck">
+    <p className="kp-modal-hint">Tap them in order: the first card you pick goes on top.</p>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {hand.map(id=>{const idx=pk.indexOf(id);return(<div key={id} style={{position:"relative"}}>
         <PreviewCard id={id} selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
         {idx>=0&&<div style={{position:"absolute",top:2,left:2,background:"#f5b942",color:"#000",borderRadius:10,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{idx+1}</div>}
       </div>);})}</div>
-    {pk.length===3&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>Top to bottom: {pk.map(id=>CM[id].name).join(", ")}</div>}
-    <Btn label={`Put ${pk.length}/3 on top`} bg={pk.length===3?"#f5b942":"#333"} disabled={pk.length!==3} onClick={()=>pk.length===3&&onPick(pk)}/></Modal>);}
+    {pk.length===3&&<p className="kp-modal-hint">Top to bottom: {pk.map(id=>CM[id].name).join(", ")}</p>}
+    <Btn label={`Put ${pk.length}/3 on top`} bg={pk.length===3?BTN_PRIMARY:BTN_QUIET} disabled={pk.length!==3} onClick={()=>pk.length===3&&onPick(pk)}/></Modal>);}
 
 // Rejuvenate: pick up to 3 to discard
 function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
-  return(<Modal title="Rejuvenate: Discard up to 3, draw that many">
-    <div style={{fontSize:11,color:"#8d89a8",marginBottom:6}}>Choose any number from 0 to 3.</div>
+  return(<Modal title="Rejuvenate · Discard up to 3, then draw that many">
+    <p className="kp-modal-hint">Choose any number from 0 to 3.</p>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
       {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
-    <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg="#f5b942" onClick={()=>onPick(pk)}/></Modal>);}
+    <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg={BTN_PRIMARY} onClick={()=>onPick(pk)}/></Modal>);}
 
 // Persistent player memory — shows only information that player has learned.
 function DeckStats({gs,player,viewerPlayer}){const[show,setShow]=useState(false);
@@ -716,4 +730,4 @@ function PublicZones({gs,extraControls,onToggleZone,canToggleZone,spotlightZone}
     {exp&&(()=>{const z=zones.find(x=>x.key===exp);if(!z||!z.cards.length)return <div style={{fontSize:10,color:"#8d89a8",marginTop:4,fontStyle:"italic"}}>Empty</div>;
       return(<div style={{marginTop:6,padding:8,background:"#12142acc",borderRadius:10,border:`2px solid ${z.color}44`,boxShadow:"inset 0 3px 8px rgba(0,0,0,.4)"}}>
         <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{sortC(z.cards).map((id,i)=><PreviewCard key={id+i} id={id}/>)}</div></div>);})()}</div>);}
-export { FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones };
+export { BTN_PRIMARY, BTN_CHOICE, BTN_QUIET, SUIT_NAMES, FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones };

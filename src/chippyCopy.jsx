@@ -15,6 +15,11 @@ export const CHIPPY_COPY = {
     message:
       "This gallery shows the current print prototype. The illustrations are AI-generated placeholders — the published game won't use this artwork. They're here to help the card names and abilities stick, and to show the visual direction the game is being designed around.",
   },
+  galleryGraphic: {
+    title: "Card Gallery",
+    message:
+      "Every card in the deck, in the graphical style you're playing with. Hover over a card (or tap it) to see it up close. The rings in each suit emblem count the card's rank: an Ace is a single solid shape, a King has thirteen layers.",
+  },
   soloIntro: {
     title: "Solo Mode",
     message:

@@ -37,7 +37,7 @@ import { randomIndexFromState, shuffleFromState } from "./rng.js";
 import { getPlayerZone, opponent, reduceGameCommand, setPlayerZone } from "./rulesEngine.js";
 import { randomizeLibraryKnowledge, rememberBottomCard, rememberCards, rememberDeckOrder, rememberLibrary, rememberTopCard, syncVisibleMemories } from "./memory.js";
 import { SFX_ENABLED_KEY, setGlobalSfxEnabled, getSfxEnabledDefault, playSfx } from "./sfx.js";
-import { FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
+import { BTN_PRIMARY, BTN_CHOICE, BTN_QUIET, SUIT_NAMES, FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones } from "./components.jsx";
 
 // ============================================================
 // APP SHELL HELPERS (routing, local snapshots, misc)
@@ -904,7 +904,7 @@ export default function KaizenPoker(){
       if(frozen){g=L(g,`${player}: Capitalize triggers but Frozen!`);commitGameState(g);then(g);return;}
       const disc=getD(g,player).filter(id=>id!==discardedId);
       if(!disc.length){then(g);return;}
-      setModal({type:"pickFromList",title:`${player}: Capitalize! You discarded 8♠. Scrap a card?`,cards:disc,canCancel:true,
+      setModal({type:"pickFromList",title:"Capitalize · Scrap a card from your discard?",player,cards:disc,canCancel:true,
         statsPlayer:player,
         onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,player,"discard",[...getD(g2,player)].filter(x=>x!==id));
           g2.scrap=[...g2.scrap,id];g2=L(g2,`${player}: Capitalize scraps ${CM[id].name}`);commitGameState(g2);then(g2);},
@@ -931,7 +931,7 @@ export default function KaizenPoker(){
     const drawLog=(g2,suffix="")=>own?`${p} draws ${CM[g2.drawn[0]].name}${suffix}`:`${p} draws${suffix}`;
     const doRefresh=()=>{
       if(!hasHand){done(L(g,`${p} has no cards to Refresh.`));return;}
-      setModal({type:"pickDiscard",hand:getH(g,p),title:`Refresh: ${own?"Discard":`${p} discards`} (then draw)`,tutorialKey:"refresh-discard",handoffTo,
+      setModal({type:"pickDiscard",hand:getH(g,p),title:"Refresh · Discard a card, then draw",tutorialKey:"refresh-discard",handoffTo,player:own?undefined:p,
         onPick:id=>{setModal(null);
           discardFromHand(g,p,id,g2=>{
             setUndoState(null);
@@ -944,14 +944,14 @@ export default function KaizenPoker(){
     if(canSift)opts.push({label:"Sift (draw, then discard)",key:"sift"});
     if(canDeclutter)opts.push({label:"Declutter (scrap from discard)",key:"declutter"});
     if(optional)opts.push({label:"Skip",key:"skip"});
-    setModal({type:"refreshOpts",title:own?title:`${title}: ${p} chooses`,opts,handoffTo,onChoice:key=>{setModal(null);
+    setModal({type:"refreshOpts",title:title==="Rummage"?"Rummage · Choose how to Refresh":"Face-down play · Choose an effect",opts,handoffTo,player:own?undefined:p,onChoice:key=>{setModal(null);
       if(key==="skip"){done(g);return;}
       if(key==="refresh"){doRefresh();return;}
       if(key==="sift"){setUndoState(null);let g2=drawCardsChecked(g,p,1);if(g2.error)return;if(g2.drawn){trackDraws(g2,p,g2.drawn,"sift");g2=L(g2,drawLog(g2," (Sift)"));if(own)g2.newCards=g2.drawn;}commitGameState(g2);
-        setModal({type:"pickDiscard",hand:getH(g2,p),title:`Sift: ${own?"Discard":`${p} discards`} a card`,newCards:own?(g2.drawn||[]):[],handoffTo,
+        setModal({type:"pickDiscard",hand:getH(g2,p),title:"Sift · Discard a card",player:own?undefined:p,newCards:own?(g2.drawn||[]):[],handoffTo,
           onPick:id=>{setModal(null);discardFromHand(g2,p,id,done);}});return;}
       if(key==="declutter"){
-        setModal({type:"pickFromList",title:`Declutter: ${own?"Scrap":`${p} scraps`} from discard`,cards:getD(g,p),canCancel:true,
+        setModal({type:"pickFromList",title:"Declutter · Scrap a card from your discard",player:own?undefined:p,cards:getD(g,p),canCancel:true,
           statsPlayer:p,handoffTo,
           onPick:id=>{setModal(null);let g2=cloneGs(g);g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));
             g2.scrap=[...g2.scrap,id];trackEvent(g2,"card_scrapped",{cardId:id,reason:"declutter"},{playerSlot:p});g2=L(g2,`${p} scraps ${CM[id].name} (Declutter)`);done(g2);},
@@ -976,10 +976,10 @@ export default function KaizenPoker(){
       setUndoState(snap);// Can undo face-down (no info revealed)
       offerRefresh(g,g2=>{g2=advance(g2);commitGameState(g2);});return;}
     if(card.type==="Modify"&&((p==="A"&&gs.amends.aNegate)||(p==="B"&&gs.amends.bNegate))){
-      setModal({type:"alert",msg:"Negate prevents Modify actions!",onOk:()=>setModal(null)});return;}
+      flashToast("Negated: you can't play Modify Actions this round","frozen");return;}
     // Info-revealing actions: confirm first
     if(gs.mode!=="tutorial"&&REVEALS.has(cid)){
-      setModal({type:"confirm",title:`Play ${card.name}?`,msg:`This will reveal new information and can't be undone.`,card:cid,
+      setModal({type:"confirm",title:`${card.name} · Play this card?`,msg:`This will reveal new information and can't be undone.`,card:cid,
         onYes:()=>{setModal(null);setUndoState(null);resolveAction(cid);},
         onNo:()=>{setModal(null);}});return;}
     // Non-revealing actions: play with undo available
@@ -1018,29 +1018,29 @@ export default function KaizenPoker(){
         if(g.mode==="tutorial"&&p==="B"&&tutorialChoice.target&&valid.includes(tutorialChoice.target)){
           let g2=scrapF({...g},p,tutorialChoice.target);g2=L(g2,`${p} scraps ${CM[tutorialChoice.target].name}`);done(g2);return;
         }
-        pick(`${card.name}: Scrap a ${card.scrapSuits.map(s=>SUITS[s]).join("/")}`,disc,id=>card.scrapSuits.includes(CM[id].suit),
+        pick(`${card.name} · Scrap a ${card.scrapSuits.map(s=>SUIT_NAMES[s].slice(0,-1)).join(" or ")} from your discard`,disc,id=>card.scrapSuits.includes(CM[id].suit),
           id=>{let g2=scrapF({...g},p,id);g2=L(g2,`${p} scraps ${CM[id].name}`);done(g2);},
           ()=>{g=L(g,"...cancelled.");done(g);},{statsPlayer:p});return;}
     // 3C Defer
     if(effectId==="3C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       g=rememberTopCard(g,p,p);commitGameState(g);
-      setModal({type:"twoChoice",title:"Defer: Look at the top card of your deck",card:dk[0],opt1:"Leave on Top",opt2:"Put on Bottom",
+      setModal({type:"twoChoice",title:"Defer · The top card of your deck",card:dk[0],opt1:"Leave on Top",opt2:"Put on Bottom",
         on1:()=>{setModal(null);g=L(g,`${p} leaves ${CM[dk[0]].name} on top`);done(g);},
         on2:()=>{setModal(null);let g2=reduceGameCommand(g,{type:"MOVE_TOP_TO_BOTTOM",player:p}).state;
           g2=rememberBottomCard(g2,p,p);
           g2=L(g2,`${p} puts ${CM[dk[0]].name} on bottom`);done(g2);}});return;}
     // 3D Loot
     if(effectId==="3D"){g=drawCardsChecked(g,p,1);if(g.error)return;if(g.drawn){trackDraws(g,p,g.drawn,"loot");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.newCards=g.drawn;}commitGameState(g);
-      setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot: Discard a card",tutorialKey:"loot-discard",newCards:g.drawn||[],
+      setModal({type:"pickDiscard",hand:getH(g,p),title:"Loot · Discard a card",tutorialKey:"loot-discard",newCards:g.drawn||[],
         onPick:id=>{setModal(null);discardFromHand(g,p,id,g2=>done(g2));}});return;}
     // 3H Rummage
-    if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage: Who Refreshes?",opt1:"You Refresh",opt2:"Opponent Refreshes",
+    if(effectId==="3H"){setModal({type:"twoOptChoice",title:"Rummage · Who Refreshes?",opt1:"You Refresh",opt2:"Opponent Refreshes",
       on1:()=>{setModal(null);offerRefresh(g,done,{player:p,optional:false,title:"Rummage",source:"rummage"});},
       on2:()=>{setModal(null);
         if(isSoloMode(g.mode)){g=L(g,"...the Challenger has no hand to Refresh. Fizzles.");done(g);return;}
         // Online remote prompt only supports a plain Refresh (no Sift/Declutter choice yet).
         if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
-          queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"rummage_opp",player:opp(p),title:`${opp(p)} must discard (then draws)`});
+          queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"rummage_opp",player:opp(p),title:"Rummage · Discard a card, then draw"});
           return;
         }
         offerRefresh(g,done,{player:opp(p),optional:false,title:"Rummage",source:"rummage"});}});return;}
@@ -1052,20 +1052,20 @@ export default function KaizenPoker(){
         if(tutorialChoice.decision==="discard"){let g2={...g};let d=[...getDk(g2,p)];const c=d.shift();
           g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);return;}
       }
-        setModal({type:"twoChoice",title:"Consider: Look at the top card of your deck",card:dk[0],opt1:"Keep on Top",opt2:"Discard It",
+        setModal({type:"twoChoice",title:"Consider · The top card of your deck",card:dk[0],opt1:"Keep on Top",opt2:"Discard It",
           on1:()=>{setModal(null);g=L(g,`${p} keeps ${CM[dk[0]].name}`);done(g);},
           on2:()=>{setModal(null);let g2={...g};let d=[...getDk(g2,p)];const c=d.shift();
             g2=setZ(g2,p,"deck",d);g2=setZ(g2,p,"discard",[...getD(g2,p),c]);g2=L(g2,`${p} discards ${CM[c].name}`);done(g2);}});return;}
     // 4C Entomb
     if(effectId==="4C"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       g=rememberLibrary(g,p,p);commitGameState(g);
-      pick("Entomb: Search your deck and discard 1 card",sortC(dk),null,id=>{let g2={...g};
+      pick("Entomb · Choose a card to put into your discard",sortC(dk),null,id=>{let g2={...g};
         const shuffled=shuffleFromState(g2,[...getDk(g2,p)].filter(x=>x!==id));g2=shuffled.state;g2=setZ(g2,p,"deck",shuffled.cards);g2=randomizeLibraryKnowledge(g2,p);g2=setZ(g2,p,"discard",[...getD(g2,p),id]);
         g2=L(g2,`${p} entombs ${CM[id].name}`);done(g2);});return;}
     // 4D Gamble
     if(effectId==="4D"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       g=rememberLibrary(g,p,p);commitGameState(g);
-      pick("Gamble: Search your deck, take 1 card, then discard 1 at random",sortC(dk),null,id=>{let g2={...g};
+      pick("Gamble · Take a card, then discard one at random",sortC(dk),null,id=>{let g2={...g};
         const shuffled=shuffleFromState(g2,[...getDk(g2,p)].filter(x=>x!==id));g2=shuffled.state;g2=setZ(g2,p,"deck",shuffled.cards);g2=randomizeLibraryKnowledge(g2,p);let h=[...getH(g2,p),id];g2.newCards=[id];
         const randomPick=randomIndexFromState(g2,h.length);g2=randomPick.state;const disc=h[randomPick.index];
         g2=setZ(g2,p,"hand",h);g2=L(g2,`${p} takes ${CM[id].name}, then discards at random`);
@@ -1075,16 +1075,16 @@ export default function KaizenPoker(){
     // 4H Cultivate
     if(effectId==="4H"){const dk=getDk(g,p);if(!dk.length){g=L(g,"...deck empty.");done(g);return;}
       g=rememberLibrary(g,p,p);commitGameState(g);
-      pick("Cultivate: Search your deck and put 1 card on top",sortC(dk),null,id=>{let g2={...g};
+      pick("Cultivate · Choose a card to put on top of your deck",sortC(dk),null,id=>{let g2={...g};
         const shuffled=shuffleFromState(g2,[...getDk(g2,p)].filter(x=>x!==id));g2=shuffled.state;let d=shuffled.cards;d.unshift(id);g2=setZ(g2,p,"deck",d);g2=randomizeLibraryKnowledge(g2,p);g2=rememberDeckOrder(g2,p,p,[id]);
         g2=L(g2,`${p} cultivates ${CM[id].name}`);done(g2);});return;}
     // 4S Unearth
     if(effectId==="4S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
-      pick("Unearth: Return a card from your discard to hand",disc,null,id=>{let g2=cloneGs(g);
+      pick("Unearth · Return a card from your discard to your hand",disc,null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
         g2=L(g2,`${p} unearths ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
-        setModal({type:"pickDiscard",hand:h,title:"Unearth: Discard a card",newCards:[id],
+        setModal({type:"pickDiscard",hand:h,title:"Unearth · Discard a card",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // 5C Mill
     if(effectId==="5C"){const milled=reduceGameCommand(g,{type:"MILL",player:p,count:3});g=milled.state;const m=milled.events[0]?.payload.cards||[];
@@ -1092,11 +1092,11 @@ export default function KaizenPoker(){
     // 5H Recall
     if(effectId==="5H"){const play=getP(g,p).filter(a=>!a.faceDown&&a.id!==cid);
       if(!play.length){g=L(g,"...no other actions.");done(g);return;}
-      pick("Recall: Return one of your actions to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
+      pick("Recall · Return one of your Actions to your hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
         g2=L(g2,`${p} recalls ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
-        setModal({type:"pickDiscard",hand:h,title:"Recall: Discard",newCards:[id],
+        setModal({type:"pickDiscard",hand:h,title:"Recall · Discard a card",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // 5S Reclaim
     if(effectId==="5S"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
@@ -1105,20 +1105,20 @@ export default function KaizenPoker(){
         g2=rememberDeckOrder(g2,p,p,[tutorialChoice.target]);
         g2=rememberDeckOrder(g2,opp(p),p,[tutorialChoice.target]);
         g2=L(g2,`${p} reclaims ${CM[tutorialChoice.target].name}`);done(g2);return;}
-      pick("Reclaim: Put on top of deck",disc,null,id=>{let g2={...g};
+      pick("Reclaim · Put a card from your discard on top of your deck",disc,null,id=>{let g2={...g};
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));g2=setZ(g2,p,"deck",[id,...getDk(g2,p)]);
         g2=rememberDeckOrder(g2,p,p,[id]);
         g2=rememberDeckOrder(g2,opp(p),p,[id]);
         g2=L(g2,`${p} reclaims ${CM[id].name}`);done(g2);});return;}
     // 6C Curse
     if(effectId==="6C"){if(!g.scrap.length){g=L(g,"...scrap empty. Fizzles.");done(g);return;}
-      pick("Curse: Move a scrapped card into your opponent's discard",g.scrap,null,id=>{let g2={...g};
+      pick("Curse · Move a scrapped card into your opponent's discard",g.scrap,null,id=>{let g2={...g};
         g2.scrap=g2.scrap.filter(x=>x!==id);g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);
         g2=L(g2,`${p} curses ${opp(p)} with ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 6D Abduct
     if(effectId==="6D"){const oa=getP(g,opp(p)).filter(a=>!a.faceDown);
       if(!oa.length){g=L(g,"...no opponent actions. Fizzles.");done(g);return;}
-      pick("Abduct: Steal an opponent action into your discard",oa.map(a=>a.id),null,id=>{let g2={...g};
+      pick("Abduct · Take an opponent's Action into your discard",oa.map(a=>a.id),null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"play",[...getP(g2,opp(p))].filter(a=>a.id!==id));
         g2=setZ(g2,p,"discard",[...getD(g2,p),id]);g2=L(g2,`${p} abducts ${CM[id].name}!`);
         // "then scrap this card" — Freeze stops the scrap; Abduct stays in play.
@@ -1128,8 +1128,8 @@ export default function KaizenPoker(){
     // 6H Exchange
     if(effectId==="6H"){const od=getD(g,opp(p)),md=getD(g,p);
       if(!od.length||!md.length){g=L(g,"...need cards in both discards. Fizzles.");done(g);return;}
-      pick("Exchange: Choose a card from your opponent's discard",od,null,oid=>{
-        pick("Exchange: Choose one of your discard cards to trade",getD(g,p),null,mid=>{let g2={...g};
+      pick("Exchange · Choose a card from your opponent's discard",od,null,oid=>{
+        pick("Exchange · Choose one of your discards to trade",getD(g,p),null,mid=>{let g2={...g};
           let o2=[...getD(g2,opp(p))].filter(x=>x!==oid);o2.push(mid);
           let m2=[...getD(g2,p)].filter(x=>x!==mid);m2.push(oid);
           g2=setZ(g2,opp(p),"discard",o2);g2=setZ(g2,p,"discard",m2);
@@ -1138,7 +1138,7 @@ export default function KaizenPoker(){
     // 6S Banish
     if(effectId==="6S"){if(frozen){g=L(g,"...Frozen!");done(g);return;}
       const od=getD(g,opp(p));if(!od.length){g=L(g,"...opponent discard empty. Fizzles.");done(g);return;}
-      pick("Banish: Scrap a card from your opponent's discard",od,null,id=>{let g2={...g};
+      pick("Banish · Scrap a card from your opponent's discard",od,null,id=>{let g2={...g};
         g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p))].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
         g2=L(g2,`${p} banishes ${CM[id].name}`);done(g2);},()=>{g=L(g,"...cancelled.");done(g);});return;}
     // 7H Abdicate
@@ -1148,10 +1148,10 @@ export default function KaizenPoker(){
       const oh=getH(g,opp(p)),faces=oh.filter(id=>FACE.includes(CM[id].rank));
       if(!faces.length){g=rememberCards(g,p,oh,`${opp(p).toLowerCase()}Hand`);g=L(g,`${opp(p)} has no face cards.`);g=drawCardsChecked(g,opp(p),1);if(g.error)return;if(g.drawn){trackDraws(g,opp(p),g.drawn,"abdicate");g=L(g,`${opp(p)} draws`);}done(g);return;}
       if(onlineRef.current.active&&getCurrentSeat()===p&&getCurrentSeat()!==opp(p)){
-        queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"abdicate",player:opp(p),title:`${opp(p)} must discard a face card`,faceOnly:true});
+        queueRemotePrompt(g,{type:"pickDiscardFromHand",kind:"abdicate",player:opp(p),title:"Abdicate · Discard a face card",faceOnly:true});
         return;
       }
-      setModal({type:"pickDiscard",hand:oh,title:`${opp(p)} must discard a face card`,filter:id=>FACE.includes(CM[id].rank),handoffTo:opp(p),
+      setModal({type:"pickDiscard",hand:oh,title:"Abdicate · Discard a face card",player:opp(p),filter:id=>FACE.includes(CM[id].rank),handoffTo:opp(p),
         onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,opp(p),"hand",[...getH(g2,opp(p))].filter(x=>x!==id));
           g2=setZ(g2,opp(p),"discard",[...getD(g2,opp(p)),id]);g2=L(g2,`${opp(p)} discards ${CM[id].name} (Abdicate)`);
           g2=drawCardsChecked(g2,opp(p),1);if(g2.error)return;if(g2.drawn){trackDraws(g2,opp(p),g2.drawn,"abdicate");g2=L(g2,`${opp(p)} draws`);}done(g2);}});return;}
@@ -1161,7 +1161,7 @@ export default function KaizenPoker(){
       const allM=[...getP(g,"A").filter(isMod).map(a=>({...a,ow:"A"})),
       ...getP(g,"B").filter(isMod).map(a=>({...a,ow:"B"}))];
       if(!allM.length){g=L(g,"...no Modifies. Fizzles.");done(g);return;}
-      pick("Nullify: Remove a Modify",allM.map(m=>m.id),null,id=>{let g2={...g};const ow=allM.find(m=>m.id===id).ow;
+      pick("Nullify · Remove a Modify from play",allM.map(m=>m.id),null,id=>{let g2={...g};const ow=allM.find(m=>m.id===id).ow;
         g2=setZ(g2,ow,"play",[...getP(g2,ow)].filter(a=>a.id!==id));g2=setZ(g2,ow,"discard",[...getD(g2,ow),id]);
         g2=L(g2,`${p} nullifies ${CM[id].name}`);done(g2);});return;}
     // 8H Reject
@@ -1173,7 +1173,7 @@ export default function KaizenPoker(){
           let g2={...g};let d=[...getDk(g2,p)];d.shift();g2=setZ(g2,p,"deck",d);g2.scrap=[...g2.scrap,dk[0]];
           g2=L(g2,`${p} rejects ${CM[dk[0]].name}`);done(g2);return;}
       }
-        setModal({type:"twoChoice",title:"Reject: Look at the top card of your deck",card:dk[0],opt1:"Leave It",opt2:"Scrap It",
+        setModal({type:"twoChoice",title:"Reject · The top card of your deck",card:dk[0],opt1:"Leave It",opt2:"Scrap It",
           on1:()=>{setModal(null);g=L(g,`${p} keeps ${CM[dk[0]].name}`);done(g);},
           on2:()=>{setModal(null);if(frozen){g=L(g,"...Frozen!");done(g);return;}
           let g2={...g};let d=[...getDk(g2,p)];d.shift();g2=setZ(g2,p,"deck",d);g2.scrap=[...g2.scrap,dk[0]];
@@ -1181,25 +1181,25 @@ export default function KaizenPoker(){
     // 9C Terminate
     if(effectId==="9C"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>!FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no non-face cards. Fizzles.");done(g);return;}
-        pick("Terminate: Scrap a non-face card",disc,id=>!FACE.includes(CM[id].rank),
+        pick("Terminate · Scrap a non-face card",disc,id=>!FACE.includes(CM[id].rank),
           id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // 9D Impeach
     if(effectId==="9D"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter(id=>FACE.includes(CM[id].rank));if(!valid.length){g=L(g,"...no face cards. Fizzles.");done(g);return;}
-        pick("Impeach: Scrap a face card",disc,id=>FACE.includes(CM[id].rank),
+        pick("Impeach · Scrap a face card",disc,id=>FACE.includes(CM[id].rank),
           id=>{done(L(scrapF({...g},p,id),`${p} scraps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p,tutorialKey:"impeach-target"});return;}
     // 9H Accumulate
     if(effectId==="9H"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const ss=new Set(g.scrap.map(id=>CM[id].suit)),sr=new Set(g.scrap.map(id=>CM[id].rank));
       const valid=disc.filter(id=>ss.has(CM[id].suit)||sr.has(CM[id].rank));
       if(!valid.length){g=L(g,"...no matching cards. Fizzles.");done(g);return;}
-        pick("Accumulate: Scrap matching scrapped card",disc,id=>ss.has(CM[id].suit)||sr.has(CM[id].rank),
+        pick("Accumulate · Scrap a card that matches a scrapped card",disc,id=>ss.has(CM[id].suit)||sr.has(CM[id].rank),
           id=>{done(L(scrapF({...g},p,id),`${p} accumulates ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // 9S Reap
     if(effectId==="9S"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       const valid=disc.filter((id,idx)=>disc.some((other,j)=>j!==idx&&(CM[other].rank===CM[id].rank||CM[other].suit===CM[id].suit)));
       if(!valid.length){g=L(g,"...no matching discard cards. Fizzles.");done(g);return;}
-        pick("Reap: Scrap a card matching another discard card",disc,id=>valid.includes(id),
+        pick("Reap · Scrap a card that matches another in your discard",disc,id=>valid.includes(id),
           id=>{done(L(scrapF({...g},p,id),`${p} reaps ${CM[id].name}`));},()=>{done(L(g,"...cancelled."));},{statsPlayer:p});return;}
     // JD Duplicate — immediately copies another of your Actions in play
     // JD Duplicate / JH Reflect copy the *effective* action (a copy of a copy copies
@@ -1222,14 +1222,14 @@ export default function KaizenPoker(){
     if(effectId==="AD"){g=drawCardsChecked(g,p,1);if(g.error)return;if(g.drawn){trackDraws(g,p,g.drawn,"explore");g=L(g,`${p} draws ${CM[g.drawn[0]].name}`);g.bonusActions++;g.newCards=g.drawn;}done(g);return;}
     // AC Salvage
     if(effectId==="AC"){if(!g.scrap.length){g=L(g,"...scrap empty.");done(g);return;}
-      pick("Salvage: Take from scrap",g.scrap,null,id=>{let g2=cloneGs(g);g2.scrap=g2.scrap.filter(x=>x!==id);
+      pick("Salvage · Take a card from the scrap pile",g.scrap,null,id=>{let g2=cloneGs(g);g2.scrap=g2.scrap.filter(x=>x!==id);
         g2=setZ(g2,p,"hand",[...getH(g2,p),id]);g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
         g2.newCards=[id];g2=L(g2,`${p} salvages ${CM[id].name}`);g2.bonusActions++;done(g2);},
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // AH Retrieve — can retrieve ANY action in play (including face-down)
     if(effectId==="AH"){const play=getP(g,p).filter(a=>a.id!==cid);
       if(!play.length){g=L(g,"...no actions to retrieve.");done(g);return;}
-      pick("Retrieve: Return any of your actions to hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
+      pick("Retrieve · Return one of your Actions to your hand",play.map(a=>a.id),null,id=>{let g2=cloneGs(g);
         const wasFaceUp=!getP(g2,p).find(a=>a.id===id)?.faceDown;
         g2=setZ(g2,p,"play",[...getP(g2,p)].filter(a=>a.id!==id));g2=setZ(g2,p,"hand",[...getH(g2,p),id]);
         g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);if(wasFaceUp)g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
@@ -1237,7 +1237,7 @@ export default function KaizenPoker(){
       ()=>{g=L(g,"...cancelled.");done(g);});return;}
     // AS Reanimate — return card from discard to hand
     if(effectId==="AS"){const disc=getD(g,p);if(!disc.length){g=L(g,"...discard empty.");done(g);return;}
-      pick("Reanimate: Return a card from your discard to hand",disc,null,id=>{let g2=cloneGs(g);
+      pick("Reanimate · Return a card from your discard to your hand",disc,null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));g2=setZ(g2,p,"hand",[...getH(g2,p),id]);
         g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
         g2.newCards=[id];g2=L(g2,`${p} reanimates ${CM[id].name}`);g2.bonusActions++;done(g2);},
@@ -1254,12 +1254,12 @@ export default function KaizenPoker(){
       // Nothing to return (deck and discard both empty): skip straight to the discard.
       if(!getD(g,p).length){g=L(g,"...discard empty, nothing to return.");
         if(!getH(g,p).length){done(g);return;}
-        setModal({type:"pickDiscard",hand:getH(g,p),title:"Improvise: Discard",onPick:did=>{setModal(null);discardFromHand(g,p,did,done);}});return;}
-      pick("Improvise: Take from discard",[...getD(g,p)],null,id=>{let g2=cloneGs(g);
+        setModal({type:"pickDiscard",hand:getH(g,p),title:"Improvise · Discard a card",onPick:did=>{setModal(null);discardFromHand(g,p,did,done);}});return;}
+      pick("Improvise · Take a card from your discard",[...getD(g,p)],null,id=>{let g2=cloneGs(g);
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>x!==id));let h=[...getH(g2,p),id];g2=setZ(g2,p,"hand",h);
         g2=rememberCards(g2,p,[id],`${p.toLowerCase()}Hand`);g2=rememberCards(g2,opp(p),[id],`${p.toLowerCase()}Hand`);
         g2=L(g2,`${p} takes ${CM[id].name}`);g2.newCards=[id];commitGameState(g2);
-        setModal({type:"pickDiscard",hand:h,title:"Improvise: Discard",newCards:[id],
+        setModal({type:"pickDiscard",hand:h,title:"Improvise · Discard a card",newCards:[id],
           onPick:did=>{setModal(null);discardFromHand(g2,p,did,g3=>done(g3));}});});return;}
     // KH Rejuvenate
     if(effectId==="KH"){setModal({type:"rejuvenate",hand:getH(g,p),onPick:ids=>{setModal(null);let g2=cloneGs(g);
@@ -1274,7 +1274,7 @@ export default function KaizenPoker(){
     // KS Bury
     if(effectId==="KS"){if(frozen){g=L(g,"...Frozen!");done(g);return;}const disc=getD(g,p);
       if(!disc.length){g=L(g,"...nothing to scrap.");done(g);return;}
-      setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury: Scrap up to 3 cards",hint:"Choose any number from 0 to 3.",statsPlayer:p,onPick:ids=>{setModal(null);let g2={...g};
+      setModal({type:"pickMulti",cards:disc,maxPick:3,title:"Bury · Scrap up to 3 cards",hint:"Choose any number from 0 to 3.",statsPlayer:p,onPick:ids=>{setModal(null);let g2={...g};
         g2=setZ(g2,p,"discard",[...getD(g2,p)].filter(x=>!ids.includes(x)));g2.scrap=[...g2.scrap,...ids];
         g2=L(g2,ids.length?`${p} buries: ${ids.map(id=>CM[id].name).join(", ")}`:`${p} buries nothing.`);done(g2);}});return;}
     g=L(g,`(${card.name} not implemented)`);done(g);};
@@ -1308,59 +1308,59 @@ export default function KaizenPoker(){
     const effName=id=>{const e=effOf(id);return e.rank===CM[id].rank&&e.suit===CM[id].suit?CM[id].name:`${CM[id].name} (now ${e.rank}${SUITS[e.suit]})`;};
     // Forecast: choose target now, resolve after reveal
     if(mid==="5D"){const fk=pl==="A"?"aForecast":"bForecast";
-      setModal({type:"pickFromList",title:`${pl}: Forecast - pick a scoring card to save later`,cards:hand,showHand:hand,canCancel:true,cancelLabel:"Skip Modify",
+      setModal({type:"pickFromList",title:"Forecast · Choose a scoring card to save",player:pl,cards:hand,showHand:hand,canCancel:true,cancelLabel:"Skip Modify",
         onPick:tid=>{setModal(null);let g2=cloneGs(g);g2[fk]=[...(g2[fk]||[]),{sourceId:entry.sourceId,target:tid}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,kind:"forecast"},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} marks ${CM[tid].name} for Forecast`);commitGameState(g2);next(g2);},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Vanish: defer
     if(mid==="8D"){let g2=L(g,`${pl}: ${modLabel} - after scoring`);commitGameState(g2);next(g2);return;}
     // Buff
-    if(mid==="10H"){setModal({type:"pickFromList",title:`${pl}: Buff - choose which scoring card to modify`,tutorialKey:"buff-target",cards:hand,filter:id=>higherRanks(effOf(id).rank).length>0,canCancel:true,
+    if(mid==="10H"){setModal({type:"pickFromList",title:"Buff · Choose a scoring card to raise",player:pl,tutorialKey:"buff-target",cards:hand,filter:id=>higherRanks(effOf(id).rank).length>0,canCancel:true,
       hint:"Pick the scoring card Buff will raise. Aces can count as high or low here.",
       onPick:tid=>{setModal(null);const hr=higherRanks(effOf(tid).rank);
         if(!hr.length){let g2=L(g,`${pl}: ${modLabel} has no higher rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",tutorialKey:"buff-rank",title:`Buff ${effName(tid)}: New rank`,ranks:hr,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickRank",tutorialKey:"buff-rank",title:`Buff · New rank for ${effName(tid)}`,player:pl,ranks:hr,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nerf
-    if(mid==="10S"){setModal({type:"pickFromList",title:`${pl}: Nerf - choose which scoring card to modify`,cards:hand,filter:id=>lowerRanks(effOf(id).rank).length>0,canCancel:true,
+    if(mid==="10S"){setModal({type:"pickFromList",title:"Nerf · Choose a scoring card to lower",player:pl,cards:hand,filter:id=>lowerRanks(effOf(id).rank).length>0,canCancel:true,
       hint:"Pick the scoring card Nerf will lower. Aces can count as high or low here.",
       onPick:tid=>{setModal(null);const lr=lowerRanks(effOf(tid).rank);
         if(!lr.length){let g2=L(g,`${pl}: ${modLabel} has no lower rank target for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Nerf ${effName(tid)}: New rank`,ranks:lr,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickRank",title:`Nerf · New rank for ${effName(tid)}`,player:pl,ranks:lr,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Nudge
-    if(mid==="10C"){setModal({type:"pickFromList",title:`${pl}: Nudge - choose which scoring card to modify`,cards:hand,filter:id=>adjacentRanks(effOf(id).rank).length>0,canCancel:true,
+    if(mid==="10C"){setModal({type:"pickFromList",title:"Nudge · Choose a scoring card to move one rank",player:pl,cards:hand,filter:id=>adjacentRanks(effOf(id).rank).length>0,canCancel:true,
       hint:"Pick the scoring card Nudge will move by one rank.",
       onPick:tid=>{setModal(null);const opts=adjacentRanks(effOf(tid).rank);
         if(!opts.length){let g2=L(g,`${pl}: ${modLabel} has no adjacent ranks for ${CM[tid].name}`);commitGameState(g2);next(g2);return;}
-        setModal({type:"pickRank",title:`Nudge ${effName(tid)}: ±1`,ranks:opts,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickRank",title:`Nudge · Move ${effName(tid)} up or down one`,player:pl,ranks:opts,showHand:hand,cancelLabel:"Skip Modify",
           onPick:r=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:r,suit:null}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,rank:r},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${r}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Disguise
-    if(mid==="10D"){setModal({type:"pickFromList",title:`${pl}: Disguise - choose which scoring card to modify`,cards:hand,canCancel:true,
+    if(mid==="10D"){setModal({type:"pickFromList",title:"Disguise · Choose a scoring card to change suit",player:pl,cards:hand,canCancel:true,
       hint:"Pick the scoring card Disguise will change to another suit.",
       onPick:tid=>{setModal(null);
-        setModal({type:"pickSuit",title:`Disguise ${CM[tid].name}: New suit`,showHand:hand,cancelLabel:"Skip Modify",
+        setModal({type:"pickSuit",title:`Disguise · New suit for ${CM[tid].name}`,player:pl,showHand:hand,cancelLabel:"Skip Modify",
           onPick:s=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:null,suit:s}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,suit:s},{playerSlot:pl,phase:"score"});g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> ${SUITS[s]}`);commitGameState(g2);next(g2);},
           onCancel:()=>{setModal(null);skip();}});},
       onCancel:()=>{setModal(null);skip();}});return;}
     // Clone — one SCORING card becomes copy of another SCORING card
     if(mid==="JC"){
-      setModal({type:"pickFromList",title:`${pl}: Clone - pick a scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
+      setModal({type:"pickFromList",title:"Clone · Choose a scoring card to overwrite",player:pl,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);const others=hand.filter(x=>x!==tid);
-          setModal({type:"pickFromList",title:`Clone: Choose the scoring card to copy onto ${CM[tid].name}`,cards:others,showHand:hand,canCancel:false,
+          setModal({type:"pickFromList",title:`Clone · Choose the card to copy onto ${CM[tid].name}`,player:pl,cards:others,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);const src=effOf(sid);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:src.rank,suit:src.suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:src.rank,suit:src.suit},{playerSlot:pl,phase:"score"});
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> copy of ${effName(sid)}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
     // Reminisce — one SCORING card becomes copy of a DISCARD card
     if(mid==="JS"){const disc=getD(g,pl);if(!disc.length){let g2=L(g,`${pl}: Reminisce - discard empty`);commitGameState(g2);next(g2);return;}
-      setModal({type:"pickFromList",title:`${pl}: Reminisce - pick scoring card to OVERWRITE`,cards:hand,showHand:hand,canCancel:true,
+      setModal({type:"pickFromList",title:"Reminisce · Choose a scoring card to overwrite",player:pl,cards:hand,showHand:hand,canCancel:true,
         onPick:tid=>{setModal(null);
-          setModal({type:"pickFromList",title:`Reminisce: Choose a discard card to copy onto ${CM[tid].name}`,cards:disc,showHand:hand,canCancel:false,
+          setModal({type:"pickFromList",title:`Reminisce · Choose a discard to copy onto ${CM[tid].name}`,player:pl,cards:disc,showHand:hand,canCancel:false,
             onPick:sid=>{setModal(null);let g2=cloneGs(g);g2[mk]=[...g2[mk],{sourceId:entry.sourceId,target:tid,rank:CM[sid].rank,suit:CM[sid].suit}];trackEvent(g2,"modify_chosen",{sourceId:entry.sourceId,effectId:mid,target:tid,copyCardId:sid,rank:CM[sid].rank,suit:CM[sid].suit},{playerSlot:pl,phase:"score"});
               g2=L(g2,`${pl}: ${modLabel} ${CM[tid].name} -> copy of ${CM[sid].name}`);commitGameState(g2);next(g2);}});},
         onCancel:()=>{setModal(null);skip();}});return;}
@@ -1394,19 +1394,19 @@ export default function KaizenPoker(){
       if(ti>=twos.length){done(g2);return;}const tid=twos[ti];
       setModal({type:"queen2",pl,cardId:tid,misc,camo,showHand:hand,queenSourceLabel,
         onRank:()=>{setModal(null);
-          setModal({type:"pickRank",title:`Miscalculate: ${CM[tid].name} -> any rank`,ranks:RO,showHand:hand,
+          setModal({type:"pickRank",title:`Miscalculate · Any rank for ${CM[tid].name}`,player:pl,ranks:RO,showHand:hand,
             onPick:r=>{setModal(null);
-              if(camo){setModal({type:"twoOptChoice",title:`Also change suit of ${CM[tid].name}? (rank -> ${r})`,opt1:"Yes",opt2:"No",
-                on1:()=>{setModal(null);setModal({type:"pickSuit",title:"Pick suit",showHand:hand,
+              if(camo){setModal({type:"twoOptChoice",title:`Camouflage · Also change ${CM[tid].name}'s suit?`,player:pl,opt1:"Yes",opt2:"No",
+                on1:()=>{setModal(null);setModal({type:"pickSuit",title:`Camouflage · New suit for ${CM[tid].name}`,player:pl,showHand:hand,
                   onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${r}${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});},
                 on2:()=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${r}`);commitGameState(g3);proc(g3,ti+1);}});}
               else{let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:null}];trackEvent(g3,"queen_choice",{source:"miscalculate",target:tid,rank:r,suit:null},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${r}`);commitGameState(g3);proc(g3,ti+1);}}});},
         onSuit:()=>{setModal(null);
-          setModal({type:"pickSuit",tutorialKey:"camouflage-suit",title:`Camouflage: ${CM[tid].name} -> any suit`,showHand:hand,
+          setModal({type:"pickSuit",tutorialKey:"camouflage-suit",title:`Camouflage · Any suit for ${CM[tid].name}`,player:pl,showHand:hand,
             onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:null,suit:s}];trackEvent(g3,"queen_choice",{source:"camouflage",target:tid,rank:null,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});},
         onBoth:()=>{setModal(null);
-          setModal({type:"pickRank",title:`${CM[tid].name}: Pick rank`,ranks:RO,showHand:hand,
-            onPick:r=>{setModal(null);setModal({type:"pickSuit",title:`${CM[tid].name}: Pick suit`,showHand:hand,
+          setModal({type:"pickRank",title:`Miscalculate · Any rank for ${CM[tid].name}`,player:pl,ranks:RO,showHand:hand,
+            onPick:r=>{setModal(null);setModal({type:"pickSuit",title:`Camouflage · Any suit for ${CM[tid].name}`,player:pl,showHand:hand,
               onPick:s=>{setModal(null);let g3=cloneGs(g2);g3[mk]=[...g3[mk],{target:tid,rank:r,suit:s}];trackEvent(g3,"queen_choice",{source:"both",target:tid,rank:r,suit:s},{playerSlot:pl,phase:"score"});g3=L(g3,`${pl}: ${CM[tid].name} -> ${r}${SUITS[s]}`);commitGameState(g3);proc(g3,ti+1);}});}});},
         onSkip:()=>{setModal(null);proc(g2,ti+1);}});};
     proc(g,tiStart);};
@@ -1560,7 +1560,7 @@ export default function KaizenPoker(){
         trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
         trackEvent(g2,"card_scrapped",{cardId:id,reason:"vanish"},{phase:"post_score",playerSlot:e.pl});
         g2=L(g2,`B: Vanish triggers automatically and scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);return;}
-      setModal({type:"pickFromList",title:`${e.pl}: Vanish - scrap matching suit`,cards:disc,filter:id=>effS.has(CM[id].suit),canCancel:true,
+      setModal({type:"pickFromList",title:"Vanish · Scrap a card that shares a suit with your scoring hand",player:e.pl,cards:disc,filter:id=>effS.has(CM[id].suit),canCancel:true,
           statsPlayer:e.pl,
           onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"vanish",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
@@ -1574,7 +1574,7 @@ export default function KaizenPoker(){
         trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
         trackEvent(g2,"card_scrapped",{cardId:id,reason:"capitulate"},{phase:"post_score",playerSlot:e.pl});
         g2=L(g2,`B: Capitulate triggers automatically after losing and scraps ${CM[id].name}`);commitGameState(g2);procPost(g2,effs,i+1);return;}
-      setModal({type:"pickFromList",title:`${e.pl}: Capitulate - you lost! Scrap a card?`,cards:disc,canCancel:true,
+      setModal({type:"pickFromList",title:"Capitulate · You lost the round. Scrap a card?",player:e.pl,cards:disc,canCancel:true,
           statsPlayer:e.pl,
           onPick:id=>{setModal(null);let g2={...g};g2=setZ(g2,e.pl,"discard",[...getD(g2,e.pl)].filter(x=>x!==id));g2.scrap=[...g2.scrap,id];
           trackEvent(g2,"post_score_effect",{effect:"capitulate",target:id,playerSlot:e.pl},{phase:"post_score",playerSlot:e.pl});
@@ -1668,7 +1668,7 @@ export default function KaizenPoker(){
   if(gs.mode==="rules"||gs.mode==="gallery")return <Suspense fallback={<div className="kp-route-loading">Loading...</div>}>
     <PassiveScreens mode={gs.mode} hoverId={galleryHoverId} setHoverId={setGalleryHoverId}
       chippyDismissed={galleryChippyDismissed} setChippyDismissed={setGalleryChippyDismissed}
-      isCompact={isMobileLandscape} onBack={()=>{playSfx("confirm",{volume:.28});clearGameState();}}/>
+      isCompact={isMobileLandscape} cardAesthetic={cardAesthetic} onBack={()=>{playSfx("confirm",{volume:.28});clearGameState();}}/>
   </Suspense>;
 
   const isOnlineMode=gs.mode==="online";
@@ -1739,6 +1739,7 @@ export default function KaizenPoker(){
   const hotseatScreenOwner=gs.mode==="hotseat"&&(gs.phase==="action"||gs.phase==="score")?(modal?.handoffTo||viewerPlayer):null;
   const showHotseatHandoff=!!hotseatScreenOwner&&hotseatScreenOwner!==hotseatReadyPlayer;
   const pClr=viewerPlayer==="A"?"#ff5a4e":"#34a3ff";
+  const eb=gs.mode==="hotseat"&&modal?.player?<span style={{color:modal.player==="A"?"#ff9a93":"#8fc5ff"}}>Player {modal.player}</span>:undefined;
   const chipGoal=7;
   const chipStrip=(pl,count,color)=>Array.from({length:chipGoal},(_,i)=><span key={pl+i} style={{width:10,height:10,borderRadius:"50%",display:"inline-block",background:i<count?color:"#12142a",boxShadow:i<count?`0 0 10px ${color}88`:"inset 0 1px 2px #0008",border:`1px solid ${i<count?color+"88":"#3d4470"}`,animation:i===count-1?"chipBounce .45s cubic-bezier(.26,1.5,.42,1)":"none"}}/>);
   // Redact hidden information from the log: in online games mask the other
@@ -1775,6 +1776,39 @@ export default function KaizenPoker(){
     }
     return items;
   };
+  // Game over without a showdown (a player couldn't draw): the final-showdown
+  // overlay and shell, with the reason where the hands would be.
+  const renderGameOver=()=>{
+    const w=getMatchWinner(gs),wClr=w==="A"?"#ff5a4e":"#34a3ff";
+    const solo=isSoloMode(gs.mode);
+    const wText=solo?(w==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Player ${w} wins the game!`;
+    const reason=gs._endReason?(solo&&gs._endReason.startsWith("A ")?"You couldn't draw a full hand":`Player ${gs._endReason}`):null;
+    const cascade=w==="A"?getH(gs,"A"):(solo&&gs._soloReveal?.cardId?[gs._soloReveal.cardId]:getH(gs,"B"));
+    const overlayPad=isMobileLandscape?"10px 8px":"28px 20px";
+    return <div style={{position:"fixed",inset:0,zIndex:30,display:"flex",overflowY:"auto",padding:overlayPad,background:"radial-gradient(circle at 50% 20%,rgba(241,196,15,.12) 0%,rgba(10,15,22,.82) 38%,rgba(5,8,12,.94) 100%)",backdropFilter:"blur(8px)"}}>
+      <VictorySolitaireCanvas winner={w} cards={cascade.length?cascade:getCascadeCardPool(gs)}/>
+      <div role="dialog" aria-modal="true" aria-label={wText} style={{padding:"28px 28px 24px",background:"linear-gradient(180deg,#262b4cf6,#191c36fa)",borderRadius:24,border:`3px solid ${wClr}`,boxShadow:`0 8px 0 rgba(0,0,0,.4), 0 40px 100px ${wClr}44, inset 0 2px 0 rgba(255,255,255,.08)`,animation:"revealRise 0.4s cubic-bezier(.26,1.36,.42,1)",position:"relative",zIndex:32,overflow:"hidden",maxWidth:620,width:"100%",margin:"auto",flexShrink:0,textAlign:"center"}}>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
+        <div style={{position:"absolute",top:-110,left:-80,width:260,height:260,borderRadius:"50%",background:`radial-gradient(circle,${wClr}33 0%,transparent 68%)`,pointerEvents:"none"}}/>
+        <div style={{position:"relative"}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#9b97b2",letterSpacing:4,textTransform:"uppercase",marginBottom:6}}>Game Over</div>
+          <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:14,marginBottom:4}}>
+            <Chip filled color={wClr} label="*" active/>
+            <div style={{fontSize:isMobileLandscape?30:40,color:wClr,fontFamily:FONT_DISPLAY,textShadow:`0 3px 0 rgba(0,0,0,.45), 0 0 30px ${wClr}66`,lineHeight:1.08,animation:"scorePunch .5s cubic-bezier(.26,1.5,.42,1) .3s backwards"}}>{wText}</div>
+            <Chip filled color={wClr} label="*" active/>
+          </div>
+          <div style={{fontSize:18,color:"#dce7f2",fontWeight:700}}>{gs.aChips} - {gs.bChips}</div>
+          {reason&&<div style={{marginTop:12,display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:999,background:"#12142add",border:`1px solid ${wClr}55`,boxShadow:`0 12px 28px ${wClr}22`}}>
+            <span style={{fontSize:10,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#f3d7a4"}}>Out of cards</span>
+            <span style={{fontSize:13,color:"#e8f1f9"}}>{reason}</span>
+          </div>}
+          <div style={{display:"flex",justifyContent:"center",marginTop:20}}>
+            <Btn label="New Game" bg={BTN_PRIMARY} onClick={()=>clearGameState()}/>
+          </div>
+        </div>
+      </div>
+    </div>;
+  };
   const renderShowdown=(isFinal=false)=>{
     const w=gs._revealWinner,aE=gs._revealAE,bE=gs._revealBE;
     const aH=getH(gs,"A"),bH=getH(gs,"B");
@@ -1791,7 +1825,7 @@ export default function KaizenPoker(){
     const postQueue=revealPostQueue(gs);
     const soloRow=isSoloMode(gs.mode)&&gs._soloReveal?.cardId?CHALLENGER_LOOKUP[CM[gs._soloReveal.cardId].rank]:null;
     const shell=(
-      <div style={{padding:isFinal?24:16,background:"linear-gradient(180deg,#262b4cf6,#191c36fa)",borderRadius:isFinal?24:18,border:`3px solid ${wClr}`,boxShadow:isFinal?`0 8px 0 rgba(0,0,0,.4), 0 40px 100px ${wClr}44, inset 0 2px 0 rgba(255,255,255,.08)`:`0 6px 0 rgba(0,0,0,.4), 0 24px 60px ${wClr}33, inset 0 2px 0 rgba(255,255,255,.08)`,animation:"revealRise 0.4s cubic-bezier(.26,1.36,.42,1)",position:"relative",overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%",margin:"auto",flexShrink:0}}>
+      <div style={{padding:isFinal?24:16,background:"linear-gradient(180deg,#262b4cf6,#191c36fa)",borderRadius:isFinal?24:18,border:`3px solid ${wClr}`,boxShadow:isFinal?`0 8px 0 rgba(0,0,0,.4), 0 40px 100px ${wClr}44, inset 0 2px 0 rgba(255,255,255,.08)`:`0 6px 0 rgba(0,0,0,.4), 0 24px 60px ${wClr}33, inset 0 2px 0 rgba(255,255,255,.08)`,animation:"revealRise 0.4s cubic-bezier(.26,1.36,.42,1)",position:"relative",zIndex:32,overflow:"hidden",maxWidth:isFinal?980:undefined,width:"100%",margin:"auto",flexShrink:0}}>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(120deg,transparent 0%,rgba(255,255,255,.05) 22%,transparent 46%)",backgroundSize:"240px 100%",animation:"brassShine 5.5s linear infinite",pointerEvents:"none",opacity:.55}}/>
         {isFinal&&<>
           <div style={{position:"absolute",top:-110,left:-80,width:260,height:260,borderRadius:"50%",background:`radial-gradient(circle,${wClr}33 0%,transparent 68%)`,pointerEvents:"none"}}/>
@@ -2065,11 +2099,6 @@ export default function KaizenPoker(){
           </div></div>
         {gs.phase==="score"&&<Btn label="REVEAL & SCORE" bg="linear-gradient(135deg,#f5b942,#ff9d2e)" onClick={doScore} disabled={!canUseOnlineControls||!tutorialAllows("reveal")}/>}
         {/* REVEAL / GAME END SHOWDOWN */}
-        {gs.phase==="gameOver"&&!gs._revealAE&&<div style={{textAlign:"center",padding:20,position:"relative"}}>
-          <VictorySolitaireCanvas winner={getMatchWinner(gs)} cards={getMatchWinner(gs)==="A"?getH(gs,"A"):(isSoloMode(gs.mode)&&gs._soloReveal?.cardId?[gs._soloReveal.cardId]:getH(gs,"B"))}/>
-          <div style={{fontSize:24,fontWeight:900,color:"#f5b942",fontFamily:FONT_DISPLAY,position:"relative",zIndex:32}}>{isSoloMode(gs.mode)?(getMatchWinner(gs)==="A"?"You win the solo run!":"The Challenger wins the solo run!"):`Game Over - Player ${getMatchWinner(gs)} Wins!`}</div>
-          {gs._endReason&&<div style={{fontSize:14,color:"#ffe9b8",margin:"6px 0 10px",position:"relative",zIndex:32}}>{isSoloMode(gs.mode)&&gs._endReason.startsWith("A ")?"You couldn't draw a full hand.":`Player ${gs._endReason}.`}</div>}
-          <div style={{position:"relative",zIndex:32}}><Btn label="New Game" bg="#333" onClick={()=>clearGameState()}/></div></div>}
         {gs.mode!=="tutorial"&&playtestEnabled&&<div style={{marginTop:"auto",position:"sticky",bottom:0,zIndex:1,paddingTop:8,background:"linear-gradient(180deg,transparent,#09121af2 26%)"}}>
           <PlaytestPanel
             gs={gs}
@@ -2101,29 +2130,30 @@ export default function KaizenPoker(){
     </div>}
     {gs.phase==="reveal"&&renderShowdown(isMatchOver(gs))}
     {gs.phase==="gameOver"&&gs._revealAE&&renderShowdown(true)}
+    {gs.phase==="gameOver"&&!gs._revealAE&&renderGameOver()}
     {/* MODALS */}
-    {modal?.type==="refreshOpts"&&<Modal title={modal.title||"Face-Down Options"}>
-      <p style={{color:"#aaa",fontSize:12,marginBottom:10}}>Choose:</p>
+    {/* eyebrow: hotseat-only "Player A/B" tag for score-phase and opponent prompts. */}
+    {modal?.type==="refreshOpts"&&<Modal title={modal.title||"Face-Down Options"} eyebrow={eb}>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
-        {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?"#333":o.key==="refresh"?"#34a3ff":o.key==="sift"?"#3bbf7c":"#a86ef0"} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
-    {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"}>
-      {modal.hint&&<div style={{fontSize:11,color:"#b4b0c8",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
+        {modal.opts.map(o=>(<Btn key={o.key} label={o.label} bg={o.key==="skip"?BTN_QUIET:BTN_CHOICE} onClick={()=>modal.onChoice(o.key)} disabled={!tutorialAllows("refreshChoice",o.key)}/>))}</div></Modal>}
+    {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"} eyebrow={eb}>
+      {modal.hint&&<p className="kp-modal-hint">{modal.hint}</p>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#ff5a4e":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
-    {modal?.type==="pickFromList"&&<Modal title={modal.title}>
-      {modal.hint&&<div style={{fontSize:11,color:"#b4b0c8",marginBottom:8,lineHeight:1.35}}>{modal.hint}</div>}
+    {modal?.type==="pickFromList"&&<Modal title={modal.title} eyebrow={eb}>
+      {modal.hint&&<p className="kp-modal-hint">{modal.hint}</p>}
       {modal.showHand&&<div style={{marginBottom:8}}>
-        <div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+        <div className="kp-modal-label">Your scoring hand</div>
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       {modal.statsPlayer&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={modal.statsPlayer} viewerPlayer={viewerPlayer}/></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
         {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f5b942":undefined}/>;})}</div>
-      {modal.canCancel&&<Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
+      {modal.canCancel&&<Btn label={modal.cancelLabel||"Cancel"} bg={BTN_QUIET} onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
     {modal?.type==="soloLookup"&&<Modal title="Challenger Lookup">
       <div style={{display:"grid",gap:6}}>
-        <div style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"0 8px",fontSize:10,fontWeight:800,color:"#d8c08d",letterSpacing:1.2,textTransform:"uppercase"}}>
+        <div className="kp-modal-label" style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"0 8px",margin:0}}>
           <div>Rank</div>
           <div>Maps To</div>
           <div>Definition</div>
@@ -2140,59 +2170,57 @@ export default function KaizenPoker(){
         })}
       </div>
       <div style={{display:"flex",justifyContent:"center",marginTop:12}}>
-        <Btn label="Close" bg="#333" onClick={()=>setModal(null)}/>
+        <Btn label="Close" bg={BTN_QUIET} onClick={()=>setModal(null)}/>
       </div>
     </Modal>}
     {modal?.type==="mainMenu"&&<Modal title="Menu">
       <div style={{display:"grid",gap:14,minWidth:"min(360px,82vw)"}}>
-        <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.5}}>
+        <p className="kp-modal-hint" style={{margin:0}}>
           Leave this game and return to the home screen, or close this menu and keep playing.
-        </div>
+        </p>
         {isOnlineMode&&<div style={{fontSize:11,color:"#fcd34d",lineHeight:1.5}}>
           Leaving an online game stops syncing on this browser. You can rejoin later from the same invite link.
         </div>}
         <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
-          <Btn label="Return to Game" bg="#333" onClick={()=>setModal(null)}/>
-          <Btn label="Quit to Home" bg="#ff9d2e" onClick={()=>{setModal(null);clearGameState();}}/>
+          <Btn label="Return to Game" bg={BTN_QUIET} onClick={()=>setModal(null)}/>
+          <Btn label="Quit to Home" bg={BTN_PRIMARY} onClick={()=>{setModal(null);clearGameState();}}/>
         </div>
       </div>
     </Modal>}
-    {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick} statsPlayer={modal.statsPlayer} gs={gs} viewerPlayer={viewerPlayer} hint={modal.hint}/>}
-    {modal?.type==="twoChoice"&&<Modal title={modal.title}>
+    {modal?.type==="pickMulti"&&<MultiPickModal title={modal.title} eyebrow={eb} cards={modal.cards} maxPick={modal.maxPick} onPick={modal.onPick} statsPlayer={modal.statsPlayer} gs={gs} viewerPlayer={viewerPlayer} hint={modal.hint}/>}
+    {modal?.type==="twoChoice"&&<Modal title={modal.title} eyebrow={eb}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Card id={modal.card}/></div>
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#34a3ff" onClick={modal.on1}/><Btn label={modal.opt2} bg="#ff9d2e" onClick={modal.on2}/></div></Modal>}
-    {modal?.type==="twoOptChoice"&&<Modal title={modal.title}>
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg="#34a3ff" onClick={modal.on1}/><Btn label={modal.opt2} bg="#ff5a4e" onClick={modal.on2}/></div></Modal>}
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg={BTN_CHOICE} onClick={modal.on1}/><Btn label={modal.opt2} bg={BTN_CHOICE} onClick={modal.on2}/></div></Modal>}
+    {modal?.type==="twoOptChoice"&&<Modal title={modal.title} eyebrow={eb}>
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label={modal.opt1} bg={BTN_CHOICE} onClick={modal.on1}/><Btn label={modal.opt2} bg={BTN_CHOICE} onClick={modal.on2}/></div></Modal>}
     {modal?.type==="brainstorm"&&<BrainstormModal hand={modal.hand} newCards={modal.newCards} onPick={modal.onPick}/>}
     {modal?.type==="rejuvenate"&&<RejuvenateModal hand={modal.hand} onPick={modal.onPick}/>}
-    {modal?.type==="confirm"&&<Modal title={modal.title}>
+    {modal?.type==="confirm"&&<Modal title={modal.title} eyebrow={eb}>
       <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Card id={modal.card}/></div>
-      <p style={{color:"#aaa",fontSize:12,marginBottom:10,textAlign:"center"}}>{modal.msg}</p>
-      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label="Play It" bg="#3bbf7c" onClick={modal.onYes}/><Btn label="Cancel" bg="#333" onClick={modal.onNo}/></div></Modal>}
-    {modal?.type==="pickRank"&&<Modal title={modal.title}>
-      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+      <p className="kp-modal-hint" style={{textAlign:"center"}}>{modal.msg}</p>
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn label="Play It" bg={BTN_PRIMARY} onClick={modal.onYes}/><Btn label="Cancel" bg={BTN_QUIET} onClick={modal.onNo}/></div></Modal>}
+    {modal?.type==="pickRank"&&<Modal title={modal.title} eyebrow={eb}>
+      {modal.showHand&&<div style={{marginBottom:8}}><div className="kp-modal-label">Your scoring hand</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>
         {modal.ranks.map(r=>(<button key={r} onClick={()=>modal.onPick(r)} disabled={!tutorialAllows("modalRank",r)} style={{width:44,height:44,borderRadius:9,background:"#12142a",border:"2px solid #f5b94266",color:tutorialAllows("modalRank",r)?"#f5b942":"#6b7280",fontSize:18,cursor:tutorialAllows("modalRank",r)?"pointer":"default",fontFamily:FONT_DISPLAY,display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalRank",r)?1:0.45,boxShadow:"0 3px 0 rgba(0,0,0,.4)"}}>{r}</button>))}</div>
-      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalRank"}/></div>}</Modal>}
-    {modal?.type==="pickSuit"&&<Modal title={modal.title}>
-      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg={BTN_QUIET} onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalRank"}/></div>}</Modal>}
+    {modal?.type==="pickSuit"&&<Modal title={modal.title} eyebrow={eb}>
+      {modal.showHand&&<div style={{marginBottom:8}}><div className="kp-modal-label">Your scoring hand</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",gap:12,justifyContent:"center"}}>
         {SO.map(s=>(<button key={s} onClick={()=>modal.onPick(s)} disabled={!tutorialAllows("modalSuit",s)} style={{width:56,height:56,borderRadius:10,background:"#12142a",border:`2px solid ${SC[s]}88`,color:tutorialAllows("modalSuit",s)?SC[s]:"#6b7280",fontSize:28,cursor:tutorialAllows("modalSuit",s)?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",opacity:tutorialAllows("modalSuit",s)?1:0.45,boxShadow:"0 3px 0 rgba(0,0,0,.4)"}}>{SUITS[s]}</button>))}</div>
-      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg="#333" onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalSuit"}/></div>}</Modal>}
-    {modal?.type==="queen2"&&<Modal title={`${modal.pl}: Modify ${CM[modal.cardId].name}${modal.queenSourceLabel?` (${modal.queenSourceLabel})`:""}`}>
-      {modal.showHand&&<div style={{marginBottom:8}}><div style={{fontSize:9,color:"#8d89a8",fontWeight:700,letterSpacing:1,marginBottom:3}}>YOUR SCORING HAND</div>
+      {modal.onCancel&&<div style={{display:"flex",justifyContent:"center",marginTop:10}}><Btn label={modal.cancelLabel||"Cancel"} bg={BTN_QUIET} onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalSuit"}/></div>}</Modal>}
+    {modal?.type==="queen2"&&<Modal title={`${modal.queenSourceLabel||"Remember"} · Change ${CM[modal.cardId].name}?`} eyebrow={gs.mode==="hotseat"?<span style={{color:modal.pl==="A"?"#ff9a93":"#8fc5ff"}}>Player {modal.pl}</span>:undefined}>
+      {modal.showHand&&<div style={{marginBottom:8}}><div className="kp-modal-label">Your scoring hand</div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Card id={modal.cardId}/></div>
-      <p style={{color:"#d8c08d",fontSize:11,textAlign:"center",marginBottom:6}}>Remember: {modal.queenSourceLabel||"Remember effects"}</p>
-      <p style={{color:"#aaa",fontSize:11,textAlign:"center",marginBottom:10}}>Unmodified 2 - Queen effects available:</p>
+      <p className="kp-modal-hint" style={{textAlign:"center"}}>This 2 is unmodified, so {modal.queenSourceLabel||"a scrapped Queen"} lets you change it.</p>
       <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
-        {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg="#a86ef0" onClick={modal.onBoth} disabled={!tutorialAllows("queenChoice","both")}/>}
-        {modal.misc&&<Btn label="Rank Only" bg="#ff9d2e" onClick={modal.onRank} disabled={!tutorialAllows("queenChoice","rank")}/>}
-        {modal.camo&&<Btn label="Suit Only" bg="#34a3ff" onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
-        <Btn label="Skip" bg="#333" onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
-    {modal?.type==="alert"&&<Modal title="Notice"><p style={{color:"#aaa",fontSize:13}}>{modal.msg}</p><Btn label="OK" bg="#333" onClick={modal.onOk}/></Modal>}
+        {modal.misc&&modal.camo&&<Btn label="Rank + Suit" bg={BTN_CHOICE} onClick={modal.onBoth} disabled={!tutorialAllows("queenChoice","both")}/>}
+        {modal.misc&&<Btn label="Rank Only" bg={BTN_CHOICE} onClick={modal.onRank} disabled={!tutorialAllows("queenChoice","rank")}/>}
+        {modal.camo&&<Btn label="Suit Only" bg={BTN_CHOICE} onClick={modal.onSuit} disabled={!tutorialAllows("queenChoice","suit")}/>}
+        <Btn label="Skip" bg={BTN_QUIET} onClick={modal.onSkip} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="queenChoice"}/></div></Modal>}
     {soloIntroVisible&&isSoloMode(gs.mode)&&<Chippy
       title={CHIPPY_COPY.soloIntro.title}
       message={soloIntroMessage}
