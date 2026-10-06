@@ -85,6 +85,20 @@ try {
     try {
       await page.goto(BASE + route.hash, { waitUntil: "load", timeout: 60000 });
       await new Promise(r => setTimeout(r, 1200));
+      if (route.hash === "#/gallery") {
+        // Viewing Glass: the deck is on the table and a print is on display;
+        // the arrow key moves the next card under the glass.
+        const g = await page.evaluate(async () => {
+          const name = () => document.querySelector(".kp-glass-cap h2")?.textContent || "";
+          const before = name();
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+          await new Promise(r => setTimeout(r, 400));
+          return { cards: document.querySelectorAll(".kp-glass-card").length, print: !!document.querySelector(".kp-glass-print img"), before, after: name() };
+        });
+        if (g.cards !== 52) rec.pageErrors.push(`gallery shows ${g.cards} cards, expected 52`);
+        if (!g.print) rec.pageErrors.push("gallery print panel is empty");
+        if (!g.before || g.before === g.after) rec.pageErrors.push(`gallery arrow key didn't advance (${g.before} -> ${g.after})`);
+      }
       if (route.hash === "#/hotseat") {
         await page.screenshot({ path: path.join(OUT, route.name + "-handoff.png") }).catch(() => {});
         if (!(await dismissHandoff(page))) rec.pageErrors.push("hotseat handoff cover missing");

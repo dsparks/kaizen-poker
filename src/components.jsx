@@ -512,29 +512,6 @@ function KonamiCelebrationOverlay({open,onClose,onReplay,cards=[]}) {
     </div>
   );
 }
-// scale is relative to a 120px-wide card; full-size faces (graphic, image) are
-// 180px wide, so they shrink further to land at the same thumbnail size.
-function GalleryThumbCard({id,onHover,onLeave,onClick,active=false,scale=1}){
-  const renderStyle=useContext(CardRenderContext);
-  const visualScale=renderStyle==="html"?scale:scale*120/180;
-  return <div
-  onMouseEnter={onHover}
-  onMouseLeave={onLeave}
-  onClick={onClick||onHover}
-  role="button"
-  tabIndex={0}
-  onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();(onClick||onHover)?.();}}}
-  style={{
-    width:120*scale,
-    height:168*scale,
-    transform:`scale(${visualScale}) translateY(${active?-4:0}px)`,
-    transformOrigin:"top left",
-    transition:"transform .18s ease,filter .18s ease",
-    filter:active?"drop-shadow(0 12px 22px rgba(0,0,0,.34)) brightness(1.04)":"drop-shadow(0 8px 16px rgba(0,0,0,.22))",
-    cursor:"pointer"
-  }}>
-  <Card id={id}/>
-</div>;}
 function HandBadge({ids,mods,delay}){if(!ids||ids.length!==5)return null;const r=evalHand(ids,mods);const c=TC[r.handRank];
   return <span key={r.handName} style={{display:"inline-block",padding:"4px 14px",borderRadius:9,background:"#12142a",border:`2px solid ${c}`,color:c,fontWeight:400,fontSize:13,fontFamily:FONT_DISPLAY,letterSpacing:.6,whiteSpace:"nowrap",boxShadow:`0 3px 0 rgba(0,0,0,.4), 0 0 14px ${c}33`,animation:`scorePunch .42s cubic-bezier(.26,1.5,.42,1) ${delay||"0s"} backwards`}}>{r.handName}</span>;}
 // Button roles, used consistently across modals: the main action is gold,
@@ -730,4 +707,4 @@ function PublicZones({gs,extraControls,onToggleZone,canToggleZone,spotlightZone}
     {exp&&(()=>{const z=zones.find(x=>x.key===exp);if(!z||!z.cards.length)return <div style={{fontSize:10,color:"#8d89a8",marginTop:4,fontStyle:"italic"}}>Empty</div>;
       return(<div style={{marginTop:6,padding:8,background:"#12142acc",borderRadius:10,border:`2px solid ${z.color}44`,boxShadow:"inset 0 3px 8px rgba(0,0,0,.4)"}}>
         <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{sortC(z.cards).map((id,i)=><PreviewCard key={id+i} id={id}/>)}</div></div>);})()}</div>);}
-export { BTN_PRIMARY, BTN_CHOICE, BTN_QUIET, SUIT_NAMES, FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, GalleryThumbCard, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones };
+export { BTN_PRIMARY, BTN_CHOICE, BTN_QUIET, SUIT_NAMES, FONT_DISPLAY, FONT_BODY, DEFAULT_CARD_AESTHETIC, FeltBackdrop, CardRenderContext, Card, PreviewCard, FaceDownActionSlot, CardBack, FLIGHT_MS, prefersReducedMotion, flightZoneMap, FlightGhost, RememberChip, getCascadeCardPool, VictorySolitaireCanvas, KonamiCelebrationOverlay, HandBadge, Btn, SfxToggle, Chip, Modal, MultiPickModal, BrainstormModal, RejuvenateModal, DeckStats, PublicZones };

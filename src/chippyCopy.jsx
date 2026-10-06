@@ -11,14 +11,9 @@ export const CHIPPY_COPY = {
       "Welcome! This is a playable web version of Kaizen Poker. Start with the [rules](#/rules) or the short [tutorial](#/tutorial), or jump straight into a game: [two-player hotseat](#/hotseat), [solo against the Challenger deck](#/solo), or [two-player remote](#/remote).\n\nQuestions or feedback? Contact the designer [here](mailto:dsparks@gmail.com). Have fun!",
   },
   gallery: {
-    title: "Card Image Gallery",
-    message:
-      "This gallery shows the current print prototype. The illustrations are AI-generated placeholders — the published game won't use this artwork. They're here to help the card names and abilities stick, and to show the visual direction the game is being designed around.",
-  },
-  galleryGraphic: {
     title: "Card Gallery",
     message:
-      "Every card in the deck, in the graphical style you're playing with. Hover over a card (or tap it) to see it up close. The rings in each suit emblem count the card's rank: an Ace is a single solid shape, a King has thirteen layers.",
+      "Slide any card under the magnifying glass to see its printed version, or use the arrow keys to deal the deck under it one card at a time. Double-click a card to send it straight to the glass, and open Full screen to zoom into the artwork.\n\nThe illustrations come from the print prototype. They're AI-generated placeholders: the published game won't use this artwork.",
   },
   soloIntro: {
     title: "Solo Mode",

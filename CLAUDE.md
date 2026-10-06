@@ -11,6 +11,9 @@ layout:
 - `src/KaizenPoker.jsx` — the stateful app shell: routing, all game-flow
   handlers, the screens (home/board/rules/gallery), modals wiring. Still the
   big one (~2,200 lines); screens could be extracted next if it keeps growing.
+- `src/GalleryGlass.jsx` — the Card Gallery ("Viewing Glass"): a table of cards
+  in the player's aesthetic, a magnifying glass, and a panel showing the
+  printed (illustrated) card from `web_art/rendered/`, plus a zoomable full view.
 - `src/theme.css` — visual design system ("Balatro Juice"): palette variables,
   stamped buttons, panels, card-juice animations.
 

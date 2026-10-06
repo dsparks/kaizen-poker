@@ -230,6 +230,76 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
 .kp-gc-mini .kp-gc-emblem { left: 31cqw; right: 5cqw; top: 30cqw; bottom: auto; height: 66cqw; }
 .kp-gc-mini::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4cqw; background: var(--type); }
 
+/* ---------------- Card Gallery: the Viewing Glass (GalleryGlass.jsx) ----------------
+   A table (left) with a brass magnifying glass near its right edge, and a
+   display panel (right) showing the print of the card under the glass. */
+.kp-glass-main { position: relative; z-index: 1; flex: 1; min-height: 0; display: flex; }
+.kp-glass { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); }
+.kp-glass-table { position: relative; overflow: hidden; touch-action: none; }
+.kp-glass-tools { position: absolute; left: 12px; top: 10px; z-index: 950; display: flex; gap: 8px; }
+.kp-glass-tools .kp-pill { padding: 6px 14px; font-size: 11px; }
+.kp-glass-card { position: absolute; left: 0; top: 0; cursor: grab; will-change: transform; }
+.kp-glass-card.held { cursor: grabbing; filter: drop-shadow(0 26px 30px rgba(0, 0, 0, .45)); }
+.kp-glass-card .kp-card { box-shadow: 0 4px 0 rgba(0, 0, 0, .3), 0 8px 16px rgba(0, 0, 0, .3) !important; }
+.kp-glass-card.on-glass .kp-card { box-shadow: 0 0 0 3px #f5b942aa, 0 10px 24px rgba(0, 0, 0, .45) !important; }
+.kp-glass-lens { position: absolute; z-index: 800; pointer-events: none; width: var(--L, 206px); height: var(--L, 206px); }
+.kp-glass-view { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; background: radial-gradient(circle, #1f7246 0%, #0f3d25 100%); }
+.kp-glass-clone { position: absolute; left: 50%; top: 50%; }
+.kp-glass-clone .kp-card { animation: none; }
+.kp-glass-ring { position: absolute; inset: 0; border-radius: 50%; transition: box-shadow .3s;
+  box-shadow: 0 0 0 9px #2b2420, 0 0 0 12px #c8a24d, 0 0 0 14px #2b2420, 0 26px 50px rgba(0, 0, 0, .6), inset 0 0 26px rgba(0, 0, 0, .6); }
+.kp-glass-lens.focused .kp-glass-ring { box-shadow: 0 0 0 9px #2b2420, 0 0 0 12px #f5c55a, 0 0 0 14px #2b2420, 0 0 34px #f5b94288, 0 26px 50px rgba(0, 0, 0, .6), inset 0 0 26px rgba(0, 0, 0, .55); }
+.kp-glass-ring::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 30% 24%, #ffffff5c, #fff0 30%), radial-gradient(circle at 72% 80%, #ffffff17, #fff0 28%), radial-gradient(circle, #fff0 62%, rgba(0, 0, 0, .25) 100%); }
+.kp-glass-handle { position: absolute; left: 50%; top: 50%; width: 28px; height: calc(var(--L, 206px) * .62); margin-left: -14px; transform-origin: 50% 0;
+  transform: rotate(-38deg) translateY(calc(var(--L, 206px) / 2 + 12px)); border-radius: 8px 8px 14px 14px;
+  background: linear-gradient(90deg, #3a2414, #8a5a32 40%, #5c3a20 70%, #2c1b0f); box-shadow: 0 16px 30px rgba(0, 0, 0, .6), inset 0 2px 0 #ffffff22; }
+.kp-glass-handle::before { content: ""; position: absolute; left: -4px; right: -4px; top: 0; height: 18px; border-radius: 5px; background: linear-gradient(90deg, #7a5a1c, #e8c46a 45%, #9a7428); }
+.kp-glass-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 70%; text-align: center; font-weight: 800; font-size: 13px; color: #d9f2e3cc; transition: opacity .2s; }
+.kp-glass-lens.focused .kp-glass-hint { opacity: 0; }
+.kp-glass-panel { position: relative; z-index: 2; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; padding: 18px 22px 18px;
+  background: linear-gradient(180deg, rgba(28, 32, 66, .95), rgba(18, 20, 48, .97)); border-left: 1px solid rgba(255, 255, 255, .1); box-shadow: -18px 0 40px rgba(0, 0, 0, .4); }
+.kp-glass-frame { position: relative; min-height: 0; display: grid; place-items: center; perspective: 1400px; }
+.kp-glass-print { position: absolute; height: 100%; max-width: 100%; aspect-ratio: 816 / 1110; padding: 0; border: 0; border-radius: 2.2% / 1.6%; overflow: hidden; background: #f4ece0; cursor: zoom-in;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .75), 0 0 0 1px rgba(255, 255, 255, .1); }
+.kp-glass-print img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kp-glass-empty { height: 100%; max-width: 100%; aspect-ratio: 816 / 1110; border-radius: 16px; border: 2px dashed rgba(255, 255, 255, .2); display: grid; place-content: center; gap: 6px; text-align: center; padding: 20px; color: var(--text-soft); font-weight: 800; }
+.kp-glass-empty span { font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.kp-glass-cap { text-align: center; min-height: 84px; }
+.kp-glass-sub { font-size: 11px; font-weight: 900; letter-spacing: 1.4px; text-transform: uppercase; }
+.kp-glass-cap h2 { font: 400 26px/1 var(--font-display); margin: 4px 0 6px; color: var(--cream); }
+.kp-glass-cap p { margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.4; }
+.kp-glass-ctl { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+/* Full-screen print */
+.kp-glass-zoom { position: fixed; inset: 0; z-index: 2000; }
+.kp-glass-zoom-bg { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, rgba(16, 20, 46, .95), rgba(5, 6, 13, .93)); backdrop-filter: blur(10px); }
+.kp-glass-zoom-frame { position: absolute; border-radius: 2.2% / 1.6%; overflow: hidden; background: #f4ece0; box-shadow: 0 40px 120px rgba(0, 0, 0, .8); touch-action: none; cursor: zoom-in; }
+.kp-glass-zoom-frame.zoomed { cursor: grab; }
+.kp-glass-zoom-frame img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-origin: 0 0; user-select: none; }
+.kp-glass-zoom-cap { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(620px, calc(100% - 32px)); text-align: center; font-size: 12px; font-weight: 900; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-dim); }
+.kp-glass-zoom-cap strong { display: block; font: 400 26px/1.1 var(--font-display); letter-spacing: .5px; text-transform: none; color: var(--cream); margin: 2px 0; }
+.kp-glass-zoom-cap small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .2px; text-transform: none; }
+.kp-glass-zoom-btn { position: absolute; width: 52px; height: 52px; border: 0; border-radius: 50%; cursor: pointer; background: rgba(255, 255, 255, .08); color: var(--cream); font: 400 26px var(--font-display); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+.kp-glass-zoom-btn:hover { background: var(--gold); color: #2a1a00; }
+.kp-glass-zoom-btn.prev { left: 22px; top: 50%; transform: translateY(-50%); }
+.kp-glass-zoom-btn.next { right: 22px; top: 50%; transform: translateY(-50%); }
+.kp-glass-zoom-btn.close { right: 22px; top: 18px; font-size: 22px; }
+@media (max-width: 700px) and (orientation: portrait) {
+  .kp-glass { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1.05fr) minmax(0, 1fr); }
+  .kp-glass-table { order: 2; }
+  .kp-glass-panel { order: 1; border-left: 0; border-bottom: 1px solid rgba(255, 255, 255, .1); padding: 12px 14px; gap: 8px; }
+  .kp-glass-cap { min-height: 0; }
+  .kp-glass-cap h2 { font-size: 20px; }
+  .kp-glass-cap p { display: none; }
+  .kp-glass-zoom-btn.prev, .kp-glass-zoom-btn.next { top: auto; bottom: 16px; transform: none; }
+  .kp-glass-zoom-cap { bottom: 78px; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .kp-glass-panel { padding: 10px 14px; gap: 6px; }
+  .kp-glass-cap { min-height: 0; }
+  .kp-glass-cap p { display: none; }
+}
+
 /* ---------------- Modal text ----------------
    One caption style and one label style for every modal. */
 .kp-modal-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.45; color: var(--text-soft); }
@@ -380,17 +450,6 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
 .kp-rules-body { padding: 18px; position: relative; z-index: 1; flex: 1; min-height: 0; }
 .kp-rules-frame { height: 100%; border-radius: 14px; overflow: hidden; border: 2px solid #00000055; background: #12142a; }
 .kp-rules-fallback { height: 100%; display: grid; place-content: center; justify-items: center; gap: 16px; padding: 24px; text-align: center; color: #cbd5e1; }
-.kp-gallery-body { padding: 18px; position: relative; z-index: 1; flex: 1; min-height: 0; overflow: auto; }
-.kp-gallery-grid { display: grid; grid-template-columns: repeat(13, 86px); grid-auto-rows: 122px; gap: 8px; min-width: max-content; }
-.kp-gallery-cell { width: 86px; height: 122px; }
-.kp-gallery-preview-desktop { position: fixed; right: 24px; top: 84px; z-index: 3; width: min(372px, 29vw); pointer-events: none; }
-.kp-gallery-preview-desktop img { display: block; width: 100%; border-radius: 14px; box-shadow: 0 28px 72px #0009; }
-.kp-gallery-preview-mobile { display: none; }
-/* Graphic-face preview: a full-size card zoomed up (cqw keeps it crisp). */
-.kp-gallery-graphic-preview { zoom: 2; width: 180px; }
-.kp-gallery-preview-desktop { display: flex; justify-content: flex-end; }
-@media (max-width: 1300px) { .kp-gallery-graphic-preview { zoom: 1.6; } }
-.kp-gallery-graphic-preview .kp-card { box-shadow: 0 14px 36px #0009 !important; }
 
 /* Motion accessibility: stop the ambient/decorative animation loops. */
 @media (prefers-reduced-motion: reduce) {
@@ -434,15 +493,6 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
   .kp-rules-frame object { display: none; }
   .kp-rules-frame { display: grid; min-height: 300px; }
   .kp-rules-frame::after { content: "Mobile browsers open the rulebook in their PDF viewer."; place-self: center; padding: 24px; text-align: center; color: var(--text-soft); }
-  .kp-gallery-body { padding: 10px; }
-  .kp-gallery-grid { grid-template-columns: repeat(4, minmax(72px, 1fr)); grid-auto-rows: 104px; gap: 8px; min-width: 0; }
-  .kp-gallery-cell { width: 72px; height: 104px; justify-self: center; }
-  .kp-gallery-preview-desktop { display: none; }
-  .kp-gallery-preview-mobile { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; gap: 8px; width: 100%; border: 0; background: #070a14db; backdrop-filter: blur(8px); color: white; }
-  .kp-gallery-preview-mobile img { display: block; max-width: min(82vw, 360px); max-height: 78dvh; border-radius: 14px; box-shadow: 0 24px 70px #000; }
-  .kp-gallery-preview-mobile span { font: 12px var(--font-body); text-transform: uppercase; letter-spacing: 1px; }
-  .kp-gallery-preview-mobile .kp-gallery-graphic-preview { zoom: 1.3; justify-self: center; }
-  @media (max-height: 560px) { .kp-gallery-preview-mobile .kp-gallery-graphic-preview { zoom: 1.2; } }
 }
 
 /* Phone landscape (~390px tall): full 180x252 art cards push the hand below the
@@ -460,5 +510,4 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
   .kp-game-header .kp-panel-inset span:last-child { gap: 2px !important; }
   .kp-game-header .kp-panel-inset span:last-child span { width: 8px !important; height: 8px !important; }
   .kp-section-label { line-height: 1.3; }
-  .kp-gallery-grid { grid-template-columns: repeat(3, minmax(72px, 1fr)); }
 }
