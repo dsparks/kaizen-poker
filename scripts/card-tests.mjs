@@ -616,6 +616,30 @@ const TESTS = [
     await sleep(250); const g = await getState(page);
     if (!g.aDiscard.includes("2C")) fail(`2C not discarded: ${g.aDiscard}`);
   } },
+  { name: "Tie — no chip is awarded; the chip rolls over (pot 2)", run: async (page, base) => {
+    await setState(page, scoreScenario(base, { aHand: ["9C", "9D", "5H", "6S", "2C"], bHand: ["9H", "9S", "5C", "6D", "2D"] }));
+    await clickReveal(page);
+    if (!await waitReveal(page)) fail("scoring never reached reveal");
+    const g = await getState(page);
+    if (g._revealWinner !== "TIE") fail(`expected a tie, got ${g._revealWinner}`);
+    if (g.aChips !== 0 || g.bChips !== 0) fail(`no chip should be awarded on a tie: ${g.aChips}-${g.bChips}`);
+    if (g._pot !== 2) fail(`expected pot 2 after a tie, got ${g._pot}`);
+  } },
+  { name: "Rolled-over pot — the next winner takes 2 chips", run: async (page, base) => {
+    await setState(page, scoreScenario(base, { aHand: ["9C", "9D", "9H", "2S", "3C"], _pot: 2 }));
+    await clickReveal(page);
+    if (!await waitReveal(page)) fail("scoring never reached reveal");
+    const g = await getState(page);
+    if (g.aChips !== 2) fail(`expected A to take 2 chips, got ${g.aChips}`);
+    if (g._pot !== 1) fail(`pot should reset to 1, got ${g._pot}`);
+  } },
+  { name: "Solo tie — the Challenger no longer wins ties", run: async (page, base) => {
+    await setState(page, scoreScenario(base, { mode: "solo", aHand: ["9C", "9D", "5H", "6S", "2C"], bHand: [], bDeck: ["3C", "8D"] }));
+    await clickReveal(page);
+    if (!await waitReveal(page)) fail("scoring never reached reveal");
+    const g = await getState(page);
+    if (g._revealWinner !== "TIE" || g.bChips !== 0 || g._pot !== 2) fail(`expected a rolled-over tie, got winner ${g._revealWinner}, B ${g.bChips}, pot ${g._pot}`);
+  } },
   { name: "Deck-out — game-over names the right winner and drops stale showdown", run: async (page, base) => {
     await setState(page, actionScenario(base, { aHand: ["3D", "2C"], _revealAE: { handName: "Flush" }, _revealBE: { handName: "Pair" }, _revealWinner: "A" }));
     await clickHand(page, "3D"); await maybeClickPlayIt(page);

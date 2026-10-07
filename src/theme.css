@@ -210,6 +210,7 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
 .kp-gc-rail h3 { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; padding: 4cqw 0; color: #fff; font-family: inherit; font-weight: 800; font-stretch: 82%; font-size: var(--nfs, 10cqw); line-height: 1; white-space: nowrap; letter-spacing: .01em; }
 .kp-gc-emblem { position: absolute; left: 24cqw; right: 5cqw; top: 6cqw; bottom: calc(50% + 4.5cqw); color: var(--suit); }
 .kp-gc-emblem svg { width: 100%; height: 100%; }
+.kp-gc-emblem svg.kp-gc-icon { position: absolute; inset: 4%; width: 92%; height: 92%; }
 .kp-gc-mid { position: absolute; left: 24cqw; right: 4.5cqw; top: 50%; border-top: .45cqw solid #17171a2e; }
 .kp-gc-type { position: absolute; left: 24cqw; right: 5cqw; top: calc(50% + 3.2cqw); display: flex; align-items: center; gap: 2cqw; font-size: 3.8cqw; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #46464e; line-height: 1; }
 .kp-gc-type i { width: 3.2cqw; height: 3.2cqw; background: var(--type); display: block; }
@@ -299,6 +300,16 @@ button.kp-pill:active { transform: translateY(2px); box-shadow: 0 0 0 rgba(0, 0,
   .kp-glass-cap { min-height: 0; }
   .kp-glass-cap p { display: none; }
 }
+
+/* ---------------- Rolled-over pot (ties carry the chip forward) ---------------- */
+.kp-pot { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 8px; border-radius: 999px; font-family: var(--font-display); font-size: 13px; letter-spacing: .5px; color: #2a1a00;
+  background: linear-gradient(180deg, #ffd06a, var(--gold)); box-shadow: 0 3px 0 rgba(0, 0, 0, .4), 0 0 18px #f5b94266; animation: potGlow 1.8s ease-in-out infinite; white-space: nowrap; }
+.kp-pot-big { font-size: 15px; padding: 7px 14px 7px 10px; }
+.kp-pot-stack { position: relative; width: 16px; height: 16px; flex: none; }
+.kp-pot-stack i { position: absolute; left: 0; width: 16px; height: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fff6, #e2a52a 60%, #9a6a12); box-shadow: 0 1px 0 #6b4a0e; }
+.kp-pot-stack i:nth-child(1) { top: 10px; } .kp-pot-stack i:nth-child(2) { top: 6px; } .kp-pot-stack i:nth-child(3) { top: 2px; }
+@keyframes potGlow { 0%, 100% { box-shadow: 0 3px 0 rgba(0, 0, 0, .4), 0 0 12px #f5b94244; } 50% { box-shadow: 0 3px 0 rgba(0, 0, 0, .4), 0 0 26px #f5b942aa; } }
+@media (prefers-reduced-motion: reduce) { .kp-pot { animation: none; } }
 
 /* ---------------- Modal text ----------------
    One caption style and one label style for every modal. */

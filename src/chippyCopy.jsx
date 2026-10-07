@@ -18,7 +18,7 @@ export const CHIPPY_COPY = {
   soloIntro: {
     title: "Solo Mode",
     message:
-      "Solo Mode is a race to seven chips against the Challenger deck. You play normally: take two Actions, then score your best five-card poker hand. The Challenger doesn't build a hand — at showdown it reveals its top card, and the Challenger Lookup table tells you which poker hand that card counts as. Beat it and you win the chip. Ties go to the Challenger.\n\nWant the Challenger deck face-up (Easy) or face-down (Difficult)?",
+      "Solo Mode is a race to seven chips against the Challenger deck. You play normally: take two Actions, then score your best five-card poker hand. The Challenger doesn't build a hand — at showdown it reveals its top card, and the Challenger Lookup table tells you which poker hand that card counts as. Beat it and you win the chip. On a tie nobody scores: the chip rolls over, and the next round is worth two.\n\nWant the Challenger deck face-up (Easy) or face-down (Difficult)?",
   },
   tutorial: {
     complete: {
@@ -158,7 +158,7 @@ export const CHIPPY_COPY = {
       wrapUp: {
         title: "Tutorial Wrap-Up",
         message:
-          "And that's the basics! A few last rules for real games:\n• Sudden death: when a player reaches 6 chips, their opponent draws an extra card and takes an extra Action that round.\n• If you ever need to draw and your deck and discard are both empty, you lose — so don't scrap your deck too thin.\n• The Memory panel tracks what you've seen of each deck, so you don't have to.\nPress Finish Tutorial.",
+          "And that's the basics! A few last rules for real games:\n• Ties: nobody scores, and the chip rolls over, so the next round is worth two.\n• Sudden death: when a player reaches 6 chips, their opponent draws an extra card and takes an extra Action that round.\n• If you ever need to draw and your deck and discard are both empty, you lose — so don't scrap your deck too thin.\n• The Memory panel tracks what you've seen of each deck, so you don't have to.\nPress Finish Tutorial.",
       },
     },
   },

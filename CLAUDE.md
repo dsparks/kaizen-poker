@@ -58,8 +58,10 @@ file back into the bundle.
 - Card faces: players pick a **card aesthetic** on the main menu — "graphic"
   (default; `DEFAULT_CARD_AESTHETIC` in `components.jsx`) or "illustrated" —
   saved in localStorage (`kp-card-aesthetic`). Graphic faces are
-  `src/GraphicCard.jsx` ("Counted Rings": the suit emblem has one layer per
-  rank, Ace = 1, ink outermost) styled by `.kp-gc*` in `theme.css`, sized in
+  `src/GraphicCard.jsx`: the emblem is each card's own Phosphor duotone icon
+  (`src/cardIcons.js`, picked by David). The earlier "Counted Rings" emblem
+  (suit glyph with one layer per rank, Ace = 1, ink outermost) is kept as a
+  saved alternative: set `GC_EMBLEM = "rings"`. Styled by `.kp-gc*` in `theme.css`, sized in
   cqw, with rules text auto-fitted below a center rule (measured once per card
   after Archivo loads; smoke fails if any is clipped). Suit outlines are
   Phosphor Icons (MIT) in `src/suitShapes.js`. The solo test mode

@@ -1,8 +1,12 @@
-// Illustration-free card face ("Counted Rings"): the default card aesthetic.
+// Illustration-free card face: the default card aesthetic.
 // Production layout — rank/suit index top-left and inverted bottom-right, name
-// running up a suit-colored rail on the left edge. The suit emblem encodes rank
-// as layers: Ace = 1 solid glyph, 2 = solid with a paper glyph inside, 3 =
-// solid/paper/solid ... King = 13, always ink outermost. A rule sits at the
+// running up a suit-colored rail on the left edge. The emblem in the top half is
+// set by GC_EMBLEM:
+//   "icon"  (in prod) — the card's own Phosphor duotone icon (cardIcons.js).
+//   "rings" (saved alternative, "Counted Rings") — the suit glyph encodes rank
+//     as layers: Ace = 1 solid glyph, 2 = solid with a paper glyph inside, 3 =
+//     solid/paper/solid ... King = 13, always ink outermost.
+// A rule sits at the
 // card's exact vertical center; the Action type and rules text fill the lower
 // half, with the rules text sized to fit (measured once per card, cached).
 // Everything is sized in cqw (the face is a size container), so one layout
@@ -10,6 +14,9 @@
 import { memo, useLayoutEffect, useRef } from "react";
 import { CM } from "./gameData.js";
 import { SUIT_SHAPES } from "./suitShapes.js";
+import { CARD_ICONS } from "./cardIcons.js";
+
+const GC_EMBLEM = "icon"; // or "rings" — see the header comment
 
 // Print-safe four-color suit inks (deeper than the UI's suit colors).
 const GC_SUIT_INK = { C: "#1d7a4e", D: "#c9620f", H: "#c42a22", S: "#1c3f8a" };
@@ -33,6 +40,16 @@ function CountedEmblem({ card }) {
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true">{layers}</svg>;
 }
+function IconEmblem({ card }) {
+  const icon = CARD_ICONS[card.id];
+  if (!icon) return <CountedEmblem card={card} />;
+  return (
+    <svg className="kp-gc-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+      {icon.paths.map(([d, tint], i) => <path key={i} d={d} opacity={tint ? 0.2 : undefined} />)}
+    </svg>
+  );
+}
+const Emblem = GC_EMBLEM === "rings" ? CountedEmblem : IconEmblem;
 
 // Rules text: reminder text (in parentheses) set lighter; game keywords bold.
 const KEYWORDS = /\b(Scrap|scrap|scrapped|Refresh(?:es)?|Modify|Action)\b/;
@@ -102,7 +119,7 @@ export const GraphicCardFace = memo(function GraphicCardFace({ id, small = false
       <div className="kp-gc-rail">
         <h3 style={{ "--nfs": fitName(c.name, 84, 10), "--nfs-mini": fitName(c.name, 76, 17) }}>{c.name}</h3>
       </div>
-      <div className="kp-gc-emblem"><CountedEmblem card={c} /></div>
+      <div className="kp-gc-emblem"><Emblem card={c} /></div>
       {!small && <>
         <div className={`kp-gc-idx kp-gc-flip${ten}`} aria-hidden="true">{index}</div>
         <div className="kp-gc-mid" />

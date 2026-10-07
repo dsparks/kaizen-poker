@@ -1416,7 +1416,9 @@ export default function KaizenPoker(){
     const aE=evalHand(aH,aM);
     const soloCard=isSoloMode(g.mode)?(g.bDeck[0]||null):null;
     const bE=isSoloMode(g.mode)?evalChallenger(soloCard):evalHand(bH,bM);
-    const winner=isSoloMode(g.mode)?(aE.handRank>bE.handRank?"A":"B"):compareHands(aH,bH,aM,bM);
+    const winner=isSoloMode(g.mode)?(aE.handRank>bE.handRank?"A":aE.handRank<bE.handRank?"B":"TIE"):compareHands(aH,bH,aM,bM);
+    // Ties roll the chip over: the pot grows by one and goes to the next round's winner.
+    const pot=g._pot||1;
     trackEvent(g,"round_scored",{
       winner,
       aHand:[...aH],
@@ -1427,6 +1429,7 @@ export default function KaizenPoker(){
       bMods:[...bM],
       challengerCardId:soloCard,
       challengerDescription:isSoloMode(g.mode)?bE.description:undefined,
+      pot,
     },{phase:"score",playerSlot:null});
     g=L(g,`A: ${aE.handName}`);
     if(isSoloMode(g.mode)){
@@ -1441,13 +1444,14 @@ export default function KaizenPoker(){
         g=L(g,"Challenger has no card to reveal.");
       }
     }else g=L(g,`B: ${bE.handName}`);
-    if(winner==="A"){g.aChips++;trackEvent(g,"chip_awarded",{winner:"A",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,isSoloMode(g.mode)?`You win the chip! (${g.aChips}-${g.bChips})`:`Player A wins the chip! (${g.aChips}-${g.bChips})`);}
-    else if(winner==="B"){g.bChips++;trackEvent(g,"chip_awarded",{winner:"B",aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,isSoloMode(g.mode)?`The Challenger wins the chip! (${g.aChips}-${g.bChips})`:`Player B wins the chip! (${g.aChips}-${g.bChips})`);}
-    else g=L(g,"Tie - no chip awarded.");
+    const chipWord=pot>1?`${pot} chips`:"the chip";
+    if(winner==="A"){g.aChips=Math.min(7,g.aChips+pot);g._pot=1;trackEvent(g,"chip_awarded",{winner:"A",chips:pot,aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"A"});g=L(g,isSoloMode(g.mode)?`You win ${chipWord}! (${g.aChips}-${g.bChips})`:`Player A wins ${chipWord}! (${g.aChips}-${g.bChips})`);}
+    else if(winner==="B"){g.bChips=Math.min(7,g.bChips+pot);g._pot=1;trackEvent(g,"chip_awarded",{winner:"B",chips:pot,aChips:g.aChips,bChips:g.bChips},{phase:"score",playerSlot:"B"});g=L(g,isSoloMode(g.mode)?`The Challenger wins ${chipWord}! (${g.aChips}-${g.bChips})`:`Player B wins ${chipWord}! (${g.aChips}-${g.bChips})`);}
+    else{g._pot=pot+1;trackEvent(g,"chip_rolled_over",{pot:g._pot},{phase:"score",playerSlot:null});g=L(g,`Tie - the chip rolls over. Next round is worth ${g._pot} chips.`);}
     if(isMatchOver(g)){
       trackGameFinished(g,getMatchWinner(g));
     }
-    g.phase="reveal";g.currentPlayer=g.firstPlayer;g._scoreFlow=null;g._revealWinner=winner;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
+    g.phase="reveal";g.currentPlayer=g.firstPlayer;g._scoreFlow=null;g._revealWinner=winner;g._revealPot=pot;g._revealAE=aE;g._revealBE=bE;commitGameState(g);};
 
   // After reveal, process post-score effects and advance
   const advanceFromReveal=()=>{if(!gs)return;let g={...gs};const winner=g._revealWinner;
@@ -1812,16 +1816,17 @@ export default function KaizenPoker(){
   const renderShowdown=(isFinal=false)=>{
     const w=gs._revealWinner,aE=gs._revealAE,bE=gs._revealBE;
     const aH=getH(gs,"A"),bH=getH(gs,"B");
-    const wClr=w==="A"?"#ff5a4e":w==="B"?"#34a3ff":"#718096";
+    const wClr=w==="A"?"#ff5a4e":w==="B"?"#34a3ff":"#f5b942"; // ties are gold: the pot grows
     const winnerPlayer=w==="A"?"A":w==="B"?"B":null;
     const cascadeCards=getCascadeCardPool(gs);
+    const won=gs._revealPot||1,chipWord=won>1?`${won} chips`:"the chip";
     const wText=isSoloMode(gs.mode)
       ?(isFinal
         ?(w==="A"?"You win the solo run!":w==="B"?"The Challenger wins the solo run!":"The solo run ends in a tie!")
-        :(w==="A"?"You win the chip!":w==="B"?"The Challenger wins the chip!":"Tie - the Challenger keeps the chip"))
+        :(w==="A"?`You win ${chipWord}!`:w==="B"?`The Challenger wins ${chipWord}!`:"Tie! The chip rolls over"))
       :(isFinal
         ?(w==="A"?"Player A wins the game!":w==="B"?"Player B wins the game!":"Game ends in a tie!")
-        :(w==="A"?"Player A wins the chip!":w==="B"?"Player B wins the chip!":"Tie - no chip awarded"));
+        :(w==="A"?`Player A wins ${chipWord}!`:w==="B"?`Player B wins ${chipWord}!`:"Tie! The chip rolls over"));
     const postQueue=revealPostQueue(gs);
     const soloRow=isSoloMode(gs.mode)&&gs._soloReveal?.cardId?CHALLENGER_LOOKUP[CM[gs._soloReveal.cardId].rank]:null;
     const shell=(
@@ -1839,6 +1844,7 @@ export default function KaizenPoker(){
             {w!=="TIE"&&<Chip filled color={w==="A"?"#ff5a4e":"#34a3ff"} label={isFinal?"*":"*"} active/>}
           </div>
           <div style={{fontSize:isFinal?18:13,color:isFinal?"#dce7f2":"#a8a4c0",fontWeight:isFinal?700:400,animation:"chipBounce .4s cubic-bezier(.26,1.5,.42,1) .55s backwards"}}>{gs.aChips} - {gs.bChips}</div>
+          {!isFinal&&w==="TIE"&&<div className="kp-pot kp-pot-big" style={{marginTop:10}}><span className="kp-pot-stack" aria-hidden="true"><i/><i/><i/></span>Next round is worth {gs._pot||2} chips</div>}
           {isFinal&&winnerPlayer&&<div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:999,background:"#12142add",border:`1px solid ${wClr}55`,boxShadow:`0 12px 28px ${wClr}22`}}>
             <span style={{fontSize:10,fontWeight:800,letterSpacing:1.4,textTransform:"uppercase",color:"#f3d7a4"}}>Champion</span>
             <span style={{fontSize:13,color:"#e8f1f9"}}>{isSoloMode(gs.mode)?(winnerPlayer==="A"?"You beat the Challenger":"The Challenger shuts the door"):`Player ${winnerPlayer} closes it out`}</span>
@@ -1953,6 +1959,7 @@ export default function KaizenPoker(){
           <span style={{color:"#ff5a4e",fontFamily:FONT_DISPLAY,fontSize:13,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{isSoloMode(gs.mode)?"YOU":"A"} {gs.aChips}</span>
           <span style={{display:"flex",gap:4}}>{chipStrip("A",gs.aChips,"#ff5a4e")}</span>
         </div>
+        {(gs._pot||1)>1&&<div className="kp-pot" title={`A tie rolled the chip over: the next round's winner takes ${gs._pot} chips`}><span className="kp-pot-stack" aria-hidden="true"><i/><i/><i/></span>Pot ×{gs._pot}</div>}
         <div className="kp-panel-inset" style={{padding:isMobileLandscape?"5px 10px":"6px 12px",display:"flex",alignItems:"center",gap:isMobileLandscape?6:8}}>
           <span style={{color:"#34a3ff",fontFamily:FONT_DISPLAY,fontSize:13,textShadow:"0 2px 0 rgba(0,0,0,.4)"}}>{isSoloMode(gs.mode)?"CHALLENGER":"B"} {gs.bChips}</span>
           <span style={{display:"flex",gap:4}}>{chipStrip("B",gs.bChips,"#34a3ff")}</span>
@@ -2162,7 +2169,7 @@ export default function KaizenPoker(){
           const active=modal.activeRank===row.rank;
           return(
             <div key={row.rank} style={{display:"grid",gridTemplateColumns:"70px 160px 1fr",gap:8,alignItems:"center",padding:"6px 8px",borderRadius:10,background:active?"#34a3ff1f":"#12142acc",border:active?"2px solid #34a3ff88":"2px solid #2c3152"}}>
-              <div style={{fontSize:12,fontWeight:900,color:active?"#8fd0ff":"#dfe8ef"}}>{row.rank} {"->"}</div>
+              <div style={{fontSize:12,fontWeight:900,color:active?"#8fd0ff":"#dfe8ef"}}>{row.rank} <span aria-hidden="true">→</span></div>
               <div style={{fontSize:12,fontWeight:700,color:active?"#f5fbff":"#c8d6e2"}}>{row.handName}</div>
               <div style={{fontSize:11,color:active?"#dceaf6":"#92a4b5",lineHeight:1.35}}>{row.description}</div>
             </div>
