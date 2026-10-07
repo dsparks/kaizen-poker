@@ -2146,7 +2146,7 @@ export default function KaizenPoker(){
     {modal?.type==="pickDiscard"&&<Modal title={modal.title||"Discard a card"} eyebrow={eb}>
       {modal.hint&&<p className="kp-modal-hint">{modal.hint}</p>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-        {(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
+        {sortC(modal.hand||getH(gs,gs.currentPlayer)).map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#ff5a4e":undefined} isNew={(modal.newCards||gs.newCards||[]).includes(id)}/>;})}</div></Modal>}
     {modal?.type==="pickFromList"&&<Modal title={modal.title} eyebrow={eb}>
       {modal.hint&&<p className="kp-modal-hint">{modal.hint}</p>}
@@ -2155,7 +2155,7 @@ export default function KaizenPoker(){
         <div style={{display:"flex",gap:4,marginBottom:6}}>{sortC(modal.showHand).map(id=><PreviewCard key={id} id={id}/>)}</div></div>}
       {modal.statsPlayer&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={modal.statsPlayer} viewerPlayer={viewerPlayer}/></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-        {modal.cards.map(id=>{const v=!modal.filter||modal.filter(id);
+        {sortC(modal.cards).map(id=>{const v=!modal.filter||modal.filter(id);
           return <PreviewCard key={id} id={id} dimmed={!v||!tutorialAllows("modalCard",id)} onClick={v&&tutorialAllows("modalCard",id)?()=>modal.onPick(id):undefined} glow={v&&tutorialAllows("modalCard",id)?"#f5b942":undefined}/>;})}</div>
       {modal.canCancel&&<Btn label={modal.cancelLabel||"Cancel"} bg={BTN_QUIET} onClick={modal.onCancel} disabled={gs.mode==="tutorial"&&tutorialPrompt?.expect?.kind==="modalCard"}/>}</Modal>}
     {modal?.type==="soloLookup"&&<Modal title="Challenger Lookup">

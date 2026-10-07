@@ -570,7 +570,7 @@ function MultiPickModal({title,eyebrow,cards,maxPick,onPick,btnLabel="Confirm",s
   return(<Modal title={title} eyebrow={eyebrow}><p className="kp-modal-hint">{hint||`Select up to ${maxPick}.`}</p>
     {statsPlayer&&gs&&<div style={{marginBottom:8,display:"flex",justifyContent:"flex-start"}}><DeckStats gs={gs} player={statsPlayer} viewerPlayer={viewerPlayer}/></div>}
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-      {cards.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
+      {sortC(cards).map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<maxPick?[...p,id]:p)}/>))}</div>
     <Btn label={`${btnLabel} (${pk.length})`} bg={BTN_PRIMARY} onClick={()=>onPick(pk)}/></Modal>);}
 
@@ -580,7 +580,7 @@ function BrainstormModal({hand,newCards,onPick}){const[pk,setPk]=useState([]);
   return(<Modal title="Brainstorm · Put 3 cards on top of your deck">
     <p className="kp-modal-hint">Tap them in order: the first card you pick goes on top.</p>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-      {hand.map(id=>{const idx=pk.indexOf(id);return(<div key={id} style={{position:"relative"}}>
+      {sortC(hand).map(id=>{const idx=pk.indexOf(id);return(<div key={id} style={{position:"relative"}}>
         <PreviewCard id={id} selected={idx>=0} isNew={(newCards||[]).includes(id)} onClick={()=>toggle(id)}/>
         {idx>=0&&<div style={{position:"absolute",top:2,left:2,background:"#f5b942",color:"#000",borderRadius:10,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{idx+1}</div>}
       </div>);})}</div>
@@ -592,7 +592,7 @@ function RejuvenateModal({hand,onPick}){const[pk,setPk]=useState([]);
   return(<Modal title="Rejuvenate · Discard up to 3, then draw that many">
     <p className="kp-modal-hint">Choose any number from 0 to 3.</p>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-      {hand.map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
+      {sortC(hand).map(id=>(<PreviewCard key={id} id={id} selected={pk.includes(id)}
         onClick={()=>setPk(p=>p.includes(id)?p.filter(x=>x!==id):p.length<3?[...p,id]:p)}/>))}</div>
     <Btn label={`Discard ${pk.length}, then draw ${pk.length}`} bg={BTN_PRIMARY} onClick={()=>onPick(pk)}/></Modal>);}
 
